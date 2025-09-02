@@ -43,17 +43,19 @@ class _SignupStep13State extends State<SignupStep13> with TickerProviderStateMix
     super.dispose();
   }
 
-  void _onNext() {
-    if (selectedOption != null) {
-      userData['motivationalNotifications'] = selectedOption == 'yes';
+ void _onNext() {
+  if (selectedOption != null) {
+    userData['motivationalNotifications'] = selectedOption!;
+    userData['bio'] = ''; // ← bio vacía por defecto, se puede editar después
 
-      Navigator.pushNamed(
-        context,
-        '/home', // Aquí puedes cambiar por la pantalla que recibirá y guarde en Firebase
-        arguments: userData,
-      );
-    }
+    Navigator.pushNamed(
+      context,
+      '/main_navigation_screen', // Sigue igual
+      arguments: userData,
+    );
   }
+}
+
 
   Widget optionButton(String label, String value) {
     final isSelected = selectedOption == value;

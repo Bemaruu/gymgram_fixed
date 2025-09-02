@@ -1,35 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../data/simulated_ai/simulated_posts.dart';
+import '../shared/custom_bottom_nav.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key}); // ← Elimina el parámetro userData
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  PageController _pageController = PageController();
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
+  final PageController _pageController = PageController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView.builder(
-        scrollDirection: Axis.vertical,
-        controller: _pageController,
-        itemCount: simulatedPosts.length,
-        itemBuilder: (context, index) {
-          final post = simulatedPosts[index];
-          return PostWidget(post: post);
-        },
-      ),
+      body: simulatedPosts.isEmpty
+          ? const Center(
+              child: Text(
+                "No hay publicaciones disponibles",
+                style: TextStyle(color: Colors.white),
+              ),
+            )
+          : PageView.builder(
+              scrollDirection: Axis.vertical,
+              controller: _pageController,
+              itemCount: simulatedPosts.length,
+              itemBuilder: (context, index) {
+                final post = simulatedPosts[index];
+                return PostWidget(post: post);
+              },
+            ),
     );
   }
 }
@@ -45,6 +47,8 @@ class PostWidget extends StatefulWidget {
 
 class _PostWidgetState extends State<PostWidget> {
   VideoPlayerController? _videoController;
+  bool isLiked = false;
+  bool isSaved = false;
 
   @override
   void initState() {
@@ -57,6 +61,12 @@ class _PostWidgetState extends State<PostWidget> {
           _videoController!.setLooping(true);
         });
     }
+  }
+
+  @override
+  void deactivate() {
+    _videoController?.pause();
+    super.deactivate();
   }
 
   @override
@@ -112,12 +122,39 @@ class _PostWidgetState extends State<PostWidget> {
           bottom: 20,
           right: 16,
           child: Column(
-            children: const [
-              Icon(Icons.favorite_border, color: Colors.white, size: 32),
-              SizedBox(height: 12),
-              Icon(Icons.comment, color: Colors.white, size: 32),
-              SizedBox(height: 12),
-              Icon(Icons.bookmark_border, color: Colors.white, size: 32),
+            children: [
+              IconButton(
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: Colors.white,
+                  size: 32,
+                ),
+                onPressed: () {
+                  setState(() {
+                    isLiked = !isLiked;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              IconButton(
+                icon: const Icon(Icons.comment, color: Colors.white, size: 32),
+                onPressed: () {
+                  // Puedes abrir modal de comentarios
+                },
+              ),
+              const SizedBox(height: 12),
+              IconButton(
+                icon: Icon(
+                  isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  color: Colors.white,
+                  size: 32,
+                ),
+                onPressed: () {
+                  setState(() {
+                    isSaved = !isSaved;
+                  });
+                },
+              ),
             ],
           ),
         ),

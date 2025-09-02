@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+// Onboarding
 import 'ui/onboarding/welcome_screen.dart';
 import 'ui/onboarding/login_screen.dart';
 import 'ui/onboarding/signup_step_1.dart';
@@ -15,9 +17,18 @@ import 'ui/onboarding/signup_step_11.dart';
 import 'ui/onboarding/signup_step_12.dart';
 import 'ui/onboarding/signup_step_13.dart';
 
+// Menú principal (nuevas pantallas con bottom nav)
+import 'ui/main_screens/main_navigation_screen.dart';
+import 'ui/main_screens/home_screen.dart';
+import 'ui/main_screens/rutina_screen.dart';
+import 'ui/main_screens/alimentacion_screen.dart';
+import 'ui/main_screens/perfil_screen.dart';
+import 'ui/main_screens/edit_profile_screen.dart';
+
 final Map<String, WidgetBuilder> appRoutes = {
+  // Onboarding
   '/': (_) => const WelcomeScreen(),
- '/login': (_) => const LoginScreen(), 
+  '/login': (_) => const LoginScreen(),
   '/signup_step_1': (_) => const SignupStep1(),
   '/signup_step_2': (_) => const SignupStep2(),
   '/signup_step_3': (_) => const SignupStep3(),
@@ -31,5 +42,29 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/signup_step_11': (_) => const SignupStep11(),
   '/signup_step_12': (_) => const SignupStep12(),
   '/signup_step_13': (_) => const SignupStep13(),
-  // Agrega más pantallas aquí
+
+  // Pantalla con navegación inferior
+  '/main_navigation_screen': (context) {
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    return MainNavigationScreen(userData: args);
+  },
+
+  // Estas rutas se usan internamente por el bottom nav (opcionalmente)
+  '/home_screen': (_) => const HomeScreen(),
+  '/rutina_screen': (_) => const RoutineScreen(),
+  '/alimentacion_screen': (_) => const AlimentacionScreen(),
+  '/profile_screen': (_) => ProfileScreen(
+  initialUsername: 'usuarioejemplo',
+  initialBio: 'Esta es mi bio y me gusta GymGram 💪🏽',
+),
+
+  '/edit_profile': (context) {
+  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+  return EditProfileScreen(
+    currentUsername: args['username'],
+    currentBio: args['bio'],
+  );
+},
+
+
 };

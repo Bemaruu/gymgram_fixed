@@ -70,22 +70,24 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
   }
 
   void _onNext() {
-    if (selectedRestrictions.isNotEmpty) {
-      final restrictions = selectedRestrictions.toList();
+  if (selectedRestrictions.isNotEmpty) {
+    final restrictions = selectedRestrictions.toList();
 
-      if (restrictions.contains('otro') && _otherController.text.trim().isNotEmpty) {
-        restrictions.add(_otherController.text.trim());
-      }
-
-      userData['dietaryRestrictions'] = restrictions;
-
-      Navigator.pushNamed(
-        context,
-        '/signup_step_11',
-        arguments: userData,
-      );
+    if (restrictions.contains('otro') && _otherController.text.trim().isNotEmpty) {
+      restrictions.add(_otherController.text.trim());
     }
+
+    // Convertir a string
+    userData['dietaryRestrictions'] = restrictions.join(', ');
+
+    Navigator.pushNamed(
+      context,
+      '/signup_step_11',
+      arguments: userData,
+    );
   }
+}
+
 
   Widget restrictionChip(String label, String value) {
     final isSelected = selectedRestrictions.contains(value);
