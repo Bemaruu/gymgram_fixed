@@ -1,0 +1,15 @@
+mutation CreatePost(
+  $mediaUrl: String!
+  $mediaType: MediaType!
+  $description: String!
+) @auth(level: USER) {
+  post_insert(data: {
+    userId_expr: "auth.uid"
+    mediaUrl: $mediaUrl
+    mediaType: $mediaType
+    description: $description
+    createdAt_expr: "request.time"
+    likesCount: 0
+    commentsCount: 0
+  })
+}

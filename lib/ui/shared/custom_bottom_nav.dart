@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../../core/app_colors.dart';
-import '../shared/user_profile_avatar.dart';
-import '../../services/profile_photo_local.dart';
 
 class CustomBottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
-  final String? profileImageUrl; // nueva propiedad opcional
+  final String? profileImageUrl;
 
   const CustomBottomNav({
     super.key,
@@ -15,6 +13,13 @@ class CustomBottomNav extends StatelessWidget {
     required this.onTap,
     this.profileImageUrl,
   });
+
+  ImageProvider _avatarImage() {
+    if (profileImageUrl != null && profileImageUrl!.isNotEmpty) {
+      return NetworkImage(profileImageUrl!);
+    }
+    return const AssetImage('assets/images/default_profile.png');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,16 +44,14 @@ class CustomBottomNav extends StatelessWidget {
           icon: Icon(CupertinoIcons.heart_fill),
           label: 'Dieta',
         ),
-       BottomNavigationBarItem(
+        BottomNavigationBarItem(
           icon: CircleAvatar(
-          radius: 12,
-          backgroundImage: LocalProfilePhoto.imageFile != null
-        ? FileImage(LocalProfilePhoto.imageFile!)
-        : const AssetImage('assets/images/default_profile.png') as ImageProvider,
+            radius: 13,
+            backgroundImage: _avatarImage(),
+            backgroundColor: Colors.grey.shade200,
           ),
           label: 'Perfil',
         ),
-
       ],
     );
   }

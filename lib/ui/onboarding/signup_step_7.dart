@@ -96,13 +96,16 @@ class _SignupStep7State extends State<SignupStep7>
           ],
         ),
         child: Center(
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? Colors.white : AppColors.black,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : AppColors.black,
+              ),
             ),
           ),
         ),

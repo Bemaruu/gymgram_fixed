@@ -23,9 +23,9 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
     {'label': 'Lactosa', 'value': 'lactosa'},
     {'label': 'Gluten', 'value': 'gluten'},
     {'label': 'Frutos secos', 'value': 'frutos_secos'},
-    {'label': 'Mariscos', 'value': 'mariscos'},
-    {'label': 'Vegano', 'value': 'vegano'},
-    {'label': 'Vegetariano', 'value': 'vegetariano'},
+    {'label': 'Mariscos / Pescado', 'value': 'mariscos'},
+    {'label': 'Huevo', 'value': 'huevo'},
+    {'label': 'Soja', 'value': 'soja'},
     {'label': 'No tengo', 'value': 'ninguna'},
     {'label': 'Otro', 'value': 'otro'},
   ];
@@ -102,20 +102,23 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
           ],
         ),
         child: Center(
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? Colors.white : AppColors.black,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : AppColors.black,
+              ),
             ),
           ),
         ),
@@ -138,7 +141,7 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
               hintText: 'Especifica tu restricción',
               hintStyle: const TextStyle(color: Colors.black54),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.85),
+              fillColor: Colors.white.withValues(alpha: 0.85),
               prefixIcon: const Icon(Icons.edit, color: Colors.black54),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -164,7 +167,7 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
             child: Container(
-              color: const Color(0xFF0E4568).withOpacity(0.4),
+              color: const Color(0xFF0E4568).withValues(alpha: 0.4),
             ),
           ),
           SafeArea(

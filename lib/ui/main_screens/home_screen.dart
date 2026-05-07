@@ -1,10 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import '../../data/simulated_ai/simulated_posts.dart';
-import '../shared/custom_bottom_nav.dart';
+import '../../services/analytics_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/post_service.dart';
+import '../../services/supabase_service.dart';
+import '../search/search_screen.dart';
+import '../search/user_profile_screen.dart';
+import '../social/comments_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key}); // ← Elimina el parámetro userData
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -13,54 +19,279 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final PageController _pageController = PageController();
 
+  bool _isLoading = true;
+  bool _hasNotifications = false;
+  List<Map<String, dynamic>> _posts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPosts();
+    _checkUnreadNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.instance.initialize().catchError(
+        (e) => debugPrint('NotificationService error: $e'),
+      );
+    });
+  }
+
+  Future<void> _checkUnreadNotifications() async {
+    try {
+      final uid = SupabaseService.instance.currentUserId;
+      if (uid == null) return;
+      final data = await SupabaseService.instance.client
+          .from('notifications')
+          .select('id')
+          .eq('user_id', uid)
+          .isFilter('read_at', null)
+          .limit(1);
+      if (mounted) setState(() => _hasNotifications = (data as List).isNotEmpty);
+    } catch (_) {}
+  }
+
+  Future<void> _loadPosts() async {
+    if (!_isLoading) setState(() => _isLoading = true);
+    try {
+      final posts = await PostService.instance.getFeedPosts();
+      if (!mounted) return;
+      setState(() {
+        _posts = posts;
+        _isLoading = false;
+      });
+      AnalyticsService.instance.feedViewed();
+    } catch (e) {
+      debugPrint('Error cargando posts: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: simulatedPosts.isEmpty
-          ? const Center(
-              child: Text(
-                "No hay publicaciones disponibles",
-                style: TextStyle(color: Colors.white),
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
+    if (_posts.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: RefreshIndicator(
+          onRefresh: _loadPosts,
+          color: const Color(0xFF00BFFF),
+          backgroundColor: Colors.grey[900],
+          child: ListView(
+            children: [
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.8,
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.photo_library_outlined,
+                        color: Colors.white38, size: 64),
+                    SizedBox(height: 16),
+                    Text(
+                      'Aún no hay publicaciones',
+                      style: TextStyle(color: Colors.white54, fontSize: 16),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Desliza hacia abajo para actualizar',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
-            )
-          : PageView.builder(
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _loadPosts,
+            color: const Color(0xFF00BFFF),
+            backgroundColor: Colors.grey[900],
+            displacement: 60,
+            child: PageView.builder(
               scrollDirection: Axis.vertical,
               controller: _pageController,
-              itemCount: simulatedPosts.length,
-              itemBuilder: (context, index) {
-                final post = simulatedPosts[index];
-                return PostWidget(post: post);
-              },
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: PageScrollPhysics(),
+              ),
+              itemCount: _posts.length,
+              itemBuilder: (context, index) => PostWidget(post: _posts[index]),
             ),
+          ),
+          // Botón de notificaciones
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 12,
+            child: GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                );
+                if (mounted) setState(() => _hasNotifications = false);
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
+                child: Stack(
+                  children: [
+                    const Center(
+                      child: Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
+                    ),
+                    if (_hasNotifications)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Botón de búsqueda
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 12,
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SearchScreen()),
+              ),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.search, color: Colors.white, size: 22),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
+// ── PostWidget ────────────────────────────────────────────────────────────────
+
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
-
   const PostWidget({super.key, required this.post});
 
   @override
   State<PostWidget> createState() => _PostWidgetState();
 }
 
-class _PostWidgetState extends State<PostWidget> {
+class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   VideoPlayerController? _videoController;
-  bool isLiked = false;
-  bool isSaved = false;
+
+  bool _isLiked = false;
+  bool _isSaved = false;
+  late int _likesCount;
+  late int _commentsCount;
+
+  late AnimationController _heartBounceCtrl;
+  late Animation<double> _heartScale;
+
+  late AnimationController _floatingHeartCtrl;
+  late Animation<double> _floatingHeartOpacity;
+  late Animation<double> _floatingHeartSize;
+
+  // Helpers de acceso al mapa
+  String get _postId    => (widget.post['id']        as String?) ?? '';
+  String get _mediaUrl  => (widget.post['media_url'] as String?) ?? '';
+  String get _mediaType => (widget.post['media_type'] as String?) ?? 'image';
+  String get _caption   => (widget.post['caption']   as String?) ?? '';
+  String get _userId    => (widget.post['user_id']   as String?) ?? '';
+
+  Map<String, dynamic>? get _profile =>
+      widget.post['profiles'] as Map<String, dynamic>?;
+  String get _username   => (_profile?['username']  as String?) ?? '';
+  String? get _avatarUrl => _profile?['avatar_url'] as String?;
 
   @override
   void initState() {
     super.initState();
-    if (widget.post['type'] == 'video') {
-      _videoController = VideoPlayerController.asset(widget.post['file'])
-        ..initialize().then((_) {
-          setState(() {});
-          _videoController!.play();
-          _videoController!.setLooping(true);
-        });
+    _likesCount    = (widget.post['likes_count']    as int?) ?? 0;
+    _commentsCount = (widget.post['comments_count'] as int?) ?? 0;
+
+    _heartBounceCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _heartScale = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.5), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.5, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(parent: _heartBounceCtrl, curve: Curves.easeInOut));
+
+    _floatingHeartCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _floatingHeartOpacity = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
+    ]).animate(_floatingHeartCtrl);
+    _floatingHeartSize = Tween(begin: 60.0, end: 120.0)
+        .animate(CurvedAnimation(parent: _floatingHeartCtrl, curve: Curves.easeOut));
+
+    // Video
+    if (_mediaType == 'video') {
+      final uri = Uri.tryParse(_mediaUrl);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        _videoController = VideoPlayerController.networkUrl(uri)
+          ..initialize().then((_) {
+            if (!mounted) return;
+            setState(() {});
+            _videoController!.play();
+            _videoController!.setLooping(true);
+          });
+      }
     }
+
+    _loadLikeStatus();
+  }
+
+  Future<void> _loadLikeStatus() async {
+    if (_postId.isEmpty) return;
+    try {
+      final results = await Future.wait([
+        PostService.instance.hasLiked(_postId),
+        PostService.instance.getLikesCount(_postId),
+      ]);
+      if (mounted) {
+        setState(() {
+          _isLiked = results[0] as bool;
+          _likesCount = results[1] as int;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -72,7 +303,108 @@ class _PostWidgetState extends State<PostWidget> {
   @override
   void dispose() {
     _videoController?.dispose();
+    _heartBounceCtrl.dispose();
+    _floatingHeartCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleLike() async {
+    if (_postId.isEmpty) return;
+    final newLiked = !_isLiked;
+    setState(() {
+      _isLiked = newLiked;
+      _likesCount += newLiked ? 1 : -1;
+    });
+    _heartBounceCtrl.forward(from: 0);
+    if (newLiked) {
+      AnalyticsService.instance.postLiked(_postId);
+    } else {
+      AnalyticsService.instance.postUnliked(_postId);
+    }
+    try {
+      await PostService.instance.toggleLike(_postId);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLiked = !newLiked;
+          _likesCount += newLiked ? -1 : 1;
+        });
+      }
+    }
+  }
+
+  void _onDoubleTap() {
+    if (!_isLiked) _toggleLike();
+    _floatingHeartCtrl.forward(from: 0);
+  }
+
+  void _openComments() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CommentsSheet(
+        postId: _postId,
+        onCountChanged: (count) {
+          if (mounted) setState(() => _commentsCount = count);
+        },
+      ),
+    );
+  }
+
+  void _openUserProfile(BuildContext context) {
+    if (_userId.isEmpty) return;
+    if (_userId == SupabaseService.instance.currentUserId) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserProfileScreen(userId: _userId, username: _username),
+      ),
+    );
+  }
+
+  Widget _buildMedia() {
+    final uri = Uri.tryParse(_mediaUrl);
+    final isNetwork = uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+
+    if (_mediaType == 'video') {
+      if (_videoController != null && _videoController!.value.isInitialized) {
+        return FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: _videoController!.value.size.width,
+            height: _videoController!.value.size.height,
+            child: VideoPlayer(_videoController!),
+          ),
+        );
+      }
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    if (isNetwork) {
+      return Image.network(
+        _mediaUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.broken_image, color: Colors.white54, size: 60),
+        ),
+      );
+    }
+
+    if (File(_mediaUrl).existsSync()) {
+      return Image.file(
+        File(_mediaUrl),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+
+    return const Center(
+      child: Icon(Icons.image_not_supported, color: Colors.white54, size: 60),
+    );
   }
 
   @override
@@ -80,80 +412,158 @@ class _PostWidgetState extends State<PostWidget> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        widget.post['type'] == 'video'
-            ? (_videoController != null && _videoController!.value.isInitialized)
-                ? VideoPlayer(_videoController!)
-                : const Center(child: CircularProgressIndicator())
-            : Image.asset(
-                widget.post['file'],
-                fit: BoxFit.cover,
+        // ── Media ──────────────────────────────────────────────────────────
+        GestureDetector(
+          onDoubleTap: _onDoubleTap,
+          child: _buildMedia(),
+        ),
+
+        // ── Gradiente inferior ─────────────────────────────────────────────
+        IgnorePointer(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.0, 0.45, 1.0],
+                colors: [
+                  Colors.black.withValues(alpha: 0.15),
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.75),
+                ],
               ),
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [
-                Colors.black.withOpacity(0.7),
-                Colors.transparent,
-              ],
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
+
+        // ── Corazón flotante (double tap) ─────────────────────────────────
+        Center(
+          child: AnimatedBuilder(
+            animation: _floatingHeartCtrl,
+            builder: (_, __) => Opacity(
+              opacity: _floatingHeartOpacity.value,
+              child: Icon(
+                Icons.favorite,
+                color: Colors.red.shade400,
+                size: _floatingHeartSize.value,
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 20)],
+              ),
+            ),
+          ),
+        ),
+
+        // ── Info inferior izquierda ────────────────────────────────────────
+        Positioned(
+          left: 16,
+          right: 90,
+          bottom: 32,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '@${widget.post['username']}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              GestureDetector(
+                onTap: () => _openUserProfile(context),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.white24,
+                      backgroundImage: (_avatarUrl?.isNotEmpty == true)
+                          ? NetworkImage(_avatarUrl!)
+                          : null,
+                      child: (_avatarUrl?.isNotEmpty == true)
+                          ? null
+                          : Text(
+                              _username.isNotEmpty
+                                  ? _username[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '@$_username',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                widget.post['caption'],
-                style: const TextStyle(color: Colors.white),
-              ),
+              if (_caption.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _caption,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 13,
+                    height: 1.4,
+                    shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
+
+        // ── Barra de acciones derecha ──────────────────────────────────────
         Positioned(
-          bottom: 20,
-          right: 16,
+          right: 12,
+          bottom: 28,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(
-                  isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: Colors.white,
-                  size: 32,
+              // LIKE
+              _ActionButton(
+                icon: AnimatedBuilder(
+                  animation: _heartBounceCtrl,
+                  builder: (_, __) => Transform.scale(
+                    scale: _heartScale.value,
+                    child: Icon(
+                      _isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: _isLiked ? Colors.red.shade400 : Colors.white,
+                      size: 30,
+                      shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+                    ),
+                  ),
                 ),
-                onPressed: () {
-                  setState(() {
-                    isLiked = !isLiked;
-                  });
-                },
+                label: _formatCount(_likesCount),
+                onTap: _toggleLike,
               ),
-              const SizedBox(height: 12),
-              IconButton(
-                icon: const Icon(Icons.comment, color: Colors.white, size: 32),
-                onPressed: () {
-                  // Puedes abrir modal de comentarios
-                },
-              ),
-              const SizedBox(height: 12),
-              IconButton(
-                icon: Icon(
-                  isSaved ? Icons.bookmark : Icons.bookmark_border,
+              const SizedBox(height: 20),
+
+              // COMENTARIOS
+              _ActionButton(
+                icon: const Icon(
+                  Icons.chat_bubble_outline_rounded,
                   color: Colors.white,
-                  size: 32,
+                  size: 28,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
                 ),
-                onPressed: () {
-                  setState(() {
-                    isSaved = !isSaved;
-                  });
-                },
+                label: _formatCount(_commentsCount),
+                onTap: _openComments,
+              ),
+              const SizedBox(height: 20),
+
+              // GUARDAR
+              _ActionButton(
+                icon: Icon(
+                  _isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  color: _isSaved ? Colors.amber : Colors.white,
+                  size: 28,
+                  shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+                ),
+                label: '',
+                onTap: () => setState(() => _isSaved = !_isSaved),
               ),
             ],
           ),
@@ -161,4 +571,219 @@ class _PostWidgetState extends State<PostWidget> {
       ],
     );
   }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '$count';
+  }
 }
+
+// ── Pantalla de notificaciones ────────────────────────────────────────────────
+
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _notifications = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    if (!_isLoading) setState(() { _isLoading = true; _error = null; });
+    try {
+      final client = SupabaseService.instance.client;
+      final uid = SupabaseService.instance.currentUserId;
+      if (uid == null) { setState(() => _isLoading = false); return; }
+
+      // Eliminar notificaciones > 7 días
+      await client.rpc('cleanup_old_notifications');
+
+      // Cargar notificaciones con perfil del actor
+      final data = await client
+          .from('notifications')
+          .select('id, type, post_id, read_at, created_at, actor:profiles!actor_id(id, username, avatar_url)')
+          .eq('user_id', uid)
+          .order('created_at', ascending: false)
+          .limit(50);
+
+      // Marcar todas como leídas
+      await client
+          .from('notifications')
+          .update({'read_at': DateTime.now().toIso8601String()})
+          .eq('user_id', uid)
+          .isFilter('read_at', null);
+
+      if (mounted) setState(() { _notifications = List<Map<String, dynamic>>.from(data); _isLoading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = 'Error al cargar notificaciones'; _isLoading = false; });
+      debugPrint('NotificationsScreen error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Notificaciones', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00BFFF)))
+          : _error != null
+              ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+              : _notifications.isEmpty
+                  ? const Center(
+                      child: Text('Sin notificaciones', style: TextStyle(color: Colors.white54)),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadNotifications,
+                      color: const Color(0xFF00BFFF),
+                      backgroundColor: Colors.grey[900],
+                      child: ListView.separated(
+                        itemCount: _notifications.length,
+                        separatorBuilder: (_, __) => Divider(color: Colors.white12, height: 1),
+                        itemBuilder: (context, i) => _NotifTile(notif: _notifications[i]),
+                      ),
+                    ),
+    );
+  }
+}
+
+class _NotifTile extends StatelessWidget {
+  final Map<String, dynamic> notif;
+  const _NotifTile({required this.notif});
+
+  static String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Ahora';
+    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
+    if (diff.inDays < 7) return 'Hace ${diff.inDays} d';
+    return 'Hace 1 sem';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final actor = notif['actor'] as Map<String, dynamic>?;
+    final username = (actor?['username'] as String?) ?? 'alguien';
+    final actorId = (actor?['id'] as String?) ?? '';
+    final avatarUrl = actor?['avatar_url'] as String?;
+    final type = (notif['type'] as String?) ?? '';
+    final isUnread = notif['read_at'] == null;
+    final createdAt = DateTime.tryParse((notif['created_at'] as String?) ?? '');
+
+    final (IconData icon, Color iconColor, String actionText) = switch (type) {
+      'like'    => (Icons.favorite, Colors.red, 'le dio like a tu publicación.'),
+      'follow'  => (Icons.person_add, const Color(0xFF00BFFF), 'empezó a seguirte.'),
+      'comment' => (Icons.chat_bubble, Colors.amber, 'comentó en tu publicación.'),
+      _         => (Icons.notifications, Colors.white54, 'interactuó contigo.'),
+    };
+
+    return Container(
+      color: isUnread ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
+      child: ListTile(
+        leading: CircleAvatar(
+          radius: 22,
+          backgroundColor: Colors.grey[850],
+          backgroundImage: (avatarUrl?.isNotEmpty == true) ? NetworkImage(avatarUrl!) : null,
+          child: (avatarUrl?.isNotEmpty != true)
+              ? Icon(icon, color: iconColor, size: 20)
+              : null,
+        ),
+        title: RichText(
+          text: TextSpan(
+            children: [
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: GestureDetector(
+                  onTap: actorId.isNotEmpty
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => UserProfileScreen(userId: actorId, username: username),
+                            ),
+                          )
+                      : null,
+                  child: Text(
+                    '@$username ',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              TextSpan(
+                text: actionText,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+        subtitle: createdAt != null
+            ? Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(_timeAgo(createdAt), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+// ── Botón de acción reutilizable ──────────────────────────────────────────────
+
+class _ActionButton extends StatelessWidget {
+  final Widget icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(6),
+            child: icon,
+          ),
+          if (label.isNotEmpty)
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+

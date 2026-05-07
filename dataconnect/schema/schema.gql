@@ -1,0 +1,237 @@
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum FitnessGoal {
+  LOSE_WEIGHT
+  GAIN_MUSCLE
+  MAINTAIN
+}
+
+enum TrainingLocation {
+  HOME
+  GYM
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum RecommendationType {
+  WORKOUT
+  MEAL
+  HABIT
+  RECOVERY
+}
+
+enum RecommendationStatus {
+  ACTIVE
+  REPLACED
+  DISMISSED
+  COMPLETED
+}
+
+enum PlanType {
+  WORKOUT
+  MEAL
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum FoodStyle {
+  CASERO
+  GOURMET
+}
+
+type User @table(name: "user", key: "id") {
+  id: String! @default(expr: "auth.uid")
+  username: String! @unique
+  email: String! @unique
+  createdAt: Timestamp!
+}
+
+type Profile @table(name: "profile", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  displayName: String!
+  age: Int!
+  gender: Gender!
+  weight: Float!
+  height: Float!
+  targetWeight: Float!
+  fitnessGoal: FitnessGoal!
+  trainingLocation: TrainingLocation!
+  timeAvailability: String!
+  photoUrl: String
+  foodPreferences: [String]
+  exercisePreferences: [String]
+}
+
+type Post @table(name: "post", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  mediaUrl: String!
+  mediaType: MediaType!
+  description: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+  likesCount: Int! @default(expr: "0")
+  commentsCount: Int! @default(expr: "0")
+}
+
+type Like @table(name: "like", key: ["user", "post"]) {
+  user: User!
+  post: Post!
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Comment @table(name: "comment", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  post: Post!
+  content: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type AIRecommendation @table(name: "ai_recommendation", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  recommendationType: RecommendationType!
+  generatedAt: Timestamp! @default(expr: "request.time")
+  sourceAIVersion: String!
+  recommendationDetails: String!
+  status: RecommendationStatus!
+  triggeredBy: String
+}
+
+type AIPlanVersion @table(name: "ai_plan_version", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  versionNumber: Int!
+  generatedAt: Timestamp! @default(expr: "request.time")
+  planType: PlanType!
+  triggerReason: String!
+  summary: String
+  recommendation: AIRecommendation
+}
+
+type WorkoutPlan @table(name: "workout_plan", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  name: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+  startDate: Date!
+  currentAIPlanVersion: AIPlanVersion!
+  description: String
+  isActive: Boolean! @default(expr: "true")
+}
+
+type WorkoutDay @table(name: "workout_day", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  workoutPlan: WorkoutPlan!
+  dayNumber: Int!
+  date: Date!
+  isCompleted: Boolean! @default(expr: "false")
+}
+
+type Exercise @table(name: "exercise", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  workoutDay: WorkoutDay!
+  name: String!
+  description: String
+  muscleGroup: String!
+  sets: Int!
+  repetitions: String!
+  durationMinutes: Int
+  videoUrl: String
+  gifUrl: String
+  orderInDay: Int!
+}
+
+type MealPlan @table(name: "meal_plan", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  date: Date!
+  currentAIPlanVersion: AIPlanVersion!
+  totalCalories: Float
+  totalProteins: Float
+  totalCarbohydrates: Float
+  totalFats: Float
+  isActive: Boolean! @default(expr: "true")
+}
+
+type Meal @table(name: "meal", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  mealPlan: MealPlan!
+  mealType: MealType!
+  name: String!
+  ingredients: [String]!
+  calories: Float!
+  proteins: Float!
+  carbohydrates: Float!
+  fats: Float!
+  foodStyle: FoodStyle
+}
+
+type UserProgress @table(name: "user_progress", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  recordedAt: Timestamp! @default(expr: "request.time")
+  weightKg: Float
+  bodyFatPercentage: Float
+  muscleMassKg: Float
+  notes: String
+}
+
+type WaterTracking @table(name: "water_tracking", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  date: Date!
+  amountMl: Int!
+  recordedAt: Timestamp! @default(expr: "request.time")
+}
+
+type WorkoutHistory @table(name: "workout_history", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  recordedAt: Timestamp! @default(expr: "request.time")
+  workoutPlanSnapshot: String!
+  workoutDaySnapshot: String!
+  exerciseSnapshot: String!
+  workoutPlanId: UUID!
+  workoutDayId: UUID!
+  exerciseId: UUID!
+  exerciseName: String!
+  setsCompleted: Int!
+  repsCompleted: String!
+  weightUsedKg: Float
+  durationActualMinutes: Int
+  notes: String
+  isCompleted: Boolean! @default(expr: "false")
+  aiPlanVersion: AIPlanVersion!
+  planVersionNumber: Int!
+  dayNumber: Int!
+}
+
+type MealHistory @table(name: "meal_history", key: "id") {
+  id: UUID! @default(expr: "uuidV4()")
+  user: User!
+  recordedAt: Timestamp! @default(expr: "request.time")
+  mealPlanSnapshot: String!
+  mealSnapshot: String!
+  mealPlanId: UUID!
+  mealId: UUID!
+  mealName: String!
+  isAdhered: Boolean! @default(expr: "false")
+  notes: String
+  aiPlanVersion: AIPlanVersion!
+  planVersionNumber: Int!
+}

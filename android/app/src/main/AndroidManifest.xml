@@ -1,6 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Supabase y assets remotos -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- image_picker: galería y cámara -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <!-- Fallback para Android 12 o menor -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+
     <application
-        android:label="gymgram_fixed"
+        android:label="GymGram"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

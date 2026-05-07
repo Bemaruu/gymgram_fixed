@@ -1,0 +1,8 @@
+mutation CreateComment($postId: UUID!, $content: String!) @auth(level: USER) {
+  comment_insert(data: {
+    userId_expr: "auth.uid"
+    postId: $postId
+    content: $content
+    createdAt_expr: "request.time"
+  })
+}

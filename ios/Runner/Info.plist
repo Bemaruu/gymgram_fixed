@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Gymgram Fixed</string>
+	<string>GymGram</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>gymgram_fixed</string>
+	<string>GymGram</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -45,5 +45,18 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GymGram necesita acceso a tu galería para subir fotos a tu perfil y publicaciones.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>GymGram necesita acceso a tu cámara para tomar fotos para tus publicaciones.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GymGram necesita acceso al micrófono para grabar videos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>GymGram necesita permiso para guardar fotos en tu galería.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

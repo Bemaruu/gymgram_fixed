@@ -1,0 +1,21 @@
+query GetMyProfile @auth(level: USER) {
+  profiles(where: { userId: { eq_expr: "auth.uid" } }) {
+    id
+    displayName
+    age
+    gender
+    weight
+    height
+    targetWeight
+    fitnessGoal
+    trainingLocation
+    timeAvailability
+    photoUrl
+    foodPreferences
+    exercisePreferences
+    user {
+      username
+      email
+    }
+  }
+}

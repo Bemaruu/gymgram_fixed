@@ -1,10 +1,120 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../services/analytics_service.dart';
+import '../../services/auth_service.dart';
 import '../shared/custom_button.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _showPasswordRecovery() async {
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Recuperar contraseña'),
+        content: TextField(
+          controller: emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(hintText: 'Tu correo electrónico'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final email = emailCtrl.text.trim();
+    if (email.isEmpty) return;
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Revisa tu correo para restablecer tu contraseña.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo enviar el correo. Intenta de nuevo.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _onLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completa todos los campos.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService().loginWithEmail(email: email, password: password);
+
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid != null) AnalyticsService.instance.identify(uid);
+      AnalyticsService.instance.loginSuccess();
+
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main_navigation_screen',
+        (route) => false,
+        arguments: const <String, dynamic>{'username': '', 'bio': ''},
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg.isNotEmpty ? msg : 'No se pudo iniciar sesión.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,28 +122,22 @@ class LoginScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Fondo
           Image.asset(
             'assets/images/pesas.png',
             fit: BoxFit.cover,
           ),
-
-          // Desenfoque
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
             child: Container(
-              color: Colors.white.withAlpha(30), // reemplaza .withOpacity(0.2)
+              color: Colors.white.withAlpha(30),
             ),
           ),
-
-          // Contenido centrado
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: Image.asset(
@@ -44,7 +148,6 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   const Text(
                     'Bienvenido a GymGram',
                     style: TextStyle(
@@ -53,10 +156,7 @@ class LoginScreen extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-
                   const SizedBox(height: 36),
-
-                  // Formulario
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -73,28 +173,28 @@ class LoginScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
-                            hintText: 'Nombre de Usuario o Email',
+                            hintText: 'Correo electrónico',
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
+                          controller: _passwordController,
                           obscureText: true,
                           decoration: const InputDecoration(
                             hintText: 'Contraseña',
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        CustomButton(
-                          text: 'Entrar',
-                          onPressed: () {
-                            // Acción de login
-                          },
-                        ),
-
+                        _isLoading
+                            ? const CircularProgressIndicator()
+                            : CustomButton(
+                                text: 'Entrar',
+                                onPressed: _onLogin,
+                              ),
                         const SizedBox(height: 12),
-
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -103,9 +203,7 @@ class LoginScreen extends StatelessWidget {
                               style: TextStyle(fontSize: 13),
                             ),
                             GestureDetector(
-                              onTap: () {
-                                // Acción recuperar
-                              },
+                              onTap: _showPasswordRecovery,
                               child: const Text(
                                 'Recuperarla',
                                 style: TextStyle(
@@ -117,13 +215,9 @@ class LoginScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 14),
-
                         GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                          },
+                          onTap: () => Navigator.pop(context),
                           child: const Text(
                             'Volver',
                             style: TextStyle(
@@ -135,7 +229,7 @@ class LoginScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  )
+                  ),
                 ],
               ),
             ),

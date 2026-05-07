@@ -1,0 +1,8 @@
+mutation AddWaterTracking($date: Date!, $amountMl: Int!) @auth(level: USER) {
+  waterTracking_insert(data: {
+    userId_expr: "auth.uid"
+    date: $date
+    amountMl: $amountMl
+    recordedAt_expr: "request.time"
+  })
+}

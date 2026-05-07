@@ -1,0 +1,24 @@
+mutation CreateProfile(
+  $displayName: String!
+  $age: Int!
+  $gender: Gender!
+  $weight: Float!
+  $height: Float!
+  $targetWeight: Float!
+  $fitnessGoal: FitnessGoal!
+  $trainingLocation: TrainingLocation!
+  $timeAvailability: String!
+) @auth(level: USER) {
+  profile_insert(data: {
+    userId_expr: "auth.uid"
+    displayName: $displayName
+    age: $age
+    gender: $gender
+    weight: $weight
+    height: $height
+    targetWeight: $targetWeight
+    fitnessGoal: $fitnessGoal
+    trainingLocation: $trainingLocation
+    timeAvailability: $timeAvailability
+  })
+}

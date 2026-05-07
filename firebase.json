@@ -1,0 +1,30 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "gymgram-6e226",
+          "appId": "1:1037070117892:android:baeeadf6aa1eda35149951",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "gymgram-6e226",
+          "configurations": {
+            "android": "1:1037070117892:android:baeeadf6aa1eda35149951",
+            "ios": "1:1037070117892:ios:1657be9d5cb81f2e149951"
+          }
+        }
+      }
+    }
+  },
+  "emulators": {
+    "dataconnect": {
+      "dataDir": "dataconnect/.dataconnect/pgliteData"
+    }
+  },
+  "dataconnect": {
+    "source": "dataconnect"
+  }
+}

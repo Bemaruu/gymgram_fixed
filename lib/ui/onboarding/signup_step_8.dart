@@ -28,27 +28,47 @@ class _SignupStep8State extends State<SignupStep8> {
     final height = double.tryParse(_heightController.text);
     final targetWeight = double.tryParse(_targetWeightController.text);
 
-    if (currentWeight != null && height != null && targetWeight != null) {
-      final heightInMeters = height / 100;
-      final bmi = currentWeight / (heightInMeters * heightInMeters);
-      print('IMC: $bmi');
-
-      userData['currentWeight'] = currentWeight.toString();
-      userData['height'] = height.toString();
-      userData['targetWeight'] = targetWeight.toString();
-      userData['bmi'] = bmi.toStringAsFixed(2);
-
-
-      Navigator.pushNamed(
-        context,
-        '/signup_step_9',
-        arguments: userData,
-      );
-    } else {
+    if (currentWeight == null || height == null || targetWeight == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completa todos los campos con números válidos')),
       );
+      return;
     }
+
+    if (currentWeight < 30 || currentWeight > 300) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El peso debe estar entre 30 y 300 kg')),
+      );
+      return;
+    }
+
+    if (height < 100 || height > 250) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La estatura debe estar entre 100 y 250 cm')),
+      );
+      return;
+    }
+
+    if (targetWeight < 30 || targetWeight > 300) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El peso objetivo debe estar entre 30 y 300 kg')),
+      );
+      return;
+    }
+
+    final heightInMeters = height / 100;
+    final bmi = currentWeight / (heightInMeters * heightInMeters);
+
+    userData['currentWeight'] = currentWeight.toString();
+    userData['height'] = height.toString();
+    userData['targetWeight'] = targetWeight.toString();
+    userData['bmi'] = bmi.toStringAsFixed(2);
+
+    Navigator.pushNamed(
+      context,
+      '/signup_step_9',
+      arguments: userData,
+    );
   }
 
   @override
@@ -155,7 +175,7 @@ class _SignupStep8State extends State<SignupStep8> {
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.black54),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.85),
+        fillColor: Colors.white.withValues(alpha: 0.85),
         prefixIcon: Icon(icon, color: Colors.black54),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),

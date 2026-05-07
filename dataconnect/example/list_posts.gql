@@ -1,0 +1,15 @@
+query ListPosts @auth(level: PUBLIC) {
+  posts {
+    id
+    mediaUrl
+    mediaType
+    description
+    createdAt
+    likesCount
+    commentsCount
+    user {
+      username
+      email
+    }
+  }
+}

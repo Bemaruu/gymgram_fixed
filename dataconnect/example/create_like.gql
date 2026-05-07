@@ -1,0 +1,7 @@
+mutation CreateLike($postId: UUID!) @auth(level: USER) {
+  like_insert(data: {
+    userId_expr: "auth.uid"
+    postId: $postId
+    createdAt_expr: "request.time"
+  })
+}

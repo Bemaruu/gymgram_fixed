@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Onboarding
 import 'ui/onboarding/welcome_screen.dart';
@@ -24,10 +25,20 @@ import 'ui/main_screens/rutina_screen.dart';
 import 'ui/main_screens/alimentacion_screen.dart';
 import 'ui/main_screens/perfil_screen.dart';
 import 'ui/main_screens/edit_profile_screen.dart';
+import 'ui/main_screens/food_search_screen.dart';
+import 'ui/medals/user_medals_screen.dart';
+import 'ui/search/search_screen.dart';
+import 'ui/main_screens/create_custom_routine_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   // Onboarding
-  '/': (_) => const WelcomeScreen(),
+  '/': (_) {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      return MainNavigationScreen(userData: const <String, dynamic>{});
+    }
+    return const WelcomeScreen();
+  },
   '/login': (_) => const LoginScreen(),
   '/signup_step_1': (_) => const SignupStep1(),
   '/signup_step_2': (_) => const SignupStep2(),
@@ -53,18 +64,34 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/home_screen': (_) => const HomeScreen(),
   '/rutina_screen': (_) => const RoutineScreen(),
   '/alimentacion_screen': (_) => const AlimentacionScreen(),
-  '/profile_screen': (_) => ProfileScreen(
-  initialUsername: 'usuarioejemplo',
-  initialBio: 'Esta es mi bio y me gusta GymGram 💪🏽',
-),
+  '/profile_screen': (_) => const ProfileScreen(
+    initialUsername: '',
+    initialBio: '',
+  ),
+
+  '/search': (_) => const SearchScreen(),
+  '/food-search': (_) => const FoodSearchScreen(),
 
   '/edit_profile': (context) {
-  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-  return EditProfileScreen(
-    currentUsername: args['username'],
-    currentBio: args['bio'],
-  );
-},
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    return EditProfileScreen(
+      currentUsername: args['username'],
+      currentBio: args['bio'],
+    );
+  },
 
+  '/medals': (context) {
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    return UserMedalsScreen(
+      userId: args['userId'] as String,
+      isOwner: args['isOwner'] as bool? ?? false,
+    );
+  },
 
+  '/create-routine': (context) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final initialDay = args is Map ? args['selectedDay'] as int? : null;
+    final availableDays = args is Map ? args['availableDays'] as List<bool>? : null;
+    return CreateCustomRoutineScreen(initialDay: initialDay, availableDays: availableDays);
+  },
 };

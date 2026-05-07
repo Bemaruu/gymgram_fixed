@@ -1,4 +1,4 @@
-package com.example.gymgram_fixed
+package com.gymgram.app
 
 import io.flutter.embedding.android.FlutterActivity
 

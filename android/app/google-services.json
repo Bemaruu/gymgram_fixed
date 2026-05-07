@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1037070117892",
+    "project_id": "gymgram-6e226",
+    "storage_bucket": "gymgram-6e226.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1037070117892:android:baeeadf6aa1eda35149951",
+        "android_client_info": {
+          "package_name": "com.example.gymgram_fixed"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBI5zekXp0ygL9iYmha-k_UJuhL1jZa5E4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1037070117892:android:f79929b743493ca4149951",
+        "android_client_info": {
+          "package_name": "com.gymgram.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBI5zekXp0ygL9iYmha-k_UJuhL1jZa5E4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

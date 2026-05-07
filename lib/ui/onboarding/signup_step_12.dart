@@ -90,12 +90,16 @@ class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMix
           ],
         ),
         child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? Colors.white : AppColors.black,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : AppColors.black,
+              ),
             ),
           ),
         ),
