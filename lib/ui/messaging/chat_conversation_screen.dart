@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/message.dart';
@@ -61,7 +62,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         _hasMore = list.length >= ChatService.messagesPageSize;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) debugPrint('loadMessages error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -109,7 +111,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _handleSend(String text) async {
     try {
       await ChatService.instance.sendMessage(widget.chatId, text);
+      // Reload after send so sender sees their message immediately,
+      // regardless of whether realtime is working.
+      final list = await ChatService.instance.loadMessages(widget.chatId);
+      if (!mounted) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(list);
+        _hasMore = list.length >= ChatService.messagesPageSize;
+      });
     } catch (e) {
+      if (kDebugMode) debugPrint('sendMessage error: $e');
       if (!mounted) return;
       final msg = e.toString();
       String show = 'No se pudo enviar';
