@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/analytics_service.dart';
 import '../services/post_service.dart';
@@ -51,22 +52,19 @@ class PostGrid extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                mediaUrl,
+              CachedNetworkImage(
+                imageUrl: mediaUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorWidget: (_, __, ___) => Container(
                   color: Colors.grey[300],
                   child: const Icon(Icons.broken_image, color: Colors.grey),
                 ),
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                },
+                placeholder: (_, __) => Container(
+                  color: Colors.grey[200],
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
               ),
               // Gradiente sutil en esquina para indicar que es tapeable
               Positioned(
@@ -196,7 +194,7 @@ class _PostDetailPageState extends State<_PostDetailPage>
   void _loadImageAspectRatio() {
     final url = _mediaUrl;
     if (url.isEmpty) return;
-    final stream = NetworkImage(url).resolve(const ImageConfiguration());
+    final stream = CachedNetworkImageProvider(url).resolve(const ImageConfiguration());
     stream.addListener(ImageStreamListener(
       (info, _) {
         if (mounted) {
@@ -435,11 +433,11 @@ class _PostDetailPageState extends State<_PostDetailPage>
                               maxHeight: maxH,
                               maxWidth: maxW,
                             ),
-                            child: Image.network(
-                              _mediaUrl,
+                            child: CachedNetworkImage(
+                              imageUrl: _mediaUrl,
                               fit: BoxFit.contain,
                               width: imageW,
-                              errorBuilder: (_, __, ___) => Container(
+                              errorWidget: (_, __, ___) => Container(
                                 height: 300,
                                 width: imageW,
                                 color: Colors.grey[900],

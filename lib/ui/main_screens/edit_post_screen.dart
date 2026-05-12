@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/post_service.dart';
 
@@ -87,12 +88,12 @@ class _EditPostScreenState extends State<EditPostScreen> {
         child: Column(
           children: [
             // Preview de la imagen
-            Image.network(
-              widget.mediaUrl,
+            CachedNetworkImage(
+              imageUrl: widget.mediaUrl,
               height: 280,
               width: double.infinity,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorWidget: (_, __, ___) => Container(
                 height: 280,
                 color: Colors.grey[900],
                 child: const Center(

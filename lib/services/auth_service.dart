@@ -79,6 +79,22 @@ class AuthService {
     }
   }
 
+  Future<void> deleteAccount() async {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) throw Exception('No hay sesión activa.');
+
+    try {
+      await _client.functions.invoke('delete-user');
+    } on AuthException catch (e) {
+      throw Exception(_mapAuthError(e.message));
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('No se pudo eliminar la cuenta.');
+    } finally {
+      await _client.auth.signOut();
+    }
+  }
+
   String _mapAuthError(String message) {
     final lower = message.toLowerCase();
     if (lower.contains('already registered') || lower.contains('already exists')) {

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
 import '../search/user_profile_screen.dart';
@@ -186,7 +187,7 @@ class _UserTileState extends State<_UserTile> {
             CircleAvatar(
               radius: 26,
               backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.15),
-              backgroundImage: hasAvatar ? NetworkImage(avatarUrl) : null,
+              backgroundImage: hasAvatar ? CachedNetworkImageProvider(avatarUrl) : null,
               child: hasAvatar
                   ? null
                   : Text(

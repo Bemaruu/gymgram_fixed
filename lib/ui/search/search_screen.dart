@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/supabase_service.dart';
@@ -247,7 +248,7 @@ class _UserTileState extends State<_UserTile> {
               radius: 26,
               backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.2),
               backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                  ? NetworkImage(avatarUrl)
+                  ? CachedNetworkImageProvider(avatarUrl)
                   : null,
               child: hasAvatar
                   ? null

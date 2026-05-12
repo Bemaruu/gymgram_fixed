@@ -1,10 +1,14 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/analytics_service.dart';
+import '../../services/chat_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
 import '../../services/supabase_service.dart';
+import '../messaging/chat_list_screen.dart';
+import '../messaging/widgets/unread_badge.dart';
 import '../search/search_screen.dart';
 import '../search/user_profile_screen.dart';
 import '../social/comments_sheet.dart';
@@ -21,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoading = true;
   bool _hasNotifications = false;
+  int _unreadChats = 0;
   List<Map<String, dynamic>> _posts = [];
 
   @override
@@ -28,11 +33,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadPosts();
     _checkUnreadNotifications();
+    _loadUnreadChats();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationService.instance.initialize().catchError(
         (e) => debugPrint('NotificationService error: $e'),
       );
     });
+  }
+
+  Future<void> _loadUnreadChats() async {
+    try {
+      final count = await ChatService.instance.getTotalUnread();
+      if (mounted) setState(() => _unreadChats = count);
+    } catch (_) {}
   }
 
   Future<void> _checkUnreadNotifications() async {
@@ -171,6 +184,42 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          // Botón de mensajes
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 64,
+            child: GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                );
+                _loadUnreadChats();
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Center(
+                      child: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 22),
+                    ),
+                    if (_unreadChats > 0)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: UnreadBadge(count: _unreadChats, size: 16),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           // Botón de búsqueda
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
@@ -284,14 +333,27 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
       final results = await Future.wait([
         PostService.instance.hasLiked(_postId),
         PostService.instance.getLikesCount(_postId),
+        PostService.instance.isPostSaved(_postId),
       ]);
       if (mounted) {
         setState(() {
           _isLiked = results[0] as bool;
           _likesCount = results[1] as int;
+          _isSaved = results[2] as bool;
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _toggleSave() async {
+    if (_postId.isEmpty) return;
+    final newSaved = !_isSaved;
+    setState(() => _isSaved = newSaved);
+    try {
+      await PostService.instance.toggleSavePost(_postId);
+    } catch (_) {
+      if (mounted) setState(() => _isSaved = !newSaved);
+    }
   }
 
   @override
@@ -382,12 +444,15 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
     }
 
     if (isNetwork) {
-      return Image.network(
-        _mediaUrl,
+      return CachedNetworkImage(
+        imageUrl: _mediaUrl,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        errorBuilder: (_, __, ___) => const Center(
+        placeholder: (_, __) => const Center(
+          child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
+        ),
+        errorWidget: (_, __, ___) => const Center(
           child: Icon(Icons.broken_image, color: Colors.white54, size: 60),
         ),
       );
@@ -469,7 +534,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
                       radius: 18,
                       backgroundColor: Colors.white24,
                       backgroundImage: (_avatarUrl?.isNotEmpty == true)
-                          ? NetworkImage(_avatarUrl!)
+                          ? CachedNetworkImageProvider(_avatarUrl!)
                           : null,
                       child: (_avatarUrl?.isNotEmpty == true)
                           ? null
@@ -563,7 +628,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
                   shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
                 ),
                 label: '',
-                onTap: () => setState(() => _isSaved = !_isSaved),
+                onTap: _toggleSave,
               ),
             ],
           ),
@@ -699,7 +764,7 @@ class _NotifTile extends StatelessWidget {
         leading: CircleAvatar(
           radius: 22,
           backgroundColor: Colors.grey[850],
-          backgroundImage: (avatarUrl?.isNotEmpty == true) ? NetworkImage(avatarUrl!) : null,
+          backgroundImage: (avatarUrl?.isNotEmpty == true) ? CachedNetworkImageProvider(avatarUrl!) : null,
           child: (avatarUrl?.isNotEmpty != true)
               ? Icon(icon, color: iconColor, size: 20)
               : null,

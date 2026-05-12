@@ -36,6 +36,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
   // ID de la rutina guardada en Supabase para el día actual (null = solo IA)
   String? _savedRoutineId;
   List<Map<String, dynamic>> _savedRoutines = [];
+  bool _hasArchivedForDay = false;
+  bool _isRestoring = false;
 
   String _goal = 'MAINTAIN';
   String _location = 'GYM';
@@ -57,14 +59,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
   void didUpdateWidget(RoutineScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.resetToken != widget.resetToken) {
-      final today = DateTime.now().weekday - 1;
-      if (_selectedDayIndex != today) {
-        setState(() {
-          _selectedDayIndex = today;
-          _isEditMode = false;
-        });
-        _generateExercises();
-      }
+      // Al volver a la tab de rutina: recarga todo desde BD para reflejar
+      // rutinas copiadas / editadas en otras pantallas.
+      setState(() {
+        _selectedDayIndex = DateTime.now().weekday - 1;
+        _isEditMode = false;
+      });
+      _load();
     }
   }
 
@@ -144,6 +145,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                 ))
             .toList();
       });
+      _checkArchivedForDay();
       return;
     }
 
@@ -184,6 +186,125 @@ class _RoutineScreenState extends State<RoutineScreen> {
               ))
           .toList();
     });
+
+    // Auto-persistir la rutina IA para que aparezca en el perfil del user
+    // y otros puedan copiarla. Silencioso, sin snackbar.
+    if (_exercises.isNotEmpty) {
+      _autoSavePersonal(raw);
+    }
+    _checkArchivedForDay();
+  }
+
+  Future<void> _checkArchivedForDay() async {
+    try {
+      final has = await RoutineService.instance
+          .hasArchivedRoutineForDay(_selectedDayIndex);
+      if (!mounted) return;
+      setState(() => _hasArchivedForDay = has);
+    } catch (_) {}
+  }
+
+  Future<void> _restorePreviousRoutine() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Volver a tu rutina anterior',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: const Text(
+          'Se reemplazará la rutina actual de este día por la que tenías antes de copiar.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Restaurar',
+              style: TextStyle(
+                color: Color(0xFF00BFFF),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isRestoring = true);
+    try {
+      await RoutineService.instance.restorePersonalDay(_selectedDayIndex);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(children: [
+            Icon(Icons.check_circle_rounded,
+                color: Color(0xFF00BFFF), size: 20),
+            SizedBox(width: 10),
+            Text('Rutina anterior restaurada'),
+          ]),
+          backgroundColor: const Color(0xFF1A1A2E),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(milliseconds: 2200),
+        ),
+      );
+    } catch (e) {
+      debugPrint('restore error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo restaurar: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
+    }
+  }
+
+  Future<void> _autoSavePersonal(List<Map<String, dynamic>> raw) async {
+    const dayNames = [
+      'Lunes', 'Martes', 'Miércoles', 'Jueves',
+      'Viernes', 'Sábado', 'Domingo',
+    ];
+    try {
+      final exerciseMaps = raw
+          .map((e) => {
+                'name': e['name'],
+                'muscle_group': e['muscle_group'],
+                'sets': e['sets'],
+                'reps': e['reps'],
+                'rest_seconds': e['rest_seconds'],
+              })
+          .toList();
+      final newId = await RoutineService.instance.saveRoutine(
+        title: dayNames[_selectedDayIndex],
+        goal: _goal,
+        trainingLocation: _location,
+        dayOfWeek: _selectedDayIndex,
+        exercises: exerciseMaps,
+      );
+      if (!mounted) return;
+      setState(() {
+        _savedRoutineId = newId;
+        _savedRoutines.add({
+          'id': newId,
+          'day_of_week': _selectedDayIndex,
+          'routine_exercises': exerciseMaps,
+        });
+      });
+    } catch (e) {
+      debugPrint('autoSavePersonal error: $e');
+    }
   }
 
   void _selectDay(int index) {
@@ -766,7 +887,29 @@ class _RoutineScreenState extends State<RoutineScreen> {
           : AppBar(
               backgroundColor: Colors.white,
               elevation: 0,
-              leading: const BackButton(color: Colors.black),
+              automaticallyImplyLeading: false,
+              leading: _hasArchivedForDay
+                  ? (_isRestoring
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF00BFFF),
+                            ),
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(
+                            Icons.history_rounded,
+                            color: Color(0xFF00BFFF),
+                          ),
+                          tooltip: 'Volver a tu rutina anterior',
+                          onPressed: _restorePreviousRoutine,
+                        ))
+                  : null,
               title: const Text(
                 'Rutina del Dia',
                 style: TextStyle(color: Colors.black),

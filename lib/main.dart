@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
@@ -21,22 +23,13 @@ const _mixpanelToken = String.fromEnvironment(
 );
 
 Future<void> main() async {
+  assert(_supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY no configurado');
+  assert(_mixpanelToken.isNotEmpty, 'MIXPANEL_TOKEN no configurado');
   await runZonedGuarded(_boot, (error, stack) {
     debugPrint('GymGram fatal: $error\n$stack');
-    runApp(MaterialApp(
+    runApp(const MaterialApp(
       home: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                'GymGram error de arranque:\n\n$error\n\n$stack',
-                style: const TextStyle(color: Colors.red, fontSize: 12),
-              ),
-            ),
-          ),
-        ),
+        body: Center(child: Text('Error al iniciar la app. Por favor reiníciala.')),
       ),
     ));
   });
@@ -47,6 +40,10 @@ Future<void> _boot() async {
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+    );
   } catch (e) {
     debugPrint('Firebase init error (notificaciones no disponibles): $e');
   }

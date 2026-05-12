@@ -1,10 +1,17 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/profile_photo_local.dart';
 import '../../services/post_service.dart';
+import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/copy_routine_bottom_sheet.dart';
 import '../../widgets/medal_preview_section.dart';
+import '../../widgets/personal_routine_card.dart';
 import '../../widgets/post_grid.dart';
+import '../../widgets/premium_rank_preview.dart';
+import '../../widgets/profile_tabs_nav.dart';
+import '../../widgets/routine_card.dart';
 import '../social/follow_list_screen.dart';
 import 'create_post_screen.dart';
 
@@ -38,6 +45,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Map<String, dynamic>> _userPosts = [];
   int _followersCount = 0;
   int _followingCount = 0;
+
+  ProfileTab _selectedTab = ProfileTab.fotos;
+  List<Map<String, dynamic>> _personalRoutines = [];
+  List<Map<String, dynamic>> _communityRoutines = [];
+  bool _routinesLoaded = false;
+  List<Map<String, dynamic>> _savedPosts = [];
+  bool _savedLoaded = false;
 
   @override
   void initState() {
@@ -103,6 +117,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _refresh() async {
     await Future.wait([_loadProfile(), _loadUserPosts(), _loadFollowCounts()]);
+    if (_selectedTab == ProfileTab.rutinas) {
+      _routinesLoaded = false;
+      await _loadMyRoutines();
+    } else if (_selectedTab == ProfileTab.guardados) {
+      _savedLoaded = false;
+      await _loadSavedPosts();
+    }
+  }
+
+  Future<void> _loadMyRoutines() async {
+    if (_routinesLoaded) return;
+    try {
+      final results = await Future.wait([
+        RoutineService.instance.getMyPersonalRoutines(),
+        RoutineService.instance.getMyCommunityRoutines(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _personalRoutines = results[0];
+        _communityRoutines = results[1];
+        _routinesLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('loadMyRoutines error: $e');
+      if (mounted) setState(() => _routinesLoaded = true);
+    }
+  }
+
+  Future<void> _loadSavedPosts() async {
+    if (_savedLoaded) return;
+    try {
+      final list = await PostService.instance.getSavedPosts();
+      if (!mounted) return;
+      setState(() {
+        _savedPosts = list;
+        _savedLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('loadSavedPosts error: $e');
+      if (mounted) setState(() => _savedLoaded = true);
+    }
+  }
+
+  void _onTabChanged(ProfileTab tab) {
+    setState(() => _selectedTab = tab);
+    if (tab == ProfileTab.rutinas) _loadMyRoutines();
+    if (tab == ProfileTab.guardados) _loadSavedPosts();
   }
 
   void _navigateToEditProfile() async {
@@ -157,6 +218,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Widget _buildTabContent() {
+    switch (_selectedTab) {
+      case ProfileTab.fotos:
+        return PostGrid(
+          posts: _userPosts,
+          isOwner: true,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          onPostDeleted: (id) => setState(
+            () => _userPosts.removeWhere((p) => p['id'] == id),
+          ),
+          onPostUpdated: (id, newCaption) => setState(() {
+            final i = _userPosts.indexWhere((p) => p['id'] == id);
+            if (i != -1) {
+              _userPosts[i] = {..._userPosts[i], 'caption': newCaption};
+            }
+          }),
+        );
+      case ProfileTab.rutinas:
+        if (!_routinesLoaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PersonalRoutineCard(
+                routines: _personalRoutines,
+                isOwner: true,
+                onTap: () =>
+                    Navigator.pushNamed(context, '/rutina_screen'),
+              ),
+              if (_communityRoutines.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Text(
+                    'Rutinas que comparto',
+                    style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ..._communityRoutines.map(
+                  (r) => RoutineCard(
+                    routine: r,
+                    isOwner: true,
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => CopyRoutineBottomSheet(routine: r),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () async {
+                  final created = await Navigator.pushNamed(
+                      context, '/create-community-routine');
+                  if (created == true) {
+                    _routinesLoaded = false;
+                    _loadMyRoutines();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: const Color(0xFF00BFFF), width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_circle_outline,
+                          color: Color(0xFF00BFFF), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Crear rutina para la comunidad',
+                        style: TextStyle(
+                          color: Color(0xFF00BFFF),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      case ProfileTab.rango:
+        return const PremiumRankPreview();
+      case ProfileTab.guardados:
+        if (!_savedLoaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_savedPosts.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+            child: Center(
+              child: Text(
+                'Aún no has guardado publicaciones',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          );
+        }
+        return PostGrid(
+          posts: _savedPosts,
+          isOwner: false,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+        );
+    }
+  }
+
   Widget _buildInfoChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -195,23 +387,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       ),
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black),
-            onPressed: _navigateToEditProfile,
-          ),
-        ],
-      ),
-      body: _isLoadingProfile
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : RefreshIndicator(
-              onRefresh: _refresh,
-              child: CustomScrollView(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: _isLoadingProfile
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(
                     child: Column(
@@ -220,13 +403,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 20),
 
                 Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
-                        ? NetworkImage(_avatarUrl!) as ImageProvider
-                        : LocalProfilePhoto.imageFile != null
-                            ? FileImage(LocalProfilePhoto.imageFile!)
-                            : const AssetImage('assets/images/default_profile.png'),
+                  child: GestureDetector(
+                    onLongPress: () =>
+                        Navigator.pushNamed(context, '/admin/usage'),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
+                          ? CachedNetworkImageProvider(_avatarUrl!) as ImageProvider
+                          : LocalProfilePhoto.imageFile != null
+                              ? FileImage(LocalProfilePhoto.imageFile!)
+                              : const AssetImage('assets/images/default_profile.png'),
+                    ),
                   ),
                 ),
 
@@ -371,23 +558,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           SliverToBoxAdapter(
-            child: PostGrid(
-              posts: _userPosts,
-              isOwner: true,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              onPostDeleted: (id) => setState(
-                () => _userPosts.removeWhere((p) => p['id'] == id),
-              ),
-              onPostUpdated: (id, newCaption) => setState(() {
-                final i = _userPosts.indexWhere((p) => p['id'] == id);
-                if (i != -1) _userPosts[i] = {..._userPosts[i], 'caption': newCaption};
-              }),
+            child: ProfileTabsNav(
+              selected: _selectedTab,
+              onChanged: _onTabChanged,
+              showSaved: true,
             ),
+          ),
+          SliverToBoxAdapter(
+            child: _buildTabContent(),
           ),
         ],
       ),
     ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                icon: const Icon(Icons.settings, color: Colors.black),
+                onPressed: _navigateToEditProfile,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

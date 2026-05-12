@@ -5,7 +5,7 @@ class ImageCompressor {
   static Future<File> compress(
     File file, {
     int maxDimension = 1080,
-    int quality = 85,
+    int quality = 72,
   }) async {
     final bytes = await FlutterImageCompress.compressWithFile(
       file.absolute.path,

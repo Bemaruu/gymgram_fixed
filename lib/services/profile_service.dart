@@ -82,6 +82,16 @@ class ProfileService {
   Future<String?> uploadAvatar(File file) async {
     final uid = _uid;
     if (uid == null) return null;
+    const maxBytes = 5 * 1024 * 1024;
+    const allowed = ['jpg', 'jpeg', 'png', 'heic', 'webp'];
+    final ext = file.path.split('.').last.toLowerCase();
+    if (!allowed.contains(ext)) {
+      throw Exception('Formato de imagen no permitido.');
+    }
+    final size = await file.length();
+    if (size > maxBytes) {
+      throw Exception('La imagen supera el límite de 5 MB.');
+    }
     final compressed = await ImageCompressor.compress(file, maxDimension: 400);
     const path = 'avatar.jpg';
     await _client.storage.from('avatars').upload(

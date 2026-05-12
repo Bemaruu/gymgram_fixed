@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/post_service.dart';
@@ -165,7 +166,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                   backgroundColor: const Color(0xFF00BFFF)
                                       .withValues(alpha: 0.3),
                                   backgroundImage: hasAvatar
-                                      ? NetworkImage(avatarUrl)
+                                      ? CachedNetworkImageProvider(avatarUrl)
                                       : null,
                                   child: hasAvatar
                                       ? null

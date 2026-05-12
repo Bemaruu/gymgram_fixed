@@ -29,6 +29,9 @@ import 'ui/main_screens/food_search_screen.dart';
 import 'ui/medals/user_medals_screen.dart';
 import 'ui/search/search_screen.dart';
 import 'ui/main_screens/create_custom_routine_screen.dart';
+import 'ui/main_screens/create_community_routine_screen.dart';
+import 'ui/messaging/chat_list_screen.dart';
+import 'ui/admin/usage_dashboard_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   // Onboarding
@@ -94,4 +97,10 @@ final Map<String, WidgetBuilder> appRoutes = {
     final availableDays = args is Map ? args['availableDays'] as List<bool>? : null;
     return CreateCustomRoutineScreen(initialDay: initialDay, availableDays: availableDays);
   },
+
+  '/create-community-routine': (_) => const CreateCommunityRoutineScreen(),
+
+  '/messages': (_) => const ChatListScreen(),
+
+  '/admin/usage': (_) => const UsageDashboardScreen(),
 };

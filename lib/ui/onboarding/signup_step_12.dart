@@ -12,6 +12,7 @@ class SignupStep12 extends StatefulWidget {
 
 class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMixin {
   String? selectedTime;
+  bool _consentAccepted = false;
   late Map<String, dynamic> userData;
 
   late AnimationController _fadeController;
@@ -58,7 +59,7 @@ class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMix
   }
 
   void _onNext() {
-    if (selectedTime != null) {
+    if (selectedTime != null && _consentAccepted) {
       userData['trainingTime'] = selectedTime;
 
       Navigator.pushNamed(
@@ -181,13 +182,40 @@ class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMix
                             .toList(),
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Checkbox(
+                            value: _consentAccepted,
+                            activeColor: AppColors.primary,
+                            checkColor: Colors.white,
+                            side: const BorderSide(color: Colors.white70),
+                            onChanged: (val) =>
+                                setState(() => _consentAccepted = val ?? false),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  setState(() => _consentAccepted = !_consentAccepted),
+                              child: const Text(
+                                'Acepto la Politica de Privacidad y los Terminos de uso de GymGram.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: CustomButton(
-                          key: ValueKey(selectedTime),
+                          key: ValueKey('$selectedTime-$_consentAccepted'),
                           text: 'Finalizar',
-                          onPressed: selectedTime != null ? _onNext : null,
+                          onPressed: (selectedTime != null && _consentAccepted) ? _onNext : null,
                         ),
                       ),
                       const SizedBox(height: 16),

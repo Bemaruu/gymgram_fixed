@@ -45,7 +45,6 @@ class WelcomeScreen extends StatelessWidget {
                   child: CustomButton(
                     text: '¡ Ya Tengo Cuenta !',
                     onPressed: () {
-                      print('Botón presionado');
                       Navigator.pushNamed(context, '/login');
                     },
                   ),

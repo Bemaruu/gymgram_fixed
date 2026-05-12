@@ -1,0 +1,451 @@
+POLÍTICA DE PRIVACIDAD DE GYMGRAM
+Versión: 1.0 Beta
+Última actualización: [indicar fecha]
+País base de operación: Chile
+
+IMPORTANTE:
+Este documento es un borrador legal base para revisión. Debe ser revisado por un abogado antes de su publicación definitiva, especialmente antes del lanzamiento público, monetización, incorporación de pagos, publicidad, sponsors o expansión internacional.
+
+1. IDENTIFICACIÓN DEL RESPONSABLE
+
+GymGram es una aplicación móvil de fitness, bienestar y comunidad digital actualmente en etapa Beta.
+
+El responsable del tratamiento de los datos personales será:
+
+Responsable: [Nombre completo de la persona natural o nombre legal de la empresa]
+RUT: [indicar RUT si corresponde]
+Domicilio: [indicar domicilio comercial o legal]
+Correo de contacto: [correo legal o de privacidad]
+País: Chile
+
+Mientras GymGram se encuentre en etapa de desarrollo o Beta y aún no opere bajo una sociedad formal, el responsable podrá ser una persona natural. Una vez constituida la empresa que operará GymGram, esta Política de Privacidad será actualizada para reflejar el nuevo responsable legal.
+
+2. OBJETIVO DE ESTA POLÍTICA
+
+Esta Política de Privacidad explica cómo GymGram recopila, utiliza, almacena, protege, comunica y elimina los datos personales de sus usuarios.
+
+El objetivo es entregar información clara sobre el tratamiento de datos personales realizado dentro de la aplicación, especialmente considerando que GymGram puede tratar información relacionada con actividad física, peso, estatura, objetivos personales, hábitos de entrenamiento, alimentación, fotografías, videos, publicaciones y otros datos vinculados al bienestar del usuario.
+
+3. ACEPTACIÓN DE ESTA POLÍTICA
+
+Al crear una cuenta, acceder o utilizar GymGram, el usuario declara haber leído y aceptado esta Política de Privacidad.
+
+Si el usuario no está de acuerdo con esta Política, no debe utilizar la aplicación.
+
+En caso de usuarios menores de 18 años, el uso de GymGram deberá contar con autorización de su madre, padre, tutor legal o representante correspondiente.
+
+4. EDAD MÍNIMA
+
+GymGram está dirigida a personas de 16 años o más.
+
+GymGram no está diseñada para ser utilizada por menores de 16 años. Si detectamos que una cuenta fue creada por una persona menor de la edad mínima permitida, podremos suspenderla o eliminarla.
+
+5. DATOS PERSONALES QUE PODEMOS RECOPILAR
+
+GymGram podrá recopilar las siguientes categorías de datos:
+
+5.1. Datos de identificación y cuenta
+
+- Nombre completo.
+- Nombre de usuario.
+- Correo electrónico.
+- Contraseña cifrada o protegida mediante mecanismos técnicos.
+- Fotografía de perfil.
+- Biografía o descripción del perfil.
+- Fecha de nacimiento o edad.
+- Género, si el usuario decide entregarlo.
+- Identificadores internos de cuenta.
+
+5.2. Datos de fitness, bienestar y objetivos
+
+- Peso actual.
+- Estatura.
+- Peso objetivo.
+- Objetivo principal, como perder peso, ganar masa muscular o mantenerse saludable.
+- Lugar de entrenamiento preferido, como casa o gimnasio.
+- Disponibilidad o frecuencia de entrenamiento.
+- Nivel de actividad física.
+- Preferencias de rutina.
+- Preferencias de alimentación.
+- Registro de consumo de agua, calorías u otros hábitos, si la función está disponible.
+- Resultados estimados, cálculos de IMC, calorías, macros o métricas similares.
+
+Estos datos pueden estar relacionados con aspectos físicos, hábitos personales y bienestar del usuario, por lo que serán tratados con especial cuidado.
+
+5.3. Contenido generado por el usuario
+
+- Fotos.
+- Videos.
+- Publicaciones.
+- Comentarios.
+- Likes, interacciones o reacciones.
+- Contenido subido al perfil.
+- Rutinas, experiencias, avances o publicaciones relacionadas con fitness.
+- Reportes o denuncias realizadas dentro de la aplicación.
+
+5.4. Datos técnicos y de uso
+
+- Identificador del dispositivo.
+- Sistema operativo.
+- Modelo del dispositivo.
+- Versión de la aplicación.
+- Dirección IP aproximada.
+- Fecha y hora de acceso.
+- Pantallas visitadas.
+- Interacciones dentro de la app.
+- Errores técnicos, cierres inesperados o registros de funcionamiento.
+- Métricas de uso durante la Beta.
+
+5.5. Datos de ubicación
+
+GymGram podrá tratar datos de ubicación aproximada si en el futuro se habilitan funciones como publicidad geolocalizada, recomendaciones locales, gimnasios cercanos, eventos o contenido relevante por zona.
+
+Cuando corresponda, se solicitarán los permisos necesarios al usuario.
+
+5.6. Datos de pagos o suscripciones
+
+Durante la etapa Beta, GymGram puede no incluir pagos. Si en el futuro se habilitan funciones premium, suscripciones, promociones pagadas o compras dentro de la app, podremos tratar información relacionada con:
+
+- Plan contratado.
+- Estado de suscripción.
+- Historial de compras.
+- Identificadores de transacción.
+- Plataforma de pago utilizada.
+
+Los datos financieros sensibles, como número completo de tarjeta, clave bancaria o códigos de seguridad, serán tratados por proveedores de pago o tiendas oficiales como App Store o Google Play, según corresponda.
+
+6. DATOS QUE NO DEBES COMPARTIR EN GYMGRAM
+
+El usuario no debe publicar ni compartir en GymGram:
+
+- Datos médicos sensibles innecesarios.
+- Diagnósticos médicos.
+- Exámenes clínicos.
+- Información de salud de terceros.
+- Direcciones particulares.
+- Documentos de identidad.
+- Datos bancarios.
+- Contraseñas.
+- Información privada de otras personas sin autorización.
+- Contenido que exponga a menores de edad sin autorización correspondiente.
+
+GymGram podrá eliminar contenido que exponga datos sensibles, vulnere derechos de terceros o genere riesgos para la comunidad.
+
+7. FINALIDADES DEL TRATAMIENTO DE DATOS
+
+GymGram podrá utilizar los datos personales para las siguientes finalidades:
+
+7.1. Crear y administrar cuentas
+
+- Registrar usuarios.
+- Permitir inicio de sesión.
+- Verificar identidad básica de cuenta.
+- Mantener perfiles de usuario.
+- Permitir recuperación de acceso.
+
+7.2. Prestar las funciones principales de la app
+
+- Mostrar el perfil del usuario.
+- Permitir publicaciones, comentarios, likes e interacciones.
+- Mostrar contenido en el feed.
+- Organizar rutinas, planes de alimentación y funciones de seguimiento.
+- Mostrar historial o progreso dentro de la aplicación.
+
+7.3. Personalizar la experiencia
+
+- Adaptar rutinas según datos entregados por el usuario.
+- Ajustar recomendaciones de alimentación o bienestar.
+- Mostrar contenido más relevante.
+- Mejorar la navegación y experiencia de usuario.
+- Recordar preferencias seleccionadas.
+
+7.4. Generar recomendaciones automatizadas o asistidas
+
+GymGram podrá usar lógica algorítmica, automatización, IA simulada o inteligencia artificial para entregar recomendaciones generales de entrenamiento, alimentación, hábitos o contenido.
+
+Estas recomendaciones no constituyen consejo médico, diagnóstico, tratamiento, asesoría nutricional clínica ni indicación profesional certificada.
+
+7.5. Seguridad y prevención de abuso
+
+- Detectar accesos sospechosos.
+- Prevenir fraude, spam, bots o uso malicioso.
+- Proteger cuentas y sistemas.
+- Investigar infracciones a los Términos y Condiciones.
+- Proteger a otros usuarios.
+
+7.6. Moderación de contenido
+
+- Revisar reportes de usuarios.
+- Eliminar contenido prohibido.
+- Suspender cuentas que incumplan reglas.
+- Prevenir acoso, violencia, discriminación, contenido riesgoso o publicaciones que afecten la seguridad de la comunidad.
+
+7.7. Mejorar GymGram
+
+- Analizar errores.
+- Medir uso de funciones.
+- Evaluar comportamiento general dentro de la Beta.
+- Mejorar diseño, rendimiento y estabilidad.
+- Priorizar nuevas funciones.
+- Realizar pruebas internas.
+
+7.8. Comunicaciones
+
+GymGram podrá enviar comunicaciones relacionadas con:
+
+- Seguridad de cuenta.
+- Cambios importantes.
+- Actualizaciones de la Beta.
+- Nuevas funciones.
+- Encuestas o feedback.
+- Avisos legales.
+- Comunicaciones promocionales, si el usuario las autoriza cuando corresponda.
+
+7.9. Cumplimiento legal
+
+- Cumplir obligaciones legales.
+- Responder solicitudes de autoridades competentes.
+- Proteger derechos de GymGram, usuarios o terceros.
+- Conservar registros necesarios ante reclamos o controversias.
+
+8. BASE DE LEGITIMIDAD O AUTORIZACIÓN
+
+GymGram tratará datos personales sobre la base de una o más de las siguientes razones:
+
+- Consentimiento del usuario.
+- Necesidad de prestar el servicio solicitado.
+- Cumplimiento de obligaciones legales.
+- Seguridad de la plataforma.
+- Interés legítimo en mejorar y proteger la app, cuando corresponda.
+- Ejecución de los Términos y Condiciones aceptados por el usuario.
+
+Cuando se traten datos especialmente sensibles o vinculados a salud, hábitos físicos o bienestar, GymGram procurará obtener consentimiento claro e informado del usuario cuando la ley lo requiera.
+
+9. DATOS RELACIONADOS CON SALUD, FITNESS Y BIENESTAR
+
+GymGram no es una aplicación médica, clínica ni de atención sanitaria.
+
+Los datos de peso, estatura, objetivo físico, actividad, alimentación, entrenamiento o métricas corporales se utilizan únicamente para fines de bienestar, personalización general, seguimiento fitness y experiencia dentro de la aplicación.
+
+GymGram no diagnostica enfermedades, no prescribe tratamientos, no reemplaza a médicos, nutricionistas, kinesiólogos, psicólogos, entrenadores certificados ni otros profesionales.
+
+El usuario es responsable de consultar con un profesional antes de iniciar rutinas, modificar su alimentación o tomar decisiones importantes relacionadas con su salud.
+
+10. CONTENIDO PÚBLICO Y VISIBILIDAD
+
+Algunas funciones de GymGram pueden permitir que el usuario publique contenido visible para otros usuarios, como foto de perfil, nombre de usuario, publicaciones, comentarios, videos, likes, medallas, avances o información del perfil.
+
+El usuario debe entender que todo contenido publicado en espacios visibles de la app puede ser visto, guardado, comentado o compartido por otros usuarios según las funciones disponibles.
+
+GymGram no recomienda publicar información privada o sensible en espacios públicos de la aplicación.
+
+11. CONTENIDO GENERADO POR USUARIOS
+
+El usuario es responsable del contenido que publica.
+
+GymGram podrá revisar, moderar, ocultar o eliminar contenido que:
+
+- Vulnere la ley.
+- Infrinja derechos de terceros.
+- Contenga datos personales de otras personas sin autorización.
+- Promueva conductas peligrosas.
+- Incluya información engañosa sobre salud o fitness.
+- Contenga acoso, discriminación, violencia, desnudez explícita o contenido prohibido.
+- Infrinja los Términos y Condiciones o Normas de Comunidad.
+
+12. IA, AUTOMATIZACIÓN Y RECOMENDACIONES
+
+GymGram podrá utilizar sistemas automatizados, lógica algorítmica, modelos de IA o IA simulada para generar recomendaciones o personalizar contenido.
+
+El usuario reconoce que:
+
+- Las recomendaciones pueden ser imperfectas.
+- La información entregada por el usuario influye en los resultados.
+- No deben tomarse como consejo médico profesional.
+- La app puede modificar o eliminar estas funciones durante la Beta.
+- Pueden existir errores, omisiones o resultados no adecuados para todos los usuarios.
+
+Cuando corresponda, GymGram podrá habilitar mecanismos para reportar recomendaciones incorrectas, ofensivas, inseguras o inadecuadas.
+
+13. PROVEEDORES Y SERVICIOS DE TERCEROS
+
+GymGram podrá utilizar proveedores externos para operar la aplicación, incluyendo servicios de:
+
+- Base de datos.
+- Autenticación.
+- Almacenamiento.
+- Hosting.
+- Analítica.
+- Reproducción de video.
+- Notificaciones.
+- Correos electrónicos.
+- Procesamiento de pagos.
+- Herramientas de seguridad.
+- Servicios de inteligencia artificial o automatización.
+
+Estos proveedores podrán tratar datos únicamente en la medida necesaria para prestar sus servicios a GymGram.
+
+GymGram procurará trabajar con proveedores que ofrezcan estándares razonables de seguridad, confidencialidad y cumplimiento normativo.
+
+14. TRANSFERENCIAS INTERNACIONALES
+
+Algunos proveedores utilizados por GymGram podrían almacenar o procesar datos fuera de Chile.
+
+Al utilizar GymGram, el usuario entiende que sus datos podrían ser tratados en otros países cuando sea necesario para operar la aplicación, siempre procurando aplicar medidas razonables de protección.
+
+15. PUBLICIDAD Y SPONSORS
+
+GymGram podrá mostrar publicidad, promociones, contenido patrocinado o recomendaciones comerciales de terceros, tales como gimnasios, marcas deportivas, suplementos, productos fitness u otros servicios relacionados.
+
+Para mostrar publicidad personalizada, GymGram podrá usar datos de perfil, intereses, actividad dentro de la aplicación o ubicación aproximada, siempre que corresponda y de acuerdo con la ley aplicable.
+
+El usuario podrá tener opciones para limitar ciertas comunicaciones promocionales cuando la app lo permita.
+
+GymGram no venderá datos personales sensibles de usuarios a anunciantes.
+
+16. ANALÍTICA Y MEDICIÓN DE USO
+
+GymGram podrá recopilar datos de uso para entender cómo los usuarios interactúan con la app.
+
+Esto puede incluir:
+
+- Tiempo de uso.
+- Pantallas más visitadas.
+- Funciones utilizadas.
+- Errores técnicos.
+- Flujo de navegación.
+- Interacciones generales.
+- Retención y comportamiento agregado.
+
+Estos datos se usarán para mejorar la app, corregir errores, optimizar la experiencia y tomar decisiones de producto.
+
+Cuando sea posible, GymGram procurará utilizar información agregada o anonimizada para análisis generales.
+
+17. CONSERVACIÓN DE DATOS
+
+GymGram conservará los datos personales mientras:
+
+- La cuenta del usuario esté activa.
+- Sean necesarios para prestar el servicio.
+- Existan obligaciones legales.
+- Sea necesario resolver reclamos, controversias o problemas de seguridad.
+- Sean necesarios para prevenir fraude o abuso.
+- La información sea requerida por respaldo técnico o auditoría.
+
+Cuando los datos ya no sean necesarios, GymGram podrá eliminarlos, anonimizarlos o bloquearlos conforme a criterios técnicos y legales razonables.
+
+18. ELIMINACIÓN DE CUENTA Y DATOS
+
+El usuario podrá solicitar la eliminación de su cuenta y datos personales escribiendo a:
+
+[correo de privacidad]
+
+O mediante las funciones disponibles dentro de la aplicación, si existen.
+
+Al eliminar una cuenta, GymGram podrá borrar o desactivar:
+
+- Perfil.
+- Datos de cuenta.
+- Publicaciones.
+- Contenido asociado.
+- Preferencias.
+- Datos de entrenamiento o alimentación.
+
+Sin embargo, GymGram podrá conservar cierta información cuando sea necesario por razones legales, seguridad, prevención de fraude, respaldo técnico, cumplimiento normativo o defensa ante reclamos.
+
+19. DERECHOS DEL USUARIO
+
+El usuario podrá ejercer los derechos que le reconozca la legislación aplicable sobre protección de datos personales.
+
+Estos derechos pueden incluir:
+
+- Solicitar información sobre el tratamiento de sus datos.
+- Acceder a sus datos personales.
+- Solicitar corrección o actualización.
+- Solicitar eliminación cuando corresponda.
+- Oponerse a ciertos tratamientos cuando sea procedente.
+- Revocar autorizaciones otorgadas, cuando corresponda.
+- Solicitar bloqueo o limitación de tratamiento en casos aplicables.
+
+Para ejercer estos derechos, el usuario puede escribir a:
+
+[correo de privacidad]
+
+GymGram podrá solicitar información adicional para verificar la identidad del solicitante antes de responder.
+
+20. SEGURIDAD DE LOS DATOS
+
+GymGram implementará medidas técnicas y organizativas razonables para proteger los datos personales contra pérdida, acceso no autorizado, uso indebido, alteración, divulgación o destrucción.
+
+Estas medidas pueden incluir:
+
+- Control de acceso.
+- Autenticación.
+- Cifrado o protección de contraseñas.
+- Restricción de permisos internos.
+- Monitoreo de errores.
+- Respaldo técnico.
+- Buenas prácticas de desarrollo seguro.
+- Revisión de vulnerabilidades.
+
+Ningún sistema es completamente seguro. El usuario debe proteger su contraseña, cerrar sesión en dispositivos compartidos y evitar compartir información sensible innecesaria.
+
+21. BRECHAS DE SEGURIDAD
+
+Si GymGram detecta una vulneración de seguridad que pueda afectar significativamente los datos personales de los usuarios, tomará medidas razonables para investigar, contener y corregir el incidente.
+
+Cuando corresponda legalmente, GymGram podrá informar a los usuarios afectados o autoridades competentes.
+
+22. CONFIDENCIALIDAD INTERNA
+
+Las personas que colaboren con GymGram y tengan acceso a datos personales deberán tratarlos con confidencialidad y únicamente para fines autorizados.
+
+23. DATOS DE MENORES DE EDAD
+
+GymGram no está dirigida a menores de 16 años.
+
+Si GymGram detecta tratamiento de datos de un menor de 16 años sin autorización válida, podrá eliminar la cuenta y la información asociada.
+
+En caso de usuarios entre 16 y 18 años, se recomienda contar con autorización de madre, padre, tutor legal o representante correspondiente.
+
+24. ENLACES EXTERNOS
+
+GymGram puede incluir enlaces a sitios, redes sociales, marcas, servicios o contenidos de terceros.
+
+GymGram no controla las políticas de privacidad de terceros. El usuario debe revisar las políticas aplicables antes de entregar datos fuera de GymGram.
+
+25. APP STORE, GOOGLE PLAY Y PLATAFORMAS DE DISTRIBUCIÓN
+
+Si GymGram se descarga o utiliza a través de App Store, Google Play u otras plataformas, también podrán aplicarse las políticas de privacidad, términos y reglas de dichas plataformas.
+
+Estas plataformas pueden recopilar datos de forma independiente, como información de descarga, pagos, dispositivo, reportes técnicos u otros datos bajo sus propias políticas.
+
+26. CAMBIOS EN ESTA POLÍTICA
+
+GymGram podrá actualizar esta Política de Privacidad para reflejar cambios legales, técnicos, comerciales o funcionales.
+
+Cuando los cambios sean relevantes, GymGram procurará informar a los usuarios mediante la app, correo electrónico u otros medios razonables.
+
+La fecha de última actualización indicará la versión vigente.
+
+27. CONTACTO
+
+Para consultas, solicitudes, reclamos o ejercicio de derechos relacionados con privacidad y datos personales, el usuario puede contactar a GymGram en:
+
+Correo: [correo de privacidad]
+Responsable: [nombre del responsable]
+País: Chile
+
+28. RESUMEN SIMPLE PARA EL USUARIO
+
+GymGram recopila datos necesarios para crear tu cuenta, mostrar tu perfil, permitir publicaciones, personalizar rutinas y alimentación, mejorar la app y proteger la comunidad.
+
+Algunos datos pueden estar relacionados con fitness, cuerpo, hábitos o bienestar, como peso, estatura, objetivo físico, entrenamiento y alimentación.
+
+GymGram no es una app médica y sus recomendaciones no reemplazan a profesionales.
+
+Puedes solicitar acceso, corrección o eliminación de tus datos escribiendo al correo de privacidad.
+
+GymGram podrá usar proveedores tecnológicos para operar la app, pero no venderá tus datos personales sensibles a anunciantes.
+
+FIN DEL DOCUMENTO

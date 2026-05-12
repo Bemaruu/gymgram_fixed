@@ -1,8 +1,18 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
+import '../../services/chat_service.dart';
+import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
+import '../messaging/chat_conversation_screen.dart';
+import '../../widgets/copy_personal_week_sheet.dart';
+import '../../widgets/copy_routine_bottom_sheet.dart';
 import '../../widgets/medal_preview_section.dart';
+import '../../widgets/personal_routine_card.dart';
 import '../../widgets/post_grid.dart';
+import '../../widgets/premium_rank_preview.dart';
+import '../../widgets/profile_tabs_nav.dart';
+import '../../widgets/routine_card.dart';
 import '../social/follow_list_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -28,6 +38,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   List<Map<String, dynamic>> _posts = [];
   int _followersCount = 0;
   int _followingCount = 0;
+
+  ProfileTab _selectedTab = ProfileTab.fotos;
+  List<Map<String, dynamic>> _personalRoutines = [];
+  List<Map<String, dynamic>> _communityRoutines = [];
+  bool _routinesLoaded = false;
 
   @override
   void initState() {
@@ -58,6 +73,156 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     } catch (e) {
       debugPrint('UserProfileScreen load error: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadUserRoutines() async {
+    if (_routinesLoaded) return;
+    try {
+      final results = await Future.wait([
+        RoutineService.instance.getPersonalRoutinesByUserId(widget.userId),
+        RoutineService.instance.getCommunityRoutinesByUserId(widget.userId),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _personalRoutines = results[0];
+        _communityRoutines = results[1];
+        _routinesLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('loadUserRoutines error: $e');
+      if (mounted) setState(() => _routinesLoaded = true);
+    }
+  }
+
+  void _onTabChanged(ProfileTab tab) {
+    setState(() => _selectedTab = tab);
+    if (tab == ProfileTab.rutinas) _loadUserRoutines();
+  }
+
+  Widget _buildTabContent() {
+    switch (_selectedTab) {
+      case ProfileTab.fotos:
+        return _posts.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Text(
+                    'Sin publicaciones aún',
+                    style: TextStyle(color: Colors.black38),
+                  ),
+                ),
+              )
+            : PostGrid(
+                posts: _posts,
+                isOwner: false,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+              );
+      case ProfileTab.rutinas:
+        if (!_routinesLoaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_personalRoutines.isEmpty && _communityRoutines.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+            child: Center(
+              child: Text(
+                'Este usuario aún no comparte rutinas',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          );
+        }
+        final username =
+            _profile?['username'] as String? ?? widget.username;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_personalRoutines.isNotEmpty)
+                PersonalRoutineCard(
+                  routines: _personalRoutines,
+                  isOwner: false,
+                  ownerUsername: username,
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => CopyPersonalWeekSheet(
+                        routines: _personalRoutines,
+                        sourceUserId: widget.userId,
+                        ownerUsername: username,
+                      ),
+                    );
+                  },
+                ),
+              if (_communityRoutines.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Text(
+                    'Rutinas que comparte',
+                    style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ..._communityRoutines.map(
+                  (r) => RoutineCard(
+                    routine: r,
+                    isOwner: false,
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => CopyRoutineBottomSheet(routine: r),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      case ProfileTab.rango:
+        return const PremiumRankPreview();
+      case ProfileTab.guardados:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Future<void> _openChat() async {
+    try {
+      final chatId = await ChatService.instance.findOrCreateChat(widget.userId);
+      if (!mounted) return;
+      final username = _profile?['username'] as String? ?? widget.username;
+      final avatarUrl = _profile?['avatar_url'] as String?;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatConversationScreen(
+            chatId: chatId,
+            otherUserId: widget.userId,
+            otherUsername: username,
+            otherAvatarUrl: avatarUrl,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir el chat')),
+        );
+      }
     }
   }
 
@@ -151,7 +316,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           radius: 48,
                           backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.15),
                           backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                              ? NetworkImage(avatarUrl)
+                              ? CachedNetworkImageProvider(avatarUrl)
                               : null,
                           child: (avatarUrl == null || avatarUrl.isEmpty)
                               ? Text(
@@ -245,33 +410,66 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
                         const SizedBox(height: 20),
 
-                        // Botón Seguir / Siguiendo
-                        SizedBox(
-                          width: double.infinity,
-                          child: _followLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  decoration: BoxDecoration(
-                                    color: _isFollowing ? Colors.transparent : const Color(0xFF00BFFF),
-                                    border: Border.all(
-                                      color: _isFollowing ? Colors.grey.shade400 : const Color(0xFF00BFFF),
-                                    ),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: TextButton(
-                                    onPressed: _toggleFollow,
-                                    child: Text(
-                                      _isFollowing ? 'Siguiendo' : 'Seguir',
-                                      style: TextStyle(
-                                        color: _isFollowing ? Colors.black54 : Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
+                        // Botón Seguir / Siguiendo (+ Mensaje cuando sigo)
+                        _followLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : Row(
+                                children: [
+                                  Expanded(
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      decoration: BoxDecoration(
+                                        color: _isFollowing ? Colors.transparent : const Color(0xFF00BFFF),
+                                        border: Border.all(
+                                          color: _isFollowing ? Colors.grey.shade400 : const Color(0xFF00BFFF),
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: TextButton(
+                                        onPressed: _toggleFollow,
+                                        child: Text(
+                                          _isFollowing ? 'Siguiendo' : 'Seguir',
+                                          style: TextStyle(
+                                            color: _isFollowing ? Colors.black54 : Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                        ),
+                                  if (_isFollowing) ...[
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00BFFF),
+                                          border: Border.all(color: const Color(0xFF0086B3)),
+                                          borderRadius: BorderRadius.circular(10),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x3300BFFF),
+                                              blurRadius: 8,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: TextButton(
+                                          onPressed: _openChat,
+                                          child: const Text(
+                                            'Mensaje',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
 
                         const SizedBox(height: 20),
 
@@ -288,25 +486,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ),
 
-                // Grilla de posts
+                // Nav (sin Guardados en perfil ajeno) + contenido por tab
                 SliverToBoxAdapter(
-                  child: _posts.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: Center(
-                            child: Text(
-                              'Sin publicaciones aún',
-                              style: TextStyle(color: Colors.black38),
-                            ),
-                          ),
-                        )
-                      : PostGrid(
-                          posts: _posts,
-                          isOwner: false,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                        ),
+                  child: ProfileTabsNav(
+                    selected: _selectedTab,
+                    onChanged: _onTabChanged,
+                    showSaved: false,
+                  ),
                 ),
+                SliverToBoxAdapter(child: _buildTabContent()),
               ],
             ),
           ),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../../core/app_colors.dart';
@@ -16,7 +17,7 @@ class CustomBottomNav extends StatelessWidget {
 
   ImageProvider _avatarImage() {
     if (profileImageUrl != null && profileImageUrl!.isNotEmpty) {
-      return NetworkImage(profileImageUrl!);
+      return CachedNetworkImageProvider(profileImageUrl!);
     }
     return const AssetImage('assets/images/default_profile.png');
   }
