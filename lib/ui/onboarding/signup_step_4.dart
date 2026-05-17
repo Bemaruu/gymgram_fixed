@@ -48,11 +48,13 @@ class _SignupStep4State extends State<SignupStep4> with TickerProviderStateMixin
 
   void _onNext() {
     if (selectedPlace != null) {
+      // Mantenemos ambas claves por compat con código legacy.
       userData['trainingPlace'] = selectedPlace;
+      userData['trainingLocation'] = selectedPlace;
 
       Navigator.pushNamed(
         context,
-        '/signup_step_5',
+        '/signup_equipment',
         arguments: userData,
       );
     }
@@ -165,8 +167,8 @@ class _SignupStep4State extends State<SignupStep4> with TickerProviderStateMixin
                         ),
                       ),
                       const SizedBox(height: 32),
-                      placeButton('Casa', Icons.home, 'Casa', AppColors.primary),
-                      placeButton('Gimnasio', Icons.fitness_center, 'Gym', AppColors.accentOrange),
+                      placeButton('Casa', Icons.home, 'HOME', AppColors.primary),
+                      placeButton('Gimnasio', Icons.fitness_center, 'GYM', AppColors.accentOrange),
                       const SizedBox(height: 32),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),

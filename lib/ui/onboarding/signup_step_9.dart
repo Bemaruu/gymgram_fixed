@@ -17,13 +17,14 @@ class _SignupStep9State extends State<SignupStep9> with TickerProviderStateMixin
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final List<Map<String, String>> dietOptions = [
-    {'label': 'Normal', 'value': 'normal'},
-    {'label': 'Vegetariana', 'value': 'vegetariana'},
-    {'label': 'Vegana', 'value': 'vegana'},
-    {'label': 'Alta en proteínas', 'value': 'proteica'},
-    {'label': 'Baja en carbohidratos', 'value': 'lowcarb'},
-    {'label': 'Sin preferencia', 'value': 'libre'},
+  final List<Map<String, String>> dietOptions = const [
+    {'label': 'Normal', 'value': 'omnivore'},
+    {'label': 'Vegetariana', 'value': 'vegetarian'},
+    {'label': 'Vegana', 'value': 'vegan'},
+    {'label': 'Alta en proteínas', 'value': 'high_protein'},
+    {'label': 'Baja en carbohidratos', 'value': 'low_carb'},
+    {'label': 'Keto', 'value': 'keto'},
+    {'label': 'Sin preferencia', 'value': 'no_preference'},
   ];
 
   @override
@@ -64,7 +65,8 @@ class _SignupStep9State extends State<SignupStep9> with TickerProviderStateMixin
 
   void _onNext() {
     if (selectedDiets.isNotEmpty) {
-      userData['foodPreferences'] = selectedDiets.join(', ');
+      // Lista tipada para serializar limpio. Se mantiene clave 'foodPreferences'.
+      userData['foodPreferences'] = selectedDiets.toList();
 
       Navigator.pushNamed(
         context,

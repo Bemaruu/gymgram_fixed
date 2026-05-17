@@ -1,5 +1,6 @@
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../models/food_log.dart';
 import '../../services/analytics_service.dart';
@@ -7,6 +8,8 @@ import '../../services/food_service.dart';
 import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
+import '../../widgets/food_icon.dart';
+import '../../widgets/skeletons/meal_skeleton.dart';
 import 'food_search_screen.dart';
 
 class AlimentacionScreen extends StatefulWidget {
@@ -40,6 +43,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   String _mealsPerDay = '3';
   List<String> _foodPrefs = [];
   List<String> _allergies = [];
+  List<String> _dislikedFoods = [];
+  String? _cookingTime;
+  String? _userId;
 
   static const _days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _mealOrder = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -52,12 +58,12 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     'post_workout': 'Post-entreno',
   };
   static const _mealIcon = {
-    'breakfast': Icons.wb_sunny_outlined,
-    'lunch': Icons.lunch_dining_outlined,
-    'dinner': Icons.nightlight_outlined,
-    'snack': Icons.cookie_outlined,
-    'pre_workout': Icons.bolt_outlined,
-    'post_workout': Icons.fitness_center,
+    'breakfast': PhosphorIconsDuotone.sun,
+    'lunch': PhosphorIconsDuotone.forkKnife,
+    'dinner': PhosphorIconsDuotone.moon,
+    'snack': PhosphorIconsDuotone.cookie,
+    'pre_workout': PhosphorIconsDuotone.lightning,
+    'post_workout': PhosphorIconsDuotone.barbell,
   };
 
   @override
@@ -103,16 +109,19 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final trainingDaysPerWeek = rawDays.isEmpty ? 3 : rawDays.length.clamp(1, 7);
 
       final rawFoodPrefs = (onboarding?['food_preferences'] as List?)?.cast<String>() ?? [];
-      final specialMeal = rawFoodPrefs.firstWhere(
-        (p) => p == 'ayuno' || p == 'flexible',
-        orElse: () => '',
-      );
+      // Aceptamos valores nuevos (intermittent_fasting) y legacy (ayuno).
+      bool isSpecialMeal(String p) =>
+          p == 'ayuno' || p == 'intermittent_fasting' || p == 'flexible';
+      final specialMeal = rawFoodPrefs.firstWhere(isSpecialMeal, orElse: () => '');
       final mealsPerDay = specialMeal.isNotEmpty
           ? specialMeal
           : (onboarding?['meals_per_day']?.toString() ?? '3');
       final cleanFoodPrefs =
-          rawFoodPrefs.where((p) => p != 'ayuno' && p != 'flexible').toList();
+          rawFoodPrefs.where((p) => !isSpecialMeal(p)).toList();
       final rawAllergies = (onboarding?['allergies'] as List?)?.cast<String>() ?? [];
+      final rawDisliked = (onboarding?['disliked_foods'] as List?)?.cast<String>() ?? [];
+      final cookingTime = onboarding?['cooking_time_preference'] as String?;
+      final userId = SupabaseService.instance.currentUserId;
 
       if (!mounted) return;
       setState(() {
@@ -126,6 +135,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _mealsPerDay = mealsPerDay;
         _foodPrefs = cleanFoodPrefs;
         _allergies = rawAllergies;
+        _dislikedFoods = rawDisliked;
+        _cookingTime = cookingTime;
+        _userId = userId;
         _waterCount = water;
         _isLoading = false;
       });
@@ -140,6 +152,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   }
 
   void _generatePlan() {
+    final selectedDate = _dateForDayIndex(_selectedDayIndex);
+    final weekIndex = _weeksSinceEpoch(selectedDate);
+
     final plan = SimulatedAIService.generateMealPlan(
       goal: _goal,
       gender: _gender,
@@ -151,13 +166,41 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       mealsPerDay: _mealsPerDay,
       foodPreferences: _foodPrefs,
       allergies: _allergies,
+      dislikedFoods: _dislikedFoods,
+      cookingTime: _cookingTime,
+      userId: _userId,
+      weekIndex: weekIndex,
       dayIndex: _selectedDayIndex,
     );
+
+    // DEBUG: ayuda a verificar que distintas cuentas reciben planes distintos.
+    // Aparece sólo en debug builds; queda fuera en release.
+    assert(() {
+      final uidShort = (_userId ?? 'null').length >= 8
+          ? (_userId ?? 'null').substring(0, 8)
+          : (_userId ?? 'null');
+      debugPrint(
+        '[Dieta] userId=$uidShort week=$weekIndex day=$_selectedDayIndex '
+        'mode=${plan['food_mode']} cookingTime=$_cookingTime '
+        'foodPrefs=$_foodPrefs items=${(plan['items'] as List).length}',
+      );
+      return true;
+    }());
+
     setState(() {
       _plan = plan;
       _items = List<Map<String, dynamic>>.from(plan['items'] as List);
       _checked.clear();
     });
+  }
+
+  /// Número de semana absoluto desde una referencia fija. Cambia cada lunes,
+  /// es estable independientemente del huso horario y sirve como semilla
+  /// determinista para rotar el plan semanal.
+  static int _weeksSinceEpoch(DateTime date) {
+    final epoch = DateTime.utc(2024, 1, 1); // lunes 1 enero 2024
+    final daysDiff = date.toUtc().difference(epoch).inDays;
+    return daysDiff ~/ 7;
   }
 
   Future<void> _loadDailyLogs(DateTime date) async {
@@ -221,8 +264,10 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: MealSkeletonList(count: 3),
+        ),
       );
     }
 
@@ -240,7 +285,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         },
         backgroundColor: const Color(0xFF00BFFF),
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
+        icon: const Icon(PhosphorIconsFill.plusCircle),
         label: const Text(
           'Agregar alimento',
           style: TextStyle(fontWeight: FontWeight.w600),
@@ -718,7 +763,7 @@ class _EmptyLog extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
-          Icon(Icons.restaurant_outlined, size: 40, color: Colors.black12),
+          Icon(PhosphorIconsDuotone.bowlFood, size: 40, color: Colors.black12),
           const SizedBox(height: 10),
           const Text(
             'Sin registros aún',
@@ -771,7 +816,7 @@ class _LogList extends StatelessWidget {
       children: orderedTypes.map((type) {
         final group = grouped[type]!;
         final label = mealLabel[type] ?? type;
-        final icon = mealIcon[type] ?? Icons.restaurant_outlined;
+        final icon = mealIcon[type] ?? PhosphorIconsDuotone.bowlFood;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -819,7 +864,7 @@ class _LogItem extends StatelessWidget {
           color: const Color(0xFFFF4D4D),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+        child: const Icon(PhosphorIconsRegular.trash, color: Colors.white, size: 22),
       ),
       onDismissed: (_) => onDelete(log.id),
       child: Container(
@@ -832,6 +877,8 @@ class _LogItem extends StatelessWidget {
         ),
         child: Row(
           children: [
+            FoodIcon(foodName: log.foodName, size: 36),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -953,7 +1000,7 @@ class _PlanSection extends StatelessWidget {
         child: ExpansionTile(
           initiallyExpanded: !hasLogs,
           leading: const Icon(
-            Icons.auto_awesome,
+            PhosphorIconsDuotone.sparkle,
             color: Color(0xFF00BFFF),
             size: 20,
           ),
@@ -1027,7 +1074,7 @@ class _WaterSection extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                Icons.water_drop_outlined,
+                PhosphorIconsDuotone.drop,
                 color: Color(0xFF00BFFF),
                 size: 20,
               ),
@@ -1075,7 +1122,7 @@ class _WaterSection extends StatelessWidget {
                     ),
                   ),
                   child: Icon(
-                    Icons.water_drop,
+                    PhosphorIconsFill.drop,
                     size: 18,
                     color: filled
                         ? const Color(0xFF00BFFF)
@@ -1155,13 +1202,13 @@ class _NutritionSummaryCard extends StatelessWidget {
               _CalStat(
                 label: 'Mantenimiento',
                 value: '$maintenance kcal',
-                icon: Icons.balance,
+                icon: PhosphorIconsDuotone.scales,
               ),
               const SizedBox(width: 12),
               _CalStat(
                 label: 'Objetivo',
                 value: '$recommended kcal',
-                icon: Icons.flag_outlined,
+                icon: PhosphorIconsDuotone.flag,
                 highlight: true,
               ),
             ],
@@ -1314,10 +1361,12 @@ class _MealSection extends StatelessWidget {
                 children: [
                   Icon(
                     isChecked
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
+                        ? PhosphorIconsFill.checkCircle
+                        : PhosphorIconsRegular.circle,
                     color: isChecked ? Colors.green : Colors.grey,
                   ),
+                  const SizedBox(width: 10),
+                  FoodIcon(foodName: item['name'] as String, size: 36),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

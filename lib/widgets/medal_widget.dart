@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
 import '../models/badge_model.dart';
 
 /// Widget circular de medalla. Muestra la imagen PNG del asset o un ícono
@@ -53,7 +54,7 @@ class MedalWidget extends StatelessWidget {
   }
 
   Widget _buildCircle(Color rankColor) {
-    return Container(
+    final inner = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -79,7 +80,7 @@ class MedalWidget extends StatelessWidget {
         boxShadow: isEarned
             ? [
                 BoxShadow(
-                  color: rankColor.withValues(alpha: 0.45),
+                  color: AppColors.ember400.withValues(alpha: 0.35),
                   blurRadius: size * 0.35,
                   spreadRadius: size * 0.04,
                 ),
@@ -94,6 +95,21 @@ class MedalWidget extends StatelessWidget {
         ],
       ),
     );
+
+    if (isEarned) {
+      return Container(
+        width: size + 4,
+        height: size + 4,
+        padding: const EdgeInsets.all(2),
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: AppColors.auroraGradient,
+        ),
+        child: inner,
+      );
+    }
+
+    return Opacity(opacity: 0.4, child: inner);
   }
 
   Widget _buildImage(Color rankColor) {

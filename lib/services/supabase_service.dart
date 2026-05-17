@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'badge_service.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -81,6 +82,20 @@ class SupabaseService {
     List<String> exercisePreferences = const [],
     String timeAvailability = '',
     String experienceLevel = '',
+    // Nuevos campos (todos opcionales para no romper callers viejos)
+    String? trainingLevel,
+    String? experiencePath,
+    List<String> equipmentAvailable = const [],
+    int? sessionDurationMinutes,
+    String? routineSplitPreference,
+    List<String> injuries = const [],
+    String? injuryNotes,
+    String? cookingTimePreference,
+    List<String> dislikedFoods = const [],
+    String? coachingStyle,
+    bool? notificationsEnabled,
+    DateTime? privacyConsentAt,
+    DateTime? termsConsentAt,
   }) async {
     final row = <String, dynamic>{
       'user_id': userId,
@@ -90,9 +105,76 @@ class SupabaseService {
       'exercise_preferences': exercisePreferences,
       'time_availability': timeAvailability,
       'experience_level': experienceLevel,
+      'equipment_available': equipmentAvailable,
+      'injuries': injuries,
+      'disliked_foods': dislikedFoods,
     };
     if (mealsPerDay != null) row['meals_per_day'] = mealsPerDay;
+    if (trainingLevel != null) row['training_level'] = trainingLevel;
+    if (experiencePath != null) row['experience_path'] = experiencePath;
+    if (sessionDurationMinutes != null) row['session_duration_minutes'] = sessionDurationMinutes;
+    if (routineSplitPreference != null) row['routine_split_preference'] = routineSplitPreference;
+    if (injuryNotes != null && injuryNotes.isNotEmpty) row['injury_notes'] = injuryNotes;
+    if (cookingTimePreference != null) row['cooking_time_preference'] = cookingTimePreference;
+    if (coachingStyle != null) row['coaching_style'] = coachingStyle;
+    if (notificationsEnabled != null) row['notifications_enabled'] = notificationsEnabled;
+    if (privacyConsentAt != null) row['privacy_consent_at'] = privacyConsentAt.toIso8601String();
+    if (termsConsentAt != null) row['terms_consent_at'] = termsConsentAt.toIso8601String();
     await client.from('user_onboarding_data').insert(row);
+  }
+
+  /// Importa la rutina semanal del usuario desde el flujo `analyze_existing_routine`.
+  /// Crea las entradas en `routines` (kind='personal', source='user_imported') y
+  /// deja `routine_analysis` con status='pending' para una IA futura.
+  ///
+  /// [days] tiene la forma: `[{ 'day_of_week': 0, 'title': 'Lunes',
+  /// 'exercises': [{name, muscle_group, sets, reps, rest_seconds, optional_notes}] }]`.
+  Future<void> importUserRoutine({
+    required String userId,
+    required List<Map<String, dynamic>> days,
+    required String trainingLocation,
+    String goal = 'CUSTOM',
+  }) async {
+    if (days.isEmpty) return;
+
+    final analysisStub = {
+      'status': 'pending',
+      'source': 'simulated',
+      'created_at': DateTime.now().toIso8601String(),
+    };
+
+    for (final day in days) {
+      final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (exercises.isEmpty) continue;
+
+      final routine = await client.from('routines').insert({
+        'user_id': userId,
+        'title': day['title'] ?? 'Día',
+        'goal': goal,
+        'training_location': trainingLocation,
+        'day_of_week': day['day_of_week'],
+        'kind': 'personal',
+        'is_public': false,
+        'source': 'user_imported',
+        'routine_analysis': analysisStub,
+      }).select().single();
+
+      final routineId = routine['id'] as String;
+      final rows = exercises.asMap().entries.map((e) {
+        final ex = e.value;
+        return {
+          'routine_id': routineId,
+          'name': ex['name'],
+          'sets': ex['sets'],
+          'reps': ex['reps'],
+          'rest_seconds': ex['rest_seconds'],
+          'muscle_group': ex['muscle_group'],
+          'order_index': e.key,
+          if (ex['optional_notes'] != null) 'notes': ex['optional_notes'],
+        };
+      }).toList();
+      await client.from('routine_exercises').insert(rows);
+    }
   }
 
   // ── Búsqueda de perfiles ──────────────────────────────────────────────────
@@ -147,6 +229,10 @@ class SupabaseService {
       'follower_id': uid,
       'following_id': targetUserId,
     });
+    await BadgeService.instance.checkAndAwardBadges(targetUserId, 'follower_gained');
+    try {
+      await client.rpc('notify_follow', params: {'p_following_id': targetUserId});
+    } catch (_) {}
   }
 
   Future<void> unfollowUser(String targetUserId) async {

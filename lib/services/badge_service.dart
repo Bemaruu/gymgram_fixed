@@ -377,16 +377,10 @@ class BadgeService {
   /// Otorga una medalla al usuario. Silencioso si ya la tiene.
   Future<void> awardBadge(String userId, String badgeId) async {
     try {
-      await _client.from('user_badges').upsert(
-        {
-          'user_id': userId,
-          'badge_id': badgeId,
-          'earned_at': DateTime.now().toIso8601String(),
-          'progress': 1.0,
-        },
-        onConflict: 'user_id,badge_id',
-        ignoreDuplicates: true,
-      );
+      await _client.rpc('award_badge', params: {
+        'p_user_id': userId,
+        'p_badge_id': badgeId,
+      });
     } catch (e) {
       debugPrint('awardBadge [$badgeId] error: $e');
     }
@@ -399,15 +393,11 @@ class BadgeService {
     double progress,
   ) async {
     try {
-      await _client.from('user_badges').upsert(
-        {
-          'user_id': userId,
-          'badge_id': badgeId,
-          'progress': progress.clamp(0.0, 0.99),
-          'earned_at': DateTime.now().toIso8601String(),
-        },
-        onConflict: 'user_id,badge_id',
-      );
+      await _client.rpc('update_badge_progress', params: {
+        'p_user_id': userId,
+        'p_badge_id': badgeId,
+        'p_progress': progress.clamp(0.0, 0.99),
+      });
     } catch (e) {
       debugPrint('updateBadgeProgress [$badgeId] error: $e');
     }
@@ -446,16 +436,16 @@ class BadgeService {
         }
         break;
       case 'water_logged':
-        // TODO: consultar días con registro de agua y otorgar hidratado (7)
+        await _checkWaterStreak(userId);
         break;
       case 'meal_plan_completed':
-        // TODO: consultar días seguidos con plan y otorgar enfocado (5)
+        await _checkMealPlanDays(userId);
         break;
       case 'weight_logged':
-        // TODO: consultar conteo de registros y otorgar evolucion_visible (5)
+        await _checkWeightLogs(userId);
         break;
       case 'follower_gained':
-        // TODO: consultar conteo de seguidores y otorgar referente (20)
+        await _checkFollowerCount(userId);
         break;
       case 'challenge_completed':
         // Para uso manual por administración de eventos
@@ -591,6 +581,99 @@ class BadgeService {
       return result != null;
     } catch (_) {
       return false;
+    }
+  }
+
+  // ── Checks privados para medallas de Plata ────────────────────────────────
+
+  Future<void> _checkWaterStreak(String userId) async {
+    try {
+      final rows = await _client
+          .from('water_logs')
+          .select('target_date')
+          .eq('user_id', userId)
+          .gt('glasses_count', 0)
+          .order('target_date', ascending: false);
+
+      final dates = (rows as List)
+          .map((r) => DateTime.parse(r['target_date'] as String))
+          .toList();
+
+      if (dates.isEmpty) return;
+
+      int consecutive = 1;
+      int maxConsecutive = 1;
+      for (int i = 1; i < dates.length; i++) {
+        final diff = dates[i - 1].difference(dates[i]).inDays;
+        if (diff == 1) {
+          consecutive++;
+          if (consecutive > maxConsecutive) maxConsecutive = consecutive;
+        } else {
+          consecutive = 1;
+        }
+      }
+
+      if (maxConsecutive >= 7) {
+        await awardBadge(userId, 'hidratado');
+      } else {
+        await updateBadgeProgress(userId, 'hidratado', maxConsecutive / 7);
+      }
+    } catch (e) {
+      debugPrint('_checkWaterStreak error: $e');
+    }
+  }
+
+  Future<void> _checkMealPlanDays(String userId) async {
+    try {
+      final rows = await _client
+          .from('food_logs')
+          .select('log_date')
+          .eq('user_id', userId);
+      final distinctDays = (rows as List)
+          .map((r) => r['log_date'] as String)
+          .toSet()
+          .length;
+      if (distinctDays >= 5) {
+        await awardBadge(userId, 'enfocado');
+      } else {
+        await updateBadgeProgress(userId, 'enfocado', distinctDays / 5);
+      }
+    } catch (e) {
+      debugPrint('_checkMealPlanDays error: $e');
+    }
+  }
+
+  Future<void> _checkWeightLogs(String userId) async {
+    try {
+      final rows = await _client
+          .from('weight_logs')
+          .select('id')
+          .eq('user_id', userId);
+      final count = (rows as List).length;
+      if (count >= 5) {
+        await awardBadge(userId, 'evolucion_visible');
+      } else {
+        await updateBadgeProgress(userId, 'evolucion_visible', count / 5);
+      }
+    } catch (e) {
+      debugPrint('_checkWeightLogs error: $e');
+    }
+  }
+
+  Future<void> _checkFollowerCount(String userId) async {
+    try {
+      final rows = await _client
+          .from('follows')
+          .select('id')
+          .eq('following_id', userId);
+      final count = (rows as List).length;
+      if (count >= 20) {
+        await awardBadge(userId, 'referente');
+      } else {
+        await updateBadgeProgress(userId, 'referente', count / 20);
+      }
+    } catch (e) {
+      debugPrint('_checkFollowerCount error: $e');
     }
   }
 }

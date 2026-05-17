@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/onboarding_constants.dart';
+import '../../models/user_register_model.dart';
 import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/badge_service.dart';
@@ -16,6 +18,7 @@ class SignupStep13 extends StatefulWidget {
 
 class _SignupStep13State extends State<SignupStep13>
     with TickerProviderStateMixin {
+  // selectedOption ahora es el valor de coaching_style
   String? selectedOption;
   late Map<String, dynamic> userData;
 
@@ -65,104 +68,78 @@ class _SignupStep13State extends State<SignupStep13>
     }
   }
 
-  String _readString(List<String> keys, {String fallback = ''}) {
-    for (final key in keys) {
-      final value = userData[key];
-      if (value != null && value.toString().trim().isNotEmpty) {
-        return value.toString().trim();
-      }
-    }
-    return fallback;
-  }
-
-  int _readInt(List<String> keys, {int fallback = 18}) {
-    for (final key in keys) {
-      final value = userData[key];
-      if (value == null) continue;
-
-      if (value is int) return value;
-
-      final parsed = int.tryParse(value.toString().trim());
-      if (parsed != null) return parsed;
-    }
-    return fallback;
-  }
-
-  double _readDouble(List<String> keys, {double fallback = 0}) {
-    for (final key in keys) {
-      final value = userData[key];
-      if (value == null) continue;
-
-      if (value is double) return value;
-      if (value is int) return value.toDouble();
-
-      final normalized = value.toString().trim().replaceAll(',', '.');
-      final parsed = double.tryParse(normalized);
-      if (parsed != null) return parsed;
-    }
-    return fallback;
-  }
-
+// Mapeos defensivos. El flujo ya guarda en formato UPPERCASE pero estos
+// quedan como red de seguridad por si algún paso futuro guarda string libre.
 String _mapGender(String value) {
   final normalized = value.toLowerCase().trim();
-  if (normalized.contains('masc') || normalized == 'male' || normalized == 'hombre') return 'MALE';
-  if (normalized.contains('fem') || normalized == 'female' || normalized == 'mujer') return 'FEMALE';
+  if (normalized == 'male' || normalized.contains('masc') || normalized == 'hombre') return 'MALE';
+  if (normalized == 'female' || normalized.contains('fem') || normalized == 'mujer') return 'FEMALE';
   if (normalized == 'other' || normalized == 'otro') return 'OTHER';
+  if (value == value.toUpperCase() && value.isNotEmpty) return value;
   return 'PREFER_NOT_TO_SAY';
 }
 
 String _mapFitnessGoal(String value) {
+  if (value == value.toUpperCase() && value.isNotEmpty) return value;
   final normalized = value.toLowerCase().trim();
-  if (normalized.contains('perd') || normalized.contains('bajar') || normalized.contains('lose')) return 'LOSE_WEIGHT';
-  if (normalized.contains('masa') || normalized.contains('musc') || normalized.contains('gain') || normalized.contains('ganar')) return 'GAIN_MUSCLE';
+  if (normalized.contains('perd') || normalized.contains('lose')) return 'LOSE_WEIGHT';
+  if (normalized.contains('masa') || normalized.contains('gain') || normalized.contains('ganar')) return 'GAIN_MUSCLE';
+  if (normalized.contains('recomp')) return 'RECOMPOSITION';
+  if (normalized.contains('resist') || normalized.contains('endur')) return 'IMPROVE_ENDURANCE';
+  if (normalized.contains('tonif')) return 'TONE_BODY';
   return 'MAINTAIN';
 }
 
 String _mapTrainingLocation(String value) {
+  if (value == value.toUpperCase() && value.isNotEmpty) return value;
   final normalized = value.toLowerCase().trim();
   if (normalized.contains('gym') || normalized.contains('gimnasio')) return 'GYM';
+  if (normalized.contains('outdoor') || normalized.contains('aire')) return 'OUTDOOR';
+  if (normalized.contains('hybrid') || normalized.contains('mixto')) return 'HYBRID';
   return 'HOME';
 }
 
   Future<void> _onNext() async {
     if (selectedOption == null || _isLoading) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      userData['motivationalNotifications'] = selectedOption!;
+      // Coaching style + notificaciones derivadas
+      userData['coachingStyle'] = selectedOption!;
+      userData['notificationsEnabled'] = selectedOption != 'no_notifications';
       userData['bio'] = '';
 
-      final email = _readString(['email', 'correo']);
-      final password = _readString(['password', 'contraseña']);
-      final username = _readString(['username', 'userName', 'nombreUsuario']);
-      final fullName = _readString(['fullName', 'nombreCompleto', 'name'], fallback: username);
+      // Hidratar modelo tipado desde el Map.
+      final model = UserRegisterModel.fromMap(userData);
 
-      final birthDateStr = _readString(['birthDate', 'fechaNacimiento']);
-      final age = birthDateStr.isNotEmpty
-          ? _calculateAge(birthDateStr)
-          : _readInt(['age', 'edad'], fallback: 18);
-      final weight = _readDouble(['weight', 'pesoActual', 'weightKg', 'currentWeight'], fallback: 0);
-      final height = _readDouble(['height', 'estatura', 'heightCm'], fallback: 0);
-      final targetWeight = _readDouble(['targetWeight', 'pesoObjetivo'], fallback: weight);
-
-      final genderValue = _readString(['gender', 'genero'], fallback: '');
-      final goalValue = _readString(['fitnessGoal', 'goal', 'objetivo'], fallback: '');
-      final trainingLocationValue =
-          _readString(['trainingLocation', 'workoutPlace', 'lugarEntrenamiento', 'trainingPlace'], fallback: '');
-      final timeAvailability =
-          _readString(['timeAvailability', 'availableTime', 'tiempoEntrenar', 'trainingTime', 'availability'], fallback: 'medium');
+      final email = model.email ?? '';
+      final password = model.password ?? '';
+      final username = model.username ?? '';
+      final fullName = (model.fullName != null && model.fullName!.isNotEmpty)
+          ? model.fullName!
+          : username;
 
       if (email.isEmpty || password.isEmpty || username.isEmpty) {
         throw Exception('Faltan datos obligatorios del registro.');
       }
 
+      final age = model.birthDate != null && model.birthDate!.isNotEmpty
+          ? _calculateAge(model.birthDate!)
+          : 18;
+      final weight = model.weight ?? 0;
+      final height = model.height ?? 0;
+      final targetWeight = model.targetWeight ?? weight;
+      final gender = _mapGender(model.gender ?? '');
+      final goalValue = _mapFitnessGoal(model.fitnessGoal ?? '');
+      final trainingLocationValue =
+          _mapTrainingLocation(model.trainingLocation ?? '');
+      final trainingTime = model.trainingTime ?? 'variable';
+
       // 1) Crear usuario en Supabase Auth
       await AuthService().registerWithEmail(email: email, password: password);
 
-      // 2) Crear perfil en Supabase
+      // 2) Crear perfil
       final userId = SupabaseService.instance.currentUserId;
       if (userId == null) throw Exception('Error de autenticación. Intenta de nuevo.');
       await SupabaseService.instance.createProfile(
@@ -171,74 +148,98 @@ String _mapTrainingLocation(String value) {
         email: email,
         fullName: fullName,
         age: age,
-        gender: _mapGender(genderValue),
+        gender: gender,
         weight: weight,
         height: height,
         targetWeight: targetWeight,
-        fitnessGoal: _mapFitnessGoal(goalValue),
-        trainingLocation: _mapTrainingLocation(trainingLocationValue),
-        timeAvailability: timeAvailability,
-        birthDate: birthDateStr.isNotEmpty ? birthDateStr : null,
+        fitnessGoal: goalValue,
+        trainingLocation: trainingLocationValue,
+        timeAvailability: trainingTime,
+        birthDate: model.birthDate,
       );
 
-      // 4) Otorgar medallas de bienvenida: primer_paso + beta_exclusiva
+      // 3) Medallas de bienvenida
       try {
-        final userId = SupabaseService.instance.currentUserId;
-        if (userId != null) {
-          await BadgeService.instance.checkAndAwardBadges(
-            userId,
-            'account_created',
-          );
-        }
+        await BadgeService.instance.checkAndAwardBadges(userId, 'account_created');
       } catch (e) {
         debugPrint('Badge award warning: $e');
       }
 
-      // 5) Guardar datos de onboarding (no crítico, fallo silencioso)
+      // 4) Datos extendidos de onboarding
       try {
-        final userId = SupabaseService.instance.currentUserId;
-        if (userId != null) {
-          List<String> splitToList(String raw) => raw.isEmpty
-              ? []
-              : raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-
-          final trainingDays = _readString(['trainingDays', 'availableDays']);
-          final foodPrefsRaw = _readString(['foodPreferences']);
-          final allergiesRaw = _readString(['dietaryRestrictions', 'alergias']);
-          final exercisePrefsRaw = _readString(['exercisePreferences']);
-          final experienceLevel = _readString(['experienceLevel', 'nivelExperiencia']);
-          final mealsPerDayRaw = _readString(['mealsPerDay']);
-          final trainingTime = _readString(['trainingTime', 'availability', 'timeAvailability']);
-
-          // Attach 'ayuno'/'flexible' to food prefs since meals_per_day is an int column
-          final extraMealPref = (mealsPerDayRaw == 'ayuno' || mealsPerDayRaw == 'flexible')
-              ? [mealsPerDayRaw]
-              : <String>[];
-          final finalFoodPrefs = [...splitToList(foodPrefsRaw), ...extraMealPref];
-
-          await SupabaseService.instance.saveOnboardingData(
-            userId: userId,
-            availableDays: splitToList(trainingDays),
-            mealsPerDay: int.tryParse(mealsPerDayRaw),
-            foodPreferences: finalFoodPrefs,
-            allergies: splitToList(allergiesRaw),
-            exercisePreferences: splitToList(exercisePrefsRaw),
-            timeAvailability: trainingTime,
-            experienceLevel: experienceLevel,
-          );
+        final mealsInt = int.tryParse(model.mealsPerDayRaw ?? '');
+        final extraMealPref = <String>[];
+        if (model.mealsPerDayRaw == 'intermittent_fasting' ||
+            model.mealsPerDayRaw == 'flexible') {
+          extraMealPref.add(model.mealsPerDayRaw!);
         }
+
+        // Si el usuario importó rutina, sus días reales son las claves de
+        // la rutina importada (los que NO están = descanso). Esto evita que
+        // step_7 sobreescriba con valores incorrectos.
+        final imported = userData['importedRoutine'];
+        final List<String> finalAvailableDays;
+        if (imported is List && imported.isNotEmpty) {
+          finalAvailableDays = imported
+              .map((e) => (e as Map)['day_of_week'].toString())
+              .toSet()
+              .toList()
+            ..sort();
+        } else {
+          finalAvailableDays =
+              model.availableDays.map((i) => i.toString()).toList();
+        }
+
+        await SupabaseService.instance.saveOnboardingData(
+          userId: userId,
+          availableDays: finalAvailableDays,
+          mealsPerDay: mealsInt,
+          foodPreferences: [...model.foodPreferences, ...extraMealPref],
+          allergies: model.dietaryRestrictions,
+          exercisePreferences: const [],
+          timeAvailability: trainingTime,
+          experienceLevel: model.trainingLevel ?? '',
+          trainingLevel: model.trainingLevel,
+          experiencePath: model.experiencePath,
+          equipmentAvailable: model.equipmentAvailable,
+          sessionDurationMinutes: model.sessionDurationMinutes,
+          routineSplitPreference: model.routineSplitPreference,
+          injuries: model.injuries,
+          injuryNotes: model.injuryNotes,
+          cookingTimePreference: model.cookingTimePreference,
+          dislikedFoods: model.dislikedFoods,
+          coachingStyle: model.coachingStyle,
+          notificationsEnabled: model.notificationsEnabled,
+          privacyConsentAt: model.privacyConsentAt,
+          termsConsentAt: model.termsConsentAt,
+        );
       } catch (e) {
         debugPrint('saveOnboardingData warning: $e');
       }
 
-      final uid = SupabaseService.instance.currentUserId;
-      if (uid != null) {
-        AnalyticsService.instance.identify(uid, username: username, fitnessGoal: goalValue);
+      // 5) Importar rutina existente si el usuario eligió ese path
+      try {
+        final imported = userData['importedRoutine'];
+        if (imported is List && imported.isNotEmpty) {
+          await SupabaseService.instance.importUserRoutine(
+            userId: userId,
+            days: List<Map<String, dynamic>>.from(
+              imported.map((e) => Map<String, dynamic>.from(e as Map)),
+            ),
+            trainingLocation: trainingLocationValue,
+            goal: goalValue,
+          );
+        }
+      } catch (e) {
+        debugPrint('importUserRoutine warning: $e');
       }
+
+      AnalyticsService.instance.identify(userId,
+          username: username, fitnessGoal: goalValue);
       AnalyticsService.instance.signupCompleted(
         fitnessGoal: goalValue,
         trainingLocation: trainingLocationValue,
-        gender: genderValue,
+        gender: gender,
       );
 
       if (!mounted) return;
@@ -348,7 +349,7 @@ String _mapTrainingLocation(String value) {
                       ),
                       const SizedBox(height: 10),
                       const Text(
-                        '¿Quieres recibir notificaciones motivacionales?',
+                        '¿Cómo prefieres que te acompañemos?',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 22,
@@ -364,10 +365,11 @@ String _mapTrainingLocation(String value) {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      optionButton('Sí, motivame 💪', 'yes'),
-                      optionButton('No, gracias', 'no'),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      ...OnboardingCatalogs.coachingStyle.map(
+                        (o) => optionButton(o.label, o.value),
+                      ),
+                      const SizedBox(height: 24),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: _isLoading

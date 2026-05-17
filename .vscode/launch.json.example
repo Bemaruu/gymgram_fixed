@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GymGram (debug)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://TU_PROJECT_ID.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=TU_ANON_KEY",
+        "--dart-define=MIXPANEL_TOKEN=TU_MIXPANEL_TOKEN"
+      ]
+    },
+    {
+      "name": "GymGram (admin debug)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://TU_PROJECT_ID.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=TU_ANON_KEY",
+        "--dart-define=MIXPANEL_TOKEN=TU_MIXPANEL_TOKEN",
+        "--dart-define=ADMIN_UID=TU_UUID_DE_USUARIO"
+      ]
+    }
+  ]
+}

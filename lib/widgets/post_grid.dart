@@ -1,9 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
+import '../core/app_durations.dart';
+import '../core/app_radius.dart';
 import '../services/analytics_service.dart';
 import '../services/post_service.dart';
 import '../ui/main_screens/edit_post_screen.dart';
 import '../ui/social/comments_sheet.dart';
+import 'like_button.dart';
 
 class PostGrid extends StatelessWidget {
   final List<Map<String, dynamic>> posts;
@@ -47,45 +51,53 @@ class PostGrid extends StatelessWidget {
       itemBuilder: (context, index) {
         final post = posts[index];
         final mediaUrl = post['media_url'] as String? ?? '';
-        return GestureDetector(
+        return _PressableCell(
           onTap: () => _showDetail(context, post),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: mediaUrl,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                ),
-                placeholder: (_, __) => Container(
-                  color: Colors.grey[200],
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: mediaUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => Container(
+                    color: AppColors.neutral200,
+                    child: const Icon(
+                      Icons.broken_image,
+                      color: AppColors.neutral400,
+                    ),
                   ),
-                ),
-              ),
-              // Gradiente sutil en esquina para indicar que es tapeable
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 28,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.35),
-                        Colors.transparent,
-                      ],
+                  placeholder: (_, __) => Container(
+                    color: AppColors.neutral100,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.sky400,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.35),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -110,6 +122,38 @@ class PostGrid extends StatelessWidget {
           opacity: animation,
           child: child,
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PressableCell extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _PressableCell({required this.child, required this.onTap});
+
+  @override
+  State<_PressableCell> createState() => _PressableCellState();
+}
+
+class _PressableCellState extends State<_PressableCell> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: AppDurations.fast,
+        curve: AppDurations.emphasized,
+        child: widget.child,
       ),
     );
   }
@@ -217,16 +261,13 @@ class _PostDetailPageState extends State<_PostDetailPage>
     final postId = widget.post['id'] as String? ?? '';
     if (postId.isEmpty) return;
     try {
-      final results = await Future.wait([
-        PostService.instance.hasLiked(postId),
-        PostService.instance.getLikesCount(postId),
-      ]);
-      if (mounted) {
-        setState(() {
-          _isLiked = results[0] as bool;
-          _likesCount = results[1] as int;
-        });
-      }
+      // Solo necesitamos saber si el usuario actual le dio like (para pintar
+      // el corazón). El contador viene del campo cacheado `likes_count` que
+      // mantiene sincronizado el trigger fn_increment_likes / fn_decrement_likes.
+      // Si sobreescribiéramos _likesCount con getLikesCount(), el perfil y el
+      // feed mostrarían valores distintos al de la columna y entre sí.
+      final liked = await PostService.instance.hasLiked(postId);
+      if (mounted) setState(() => _isLiked = liked);
     } catch (_) {}
   }
 
@@ -507,27 +548,20 @@ class _PostDetailPageState extends State<_PostDetailPage>
                               Column(
                                 children: [
                                   // Like
-                                  GestureDetector(
-                                    onTap: _toggleLike,
-                                    child: Column(
-                                      children: [
-                                        Icon(
-                                          _isLiked
-                                              ? Icons.favorite_rounded
-                                              : Icons.favorite_border_rounded,
-                                          color: _isLiked
-                                              ? Colors.red.shade400
-                                              : Colors.white60,
-                                          size: 26,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '$_likesCount',
-                                          style: const TextStyle(
-                                              color: Colors.white60, fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
+                                  Column(
+                                    children: [
+                                      LikeButton(
+                                        isLiked: _isLiked,
+                                        onTap: _toggleLike,
+                                        size: 26,
+                                        unlikedColor: Colors.white60,
+                                      ),
+                                      Text(
+                                        '$_likesCount',
+                                        style: const TextStyle(
+                                            color: Colors.white60, fontSize: 12),
+                                      ),
+                                    ],
                                   ),
 
                                   const SizedBox(height: 14),

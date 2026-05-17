@@ -18,14 +18,15 @@ class _SignupStep7State extends State<SignupStep7>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final List<Map<String, String>> weekDays = [
-    {'label': 'Lunes', 'value': 'lunes'},
-    {'label': 'Martes', 'value': 'martes'},
-    {'label': 'Miércoles', 'value': 'miercoles'},
-    {'label': 'Jueves', 'value': 'jueves'},
-    {'label': 'Viernes', 'value': 'viernes'},
-    {'label': 'Sábado', 'value': 'sabado'},
-    {'label': 'Domingo', 'value': 'domingo'},
+  // Valor interno = índice 0..6 (alineado con day_of_week de routines).
+  final List<Map<String, String>> weekDays = const [
+    {'label': 'Lunes', 'value': '0'},
+    {'label': 'Martes', 'value': '1'},
+    {'label': 'Miércoles', 'value': '2'},
+    {'label': 'Jueves', 'value': '3'},
+    {'label': 'Viernes', 'value': '4'},
+    {'label': 'Sábado', 'value': '5'},
+    {'label': 'Domingo', 'value': '6'},
   ];
 
   @override
@@ -66,11 +67,14 @@ class _SignupStep7State extends State<SignupStep7>
 
   void _onNext() {
     if (selectedDays.isNotEmpty) {
+      // Lista de índices 0..6 (alineado con day_of_week en BD).
+      userData['availableDays'] = selectedDays.toList();
+      // Compat: algunos consumidores leen 'trainingDays' en string.
       userData['trainingDays'] = selectedDays.join(', ');
 
       Navigator.pushNamed(
         context,
-        '/signup_step_8',
+        '/signup_session_duration',
         arguments: userData,
       );
     }
@@ -183,7 +187,7 @@ class _SignupStep7State extends State<SignupStep7>
                         children: [
                           ...weekDays.sublist(0, 6).map((day) => dayChip(day['label']!, day['value']!)),
                           const SizedBox(),
-                          dayChip('Domingo', 'domingo'),
+                          dayChip('Domingo', '6'),
                         ],
                       ),
                       const SizedBox(height: 32),

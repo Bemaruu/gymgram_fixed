@@ -24,6 +24,24 @@ class PostService {
     return List<Map<String, dynamic>>.from(result);
   }
 
+  // Fetch en batch de likes y guardados para una lista de posts.
+  // Reemplaza N*3 queries por 2 queries al cargar el feed.
+  Future<({Set<String> likedIds, Set<String> savedIds})> batchGetLikedAndSaved(
+    List<String> postIds,
+  ) async {
+    final uid = _uid;
+    if (uid == null || postIds.isEmpty) {
+      return (likedIds: <String>{}, savedIds: <String>{});
+    }
+    final results = await Future.wait([
+      _client.from('likes').select('post_id').eq('user_id', uid).inFilter('post_id', postIds),
+      _client.from('saved_posts').select('post_id').eq('user_id', uid).inFilter('post_id', postIds),
+    ]);
+    final likedIds = (results[0] as List).map((r) => r['post_id'] as String).toSet();
+    final savedIds = (results[1] as List).map((r) => r['post_id'] as String).toSet();
+    return (likedIds: likedIds, savedIds: savedIds);
+  }
+
   // Sube media al bucket 'posts/{uid}/{filename}' y devuelve la URL pública.
   // Límites separados para imagen (5 MB) y video (10 MB) para cuidar egress.
   Future<String> uploadMedia(File file, {required String mediaType}) async {
@@ -103,6 +121,9 @@ class PostService {
     if (existing == null) {
       await _client.from('likes').insert({'user_id': uid, 'post_id': postId});
       await BadgeService.instance.checkAndAwardBadges(uid, 'like_given');
+      try {
+        await _client.rpc('notify_like', params: {'p_post_id': postId});
+      } catch (_) {}
     } else {
       await _client.from('likes').delete().eq('id', existing['id']);
     }
@@ -139,6 +160,9 @@ class PostService {
       'post_id': postId,
       'content': content,
     });
+    try {
+      await _client.rpc('notify_comment', params: {'p_post_id': postId});
+    } catch (_) {}
   }
 
   // Trae los comentarios de un post

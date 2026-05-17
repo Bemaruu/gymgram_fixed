@@ -12,17 +12,16 @@ class SignupStep12 extends StatefulWidget {
 
 class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMixin {
   String? selectedTime;
-  bool _consentAccepted = false;
   late Map<String, dynamic> userData;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final List<Map<String, String>> timeOptions = [
-    {'label': 'Mañana (antes de las 9:00)', 'value': 'mañana'},
-    {'label': 'Media mañana (9:00 - 12:00)', 'value': 'media'},
-    {'label': 'Tarde (12:00 - 17:00)', 'value': 'tarde'},
-    {'label': 'Noche (después de las 17:00)', 'value': 'noche'},
+  final List<Map<String, String>> timeOptions = const [
+    {'label': 'Mañana (antes de las 9:00)', 'value': 'morning_early'},
+    {'label': 'Media mañana (9:00 - 12:00)', 'value': 'morning_late'},
+    {'label': 'Tarde (12:00 - 17:00)', 'value': 'afternoon'},
+    {'label': 'Noche (después de las 17:00)', 'value': 'evening'},
     {'label': 'Varía según el día', 'value': 'variable'},
   ];
 
@@ -59,12 +58,12 @@ class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMix
   }
 
   void _onNext() {
-    if (selectedTime != null && _consentAccepted) {
+    if (selectedTime != null) {
       userData['trainingTime'] = selectedTime;
 
       Navigator.pushNamed(
         context,
-        '/signup_step_13',
+        '/signup_step_9',
         arguments: userData,
       );
     }
@@ -183,39 +182,12 @@ class _SignupStep12State extends State<SignupStep12> with TickerProviderStateMix
                       ),
 
                       const SizedBox(height: 24),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Checkbox(
-                            value: _consentAccepted,
-                            activeColor: AppColors.primary,
-                            checkColor: Colors.white,
-                            side: const BorderSide(color: Colors.white70),
-                            onChanged: (val) =>
-                                setState(() => _consentAccepted = val ?? false),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () =>
-                                  setState(() => _consentAccepted = !_consentAccepted),
-                              child: const Text(
-                                'Acepto la Politica de Privacidad y los Terminos de uso de GymGram.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: CustomButton(
-                          key: ValueKey('$selectedTime-$_consentAccepted'),
-                          text: 'Finalizar',
-                          onPressed: (selectedTime != null && _consentAccepted) ? _onNext : null,
+                          key: ValueKey(selectedTime),
+                          text: 'Siguiente',
+                          onPressed: selectedTime != null ? _onNext : null,
                         ),
                       ),
                       const SizedBox(height: 16),

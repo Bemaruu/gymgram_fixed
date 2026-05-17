@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/food_item.dart';
 import '../models/food_log.dart';
+import 'badge_service.dart';
 
 class FoodService {
   static final FoodService instance = FoodService._();
@@ -128,6 +129,7 @@ class FoodService {
     );
     final inserted =
         await _client.from('food_logs').insert(log.toInsertMap()).select().single();
+    await BadgeService.instance.checkAndAwardBadges(uid, 'meal_plan_completed');
     return FoodLog.fromMap(inserted);
   }
 

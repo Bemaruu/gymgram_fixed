@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/analytics_service.dart';
 import '../../services/chat_service.dart';
@@ -11,6 +12,8 @@ import '../messaging/chat_list_screen.dart';
 import '../messaging/widgets/unread_badge.dart';
 import '../search/search_screen.dart';
 import '../search/user_profile_screen.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/skeletons/feed_post_skeleton.dart';
 import '../social/comments_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasNotifications = false;
   int _unreadChats = 0;
   List<Map<String, dynamic>> _posts = [];
+  Set<String> _likedIds = {};
+  Set<String> _savedIds = {};
 
   @override
   void initState() {
@@ -66,9 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_isLoading) setState(() => _isLoading = true);
     try {
       final posts = await PostService.instance.getFeedPosts();
+      final postIds = posts.map((p) => p['id'] as String).toList();
+      final batch = await PostService.instance.batchGetLikedAndSaved(postIds);
       if (!mounted) return;
       setState(() {
         _posts = posts;
+        _likedIds = batch.likedIds;
+        _savedIds = batch.savedIds;
         _isLoading = false;
       });
       AnalyticsService.instance.feedViewed();
@@ -84,7 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+        body: SafeArea(
+          child: FeedPostSkeletonList(count: 3),
+        ),
       );
     }
 
@@ -99,22 +110,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               SizedBox(
                 height: MediaQuery.of(context).size.height * 0.8,
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.photo_library_outlined,
-                        color: Colors.white38, size: 64),
-                    SizedBox(height: 16),
-                    Text(
-                      'Aún no hay publicaciones',
-                      style: TextStyle(color: Colors.white54, fontSize: 16),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      'Desliza hacia abajo para actualizar',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
-                  ],
+                child: const Center(
+                  child: EmptyState(
+                    icon: PhosphorIconsDuotone.imageSquare,
+                    title: 'Aún no hay publicaciones',
+                    subtitle: 'Sé el primero en compartir tu progreso',
+                  ),
                 ),
               ),
             ],
@@ -139,7 +140,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 parent: PageScrollPhysics(),
               ),
               itemCount: _posts.length,
-              itemBuilder: (context, index) => PostWidget(post: _posts[index]),
+              itemBuilder: (context, index) {
+                final post = _posts[index];
+                final id = post['id'] as String? ?? '';
+                return PostWidget(
+                  post: post,
+                  initialIsLiked: _likedIds.contains(id),
+                  initialIsSaved: _savedIds.contains(id),
+                );
+              },
             ),
           ),
           // Botón de notificaciones
@@ -164,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   children: [
                     const Center(
-                      child: Icon(Icons.notifications_outlined, color: Colors.white, size: 22),
+                      child: Icon(PhosphorIconsDuotone.bell, color: Colors.white, size: 22),
                     ),
                     if (_hasNotifications)
                       Positioned(
@@ -207,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   clipBehavior: Clip.none,
                   children: [
                     const Center(
-                      child: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 22),
+                      child: Icon(PhosphorIconsDuotone.paperPlaneTilt, color: Colors.white, size: 22),
                     ),
                     if (_unreadChats > 0)
                       Positioned(
@@ -236,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.black45,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.search, color: Colors.white, size: 22),
+                child: const Icon(PhosphorIconsRegular.magnifyingGlass, color: Colors.white, size: 22),
               ),
             ),
           ),
@@ -250,7 +259,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
-  const PostWidget({super.key, required this.post});
+  final bool initialIsLiked;
+  final bool initialIsSaved;
+  const PostWidget({
+    super.key,
+    required this.post,
+    this.initialIsLiked = false,
+    this.initialIsSaved = false,
+  });
 
   @override
   State<PostWidget> createState() => _PostWidgetState();
@@ -286,6 +302,8 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _isLiked       = widget.initialIsLiked;
+    _isSaved       = widget.initialIsSaved;
     _likesCount    = (widget.post['likes_count']    as int?) ?? 0;
     _commentsCount = (widget.post['comments_count'] as int?) ?? 0;
 
@@ -324,25 +342,6 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
       }
     }
 
-    _loadLikeStatus();
-  }
-
-  Future<void> _loadLikeStatus() async {
-    if (_postId.isEmpty) return;
-    try {
-      final results = await Future.wait([
-        PostService.instance.hasLiked(_postId),
-        PostService.instance.getLikesCount(_postId),
-        PostService.instance.isPostSaved(_postId),
-      ]);
-      if (mounted) {
-        setState(() {
-          _isLiked = results[0] as bool;
-          _likesCount = results[1] as int;
-          _isSaved = results[2] as bool;
-        });
-      }
-    } catch (_) {}
   }
 
   Future<void> _toggleSave() async {
@@ -453,7 +452,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
           child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
         ),
         errorWidget: (_, __, ___) => const Center(
-          child: Icon(Icons.broken_image, color: Colors.white54, size: 60),
+          child: Icon(PhosphorIconsDuotone.imageBroken, color: Colors.white54, size: 60),
         ),
       );
     }
@@ -468,7 +467,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
     }
 
     return const Center(
-      child: Icon(Icons.image_not_supported, color: Colors.white54, size: 60),
+      child: Icon(PhosphorIconsDuotone.imageBroken, color: Colors.white54, size: 60),
     );
   }
 
@@ -508,7 +507,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
             builder: (_, __) => Opacity(
               opacity: _floatingHeartOpacity.value,
               child: Icon(
-                Icons.favorite,
+                PhosphorIconsFill.heart,
                 color: Colors.red.shade400,
                 size: _floatingHeartSize.value,
                 shadows: const [Shadow(color: Colors.black54, blurRadius: 20)],
@@ -594,7 +593,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
                   builder: (_, __) => Transform.scale(
                     scale: _heartScale.value,
                     child: Icon(
-                      _isLiked ? Icons.favorite : Icons.favorite_border,
+                      _isLiked ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
                       color: _isLiked ? Colors.red.shade400 : Colors.white,
                       size: 30,
                       shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
@@ -609,7 +608,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
               // COMENTARIOS
               _ActionButton(
                 icon: const Icon(
-                  Icons.chat_bubble_outline_rounded,
+                  PhosphorIconsDuotone.chatCircle,
                   color: Colors.white,
                   size: 28,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
@@ -622,7 +621,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
               // GUARDAR
               _ActionButton(
                 icon: Icon(
-                  _isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  _isSaved ? PhosphorIconsFill.bookmarkSimple : PhosphorIconsRegular.bookmarkSimple,
                   color: _isSaved ? Colors.amber : Colors.white,
                   size: 28,
                   shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
@@ -752,10 +751,10 @@ class _NotifTile extends StatelessWidget {
     final createdAt = DateTime.tryParse((notif['created_at'] as String?) ?? '');
 
     final (IconData icon, Color iconColor, String actionText) = switch (type) {
-      'like'    => (Icons.favorite, Colors.red, 'le dio like a tu publicación.'),
-      'follow'  => (Icons.person_add, const Color(0xFF00BFFF), 'empezó a seguirte.'),
-      'comment' => (Icons.chat_bubble, Colors.amber, 'comentó en tu publicación.'),
-      _         => (Icons.notifications, Colors.white54, 'interactuó contigo.'),
+      'like'    => (PhosphorIconsFill.heart, Colors.red, 'le dio like a tu publicación.'),
+      'follow'  => (PhosphorIconsFill.userPlus, const Color(0xFF00BFFF), 'empezó a seguirte.'),
+      'comment' => (PhosphorIconsFill.chatCircle, Colors.amber, 'comentó en tu publicación.'),
+      _         => (PhosphorIconsFill.bell, Colors.white54, 'interactuó contigo.'),
     };
 
     return Container(

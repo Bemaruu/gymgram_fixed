@@ -17,12 +17,12 @@ class _SignupStep11State extends State<SignupStep11> with TickerProviderStateMix
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final List<Map<String, String>> mealOptions = [
+  final List<Map<String, String>> mealOptions = const [
     {'label': '2 comidas', 'value': '2'},
     {'label': '3 comidas', 'value': '3'},
     {'label': '4 comidas', 'value': '4'},
     {'label': '5 o más', 'value': '5'},
-    {'label': 'Ayuno intermitente', 'value': 'ayuno'},
+    {'label': 'Ayuno intermitente', 'value': 'intermittent_fasting'},
     {'label': 'Depende del día', 'value': 'flexible'},
   ];
 
@@ -64,7 +64,7 @@ class _SignupStep11State extends State<SignupStep11> with TickerProviderStateMix
 
       Navigator.pushNamed(
         context,
-        '/signup_step_12',
+        '/signup_step_13',
         arguments: userData,
       );
     }

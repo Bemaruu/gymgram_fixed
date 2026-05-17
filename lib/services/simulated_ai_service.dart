@@ -567,6 +567,13 @@ class SimulatedAIService {
 
   // ── ALIMENTACIÓN ───────────────────────────────────────────────────────────
 
+  /// Genera el plan alimenticio.
+  ///
+  /// [userId] y [weekIndex] son la base de la variación determinista:
+  /// dos usuarios distintos obtienen planes distintos; el mismo usuario obtiene
+  /// el mismo plan dentro de la misma semana y un plan renovado cada semana.
+  /// [dislikedFoods] y [cookingTime] usan los catálogos del nuevo onboarding
+  /// (ver [OnboardingCatalogs]). El método tolera valores legacy.
   static Map<String, dynamic> generateMealPlan({
     required String goal,
     required String gender,
@@ -579,6 +586,10 @@ class SimulatedAIService {
     String mealsPerDay = '3',
     List<String> foodPreferences = const [],
     List<String> allergies = const [],
+    List<String> dislikedFoods = const [],
+    String? cookingTime,
+    String? userId,
+    int weekIndex = 0,
     int dayIndex = 0,
   }) {
     final isLose = goal.toUpperCase() == 'LOSE_WEIGHT';
@@ -599,6 +610,7 @@ class SimulatedAIService {
     );
 
     final pref = _dominantPref(foodPreferences);
+    final seed = _userSeed(userId, weekIndex);
 
     var items = _buildMeals(
       mealsPerDay: mealsPerDay,
@@ -607,14 +619,26 @@ class SimulatedAIService {
       isGain: isGain,
       isFemale: isFemale,
       totalCalories: nutrition.recommendedCalories,
+      seed: seed,
       dayIndex: dayIndex,
+      cookingTime: cookingTime,
     );
 
+    // Filtros: primero alergias (riesgo de salud), luego alimentos no deseados.
     final effectiveAllergies = allergies
-        .where((a) => a != 'vegano' && a != 'vegetariano' && a != 'ninguna' && a != 'otro')
+        .where((a) => a != 'vegano' && a != 'vegetariano' &&
+                       a != 'vegan'  && a != 'vegetarian' &&
+                       a != 'ninguna' && a != 'none' && a != 'otro')
         .toList();
     if (effectiveAllergies.isNotEmpty) {
       items = _filterAllergies(items, effectiveAllergies);
+    }
+
+    final cleanedDislikes = dislikedFoods
+        .where((d) => d.isNotEmpty && !d.startsWith('custom:'))
+        .toList();
+    if (cleanedDislikes.isNotEmpty) {
+      items = _filterDislikedFoods(items, cleanedDislikes);
     }
 
     return {
@@ -631,14 +655,37 @@ class SimulatedAIService {
       'carbs_grams': nutrition.carbsGrams,
       'fats_grams': nutrition.fatsGrams,
       'disclaimer': disclaimer,
+      'week_index': weekIndex,
+      'cooking_time': cookingTime,
       'items': items,
     };
   }
 
+  /// Hash determinista combinando usuario + semana. Garantiza:
+  /// (a) usuarios distintos → planes distintos;
+  /// (b) mismo usuario, misma semana → plan estable;
+  /// (c) semana nueva → rotación garantizada.
+  static int _userSeed(String? userId, int weekIndex) {
+    final base = (userId == null || userId.isEmpty)
+        ? 'anon'.hashCode
+        : userId.hashCode;
+    return ((base.abs() * 1315423911) ^ (weekIndex * 2654435761)) & 0x7fffffff;
+  }
+
+  /// Reduce las preferencias seleccionadas a un único "modo" interno.
+  /// Acepta tanto los valores nuevos del onboarding (vegan, vegetarian,
+  /// low_carb, high_protein, keto, omnivore, no_preference) como los legacy
+  /// (vegana, vegetariana, lowcarb, proteica).
   static String _dominantPref(List<String> prefs) {
-    for (final p in ['vegana', 'vegetariana', 'lowcarb', 'proteica']) {
-      if (prefs.contains(p)) return p;
-    }
+    if (prefs.isEmpty) return 'normal';
+    final normalized = prefs.map((p) => p.toLowerCase()).toSet();
+
+    bool has(List<String> aliases) => aliases.any(normalized.contains);
+
+    if (has(['vegan', 'vegana'])) return 'vegana';
+    if (has(['vegetarian', 'vegetariana'])) return 'vegetariana';
+    if (has(['keto', 'low_carb', 'lowcarb'])) return 'lowcarb';
+    if (has(['high_protein', 'proteica'])) return 'proteica';
     return 'normal';
   }
 
@@ -667,27 +714,100 @@ class SimulatedAIService {
     required bool isGain,
     required bool isFemale,
     required int totalCalories,
+    required int seed,
     int dayIndex = 0,
+    String? cookingTime,
   }) {
+    // Acepta 'ayuno' (legacy) e 'intermittent_fasting' (nuevo onboarding).
     switch (mealsPerDay) {
       case '2':
-        return _meals2(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+        return _meals2(pref, isLose: isLose, isGain: isGain,
+            seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
       case 'ayuno':
-        return _mealsAyuno(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+      case 'intermittent_fasting':
+        return _mealsAyuno(pref, isLose: isLose, isGain: isGain,
+            seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
       case '4':
-        return _meals4(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+        return _meals4(pref, isLose: isLose, isGain: isGain,
+            seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
       case '5':
-        return _meals5(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+        return _meals5(pref, isLose: isLose, isGain: isGain,
+            seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
       default: // '3' y 'flexible'
-        return _meals3(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+        return _meals3(pref, isLose: isLose, isGain: isGain,
+            seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
     }
   }
 
-  // ── 3 comidas — rota 4 planes distintos según dayIndex ────────────────────
+  // ── 3 comidas — mix & match entre planes según semilla + día ──────────────
 
-  static List<Map<String, dynamic>> _meals3(String pref, {required bool isLose, required bool isGain, int dayIndex = 0}) {
+  /// Para multiplicar variedad sin escribir más planes: cada comida
+  /// (desayuno/almuerzo/cena) se elige por separado entre los planes
+  /// disponibles. Con 4 planes da 4^3 = 64 combinaciones por preferencia,
+  /// y cada día rota a otra combinación distinta. Si el usuario tiene
+  /// poco tiempo para cocinar, restringimos a los planes más simples.
+  static List<Map<String, dynamic>> _meals3(
+    String pref, {
+    required bool isLose,
+    required bool isGain,
+    required int seed,
+    int dayIndex = 0,
+    String? cookingTime,
+  }) {
     final plans = _meals3Plans(pref, isLose: isLose, isGain: isGain);
-    return plans[dayIndex % plans.length];
+    final pool = _cookingTimeBias(plans.length, cookingTime);
+
+    Map<String, dynamic> pick(int planIdx, String type) {
+      final plan = plans[planIdx];
+      final found = plan.firstWhere(
+        (m) => m['meal_type'] == type,
+        orElse: () => plan.first,
+      );
+      return Map<String, dynamic>.from(found);
+    }
+
+    final iB = pool[(seed + dayIndex * 7) % pool.length];
+    final iL = pool[(seed + dayIndex * 11 + 1) % pool.length];
+    final iD = pool[(seed + dayIndex * 13 + 2) % pool.length];
+
+    return [
+      pick(iB, 'breakfast'),
+      pick(iL, 'lunch'),
+      pick(iD, 'dinner'),
+    ];
+  }
+
+  /// Sesgo según tiempo de cocina. Por convención los planes se escriben
+  /// ordenados de más simple a más elaborado, así que limitar el rango de
+  /// `pool` actúa como un filtro de complejidad sin necesidad de tagging.
+  /// IMPORTANTE: el pool mínimo es 3 para garantizar variedad entre usuarios
+  /// incluso en el caso restrictivo. Con 3 planes y 3 slots (B/L/D) hay
+  /// 27 combinaciones por preferencia, así que dos usuarios distintos
+  /// tienen ~96% de probabilidad de recibir comidas distintas.
+  ///   no_time          → primeros 3 planes (los más simples)
+  ///   quick_lt_15m     → primeros 4 planes
+  ///   medium_15_30m    → primeros 5 planes
+  ///   enjoy_cooking    → todos los planes disponibles
+  static List<int> _cookingTimeBias(int total, String? cookingTime) {
+    if (total <= 1) return [0];
+    int cap;
+    switch (cookingTime) {
+      case 'no_time':
+        cap = 3;
+        break;
+      case 'quick_lt_15m':
+        cap = 4;
+        break;
+      case 'medium_15_30m':
+        cap = 5;
+        break;
+      case 'enjoy_cooking':
+      default:
+        cap = total;
+    }
+    if (cap > total) cap = total;
+    if (cap < 1) cap = 1;
+    return List.generate(cap, (i) => i);
   }
 
   static List<List<Map<String, dynamic>>> _meals3Plans(String pref, {required bool isLose, required bool isGain}) {
@@ -714,6 +834,16 @@ class SimulatedAIService {
             {'meal_type': 'lunch', 'name': 'Buddha bowl de boniato, garbanzos y tahini', 'ingredients': ['150g boniato asado', '120g garbanzos', 'col lombarda', 'tahini', 'limón', 'perejil'], 'calories': isGain ? 590 : 440, 'protein': 18.0, 'carbs': isGain ? 72.0 : 54.0, 'fats': 16.0},
             {'meal_type': 'dinner', 'name': 'Sopa de tomate con tostadas de queso', 'ingredients': ['400g tomate triturado', '1 cebolla', 'ajo', '2 rebanadas pan integral', '60g queso manchego'], 'calories': isLose ? 290 : 400, 'protein': 16.0, 'carbs': 32.0, 'fats': 14.0},
           ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Huevos al horno con tomate y feta (shakshuka)', 'ingredients': ['2 huevos', '200g tomate triturado', '50g queso feta', 'pimiento', 'cebolla', 'comino'], 'calories': isGain ? 440 : 320, 'protein': 22.0, 'carbs': 18.0, 'fats': 18.0},
+            {'meal_type': 'lunch', 'name': 'Risotto de champiñones y queso parmesano', 'ingredients': ['150g arroz arborio', '200g champiñones', '60g parmesano', 'caldo vegetal', 'cebolla', 'mantequilla'], 'calories': isGain ? 620 : 470, 'protein': 22.0, 'carbs': isGain ? 78.0 : 60.0, 'fats': 14.0},
+            {'meal_type': 'dinner', 'name': 'Wrap de hummus con vegetales y queso de cabra', 'ingredients': ['1 tortilla integral grande', '60g hummus', '50g queso de cabra', 'rúcula', 'pepino', 'tomate'], 'calories': isLose ? 320 : 430, 'protein': 18.0, 'carbs': 38.0, 'fats': 16.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Tortilla francesa con queso y pan integral', 'ingredients': ['2 huevos', '40g queso emmental', '1 rebanada pan integral', 'mantequilla'], 'calories': isGain ? 410 : 300, 'protein': 24.0, 'carbs': 18.0, 'fats': 18.0},
+            {'meal_type': 'lunch', 'name': 'Estofado de seitán con patatas y zanahoria', 'ingredients': ['180g seitán', '120g patata', 'zanahoria', 'cebolla', 'tomate', 'pimentón'], 'calories': isGain ? 600 : 450, 'protein': 38.0, 'carbs': isGain ? 60.0 : 44.0, 'fats': 10.0},
+            {'meal_type': 'dinner', 'name': 'Pizza casera de espinaca y ricotta', 'ingredients': ['1 base pizza integral', '80g ricotta', 'espinaca fresca', '40g mozzarella', 'tomate', 'orégano'], 'calories': isLose ? 360 : 500, 'protein': 22.0, 'carbs': 48.0, 'fats': 16.0},
+          ],
         ];
 
       case 'vegana':
@@ -737,6 +867,16 @@ class SimulatedAIService {
             {'meal_type': 'breakfast', 'name': 'Porridge de mijo con frutos secos', 'ingredients': ['80g mijo', 'leche de soja', '30g nueces', '1 pera', 'canela', '1 cda sirope de agave'], 'calories': isGain ? 460 : 330, 'protein': 14.0, 'carbs': isGain ? 60.0 : 44.0, 'fats': 14.0},
             {'meal_type': 'lunch', 'name': 'Ensalada de alubias negras con maíz y aguacate', 'ingredients': ['200g alubias negras', '80g maíz', '1 aguacate', 'tomate', 'cilantro', 'lima'], 'calories': isGain ? 580 : 430, 'protein': 20.0, 'carbs': isGain ? 70.0 : 52.0, 'fats': 16.0},
             {'meal_type': 'dinner', 'name': 'Pasta integral con pesto vegano de anacardos', 'ingredients': ['200g pasta integral', 'albahaca fresca', '30g anacardos', 'ajo', 'levadura nutricional', 'aceite de oliva'], 'calories': isLose ? 360 : 500, 'protein': 16.0, 'carbs': 58.0, 'fats': 16.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Tostadas de hummus con tomate y semillas', 'ingredients': ['2 rebanadas pan integral', '60g hummus', 'tomate', '1 cda semillas de calabaza', 'orégano'], 'calories': isGain ? 430 : 310, 'protein': 14.0, 'carbs': isGain ? 50.0 : 36.0, 'fats': 14.0},
+            {'meal_type': 'lunch', 'name': 'Wok de fideos soba con tofu y vegetales', 'ingredients': ['120g fideos soba', '150g tofu firme', 'pak choi', 'zanahoria', 'jengibre', 'salsa tamari'], 'calories': isGain ? 610 : 450, 'protein': 24.0, 'carbs': isGain ? 78.0 : 58.0, 'fats': 10.0},
+            {'meal_type': 'dinner', 'name': 'Hamburguesa vegana de lentejas con boniato al horno', 'ingredients': ['150g lentejas cocidas', '50g avena', '150g boniato', 'cebolla', 'comino', 'mostaza'], 'calories': isLose ? 380 : 510, 'protein': 22.0, 'carbs': 60.0, 'fats': 10.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Yogur de coco con kiwi y semillas de lino', 'ingredients': ['200g yogur de coco', '1 kiwi', '1 cda semillas de lino', '20g almendras', 'canela'], 'calories': isGain ? 420 : 310, 'protein': 8.0, 'carbs': isGain ? 42.0 : 30.0, 'fats': 18.0},
+            {'meal_type': 'lunch', 'name': 'Bowl mediterráneo de cuscús con falafel', 'ingredients': ['100g cuscús integral', '4 falafel', 'pepino', 'tomate cherry', 'tahini', 'limón'], 'calories': isGain ? 620 : 470, 'protein': 22.0, 'carbs': isGain ? 78.0 : 60.0, 'fats': 16.0},
+            {'meal_type': 'dinner', 'name': 'Tempeh marinado con verduras al wok y arroz negro', 'ingredients': ['150g tempeh', '100g arroz negro', 'brócoli', 'pimiento', 'salsa de soja', 'aceite de sésamo'], 'calories': isLose ? 380 : 510, 'protein': 26.0, 'carbs': 52.0, 'fats': 14.0},
           ],
         ];
 
@@ -762,6 +902,16 @@ class SimulatedAIService {
             {'meal_type': 'lunch', 'name': 'Costilla de cerdo con coliflor asada', 'ingredients': ['250g costilla de cerdo', 'coliflor', 'ajo', 'pimentón', 'aceite de oliva'], 'calories': isGain ? 580 : 450, 'protein': 46.0, 'carbs': 10.0, 'fats': 28.0},
             {'meal_type': 'dinner', 'name': 'Sopa de pollo con verduras sin fideos', 'ingredients': ['150g pollo', 'apio', 'zanahoria', 'cebolla', 'ajo', 'caldo de hueso'], 'calories': isLose ? 300 : 400, 'protein': 34.0, 'carbs': 14.0, 'fats': 12.0},
           ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Aguacate relleno de atún y huevo', 'ingredients': ['1 aguacate', '100g atún en agua', '1 huevo', 'cebolla morada', 'limón', 'eneldo'], 'calories': isGain ? 470 : 360, 'protein': 32.0, 'carbs': 6.0, 'fats': 28.0},
+            {'meal_type': 'lunch', 'name': 'Pollo a la mantequilla con espinaca cremosa', 'ingredients': ['200g pechuga', 'espinaca', '50ml crema espesa', '30g parmesano', 'ajo', 'mantequilla'], 'calories': isGain ? 580 : 440, 'protein': 50.0, 'carbs': 6.0, 'fats': 28.0},
+            {'meal_type': 'dinner', 'name': 'Albóndigas de ternera con salsa de tomate y mozzarella', 'ingredients': ['180g ternera picada', '60g mozzarella', '100g salsa de tomate natural', '1 huevo', 'orégano'], 'calories': isLose ? 360 : 470, 'protein': 42.0, 'carbs': 8.0, 'fats': 24.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Crepe keto de queso crema con jamón', 'ingredients': ['2 huevos', '40g queso crema', '60g jamón cocido', '20g queso cheddar', 'cebollino'], 'calories': isGain ? 460 : 350, 'protein': 32.0, 'carbs': 4.0, 'fats': 26.0},
+            {'meal_type': 'lunch', 'name': 'Bowl césar de pollo (sin crutones)', 'ingredients': ['200g pechuga', 'lechuga romana', '30g parmesano', '4 anchoas', 'mayonesa', 'limón'], 'calories': isGain ? 560 : 430, 'protein': 48.0, 'carbs': 8.0, 'fats': 26.0},
+            {'meal_type': 'dinner', 'name': 'Filete con champiñones al ajillo y mantequilla de hierbas', 'ingredients': ['220g filete', '150g champiñones', 'ajo', 'romero', 'mantequilla', 'perejil'], 'calories': isLose ? 380 : 480, 'protein': 48.0, 'carbs': 8.0, 'fats': 26.0},
+          ],
         ];
 
       case 'proteica':
@@ -785,6 +935,16 @@ class SimulatedAIService {
             {'meal_type': 'breakfast', 'name': 'Tostadas con claras de huevo y jamón', 'ingredients': ['2 rebanadas pan integral', '4 claras de huevo', '60g jamón cocido', 'tomate', 'aceite de oliva'], 'calories': isGain ? 460 : 340, 'protein': 36.0, 'carbs': isGain ? 42.0 : 30.0, 'fats': 8.0},
             {'meal_type': 'lunch', 'name': 'Pollo al curry con arroz basmati y guisantes', 'ingredients': ['200g pechuga', '150g arroz basmati', '80g guisantes', 'curry', 'cebolla', 'yogur'], 'calories': isGain ? 640 : 470, 'protein': 54.0, 'carbs': isGain ? 66.0 : 46.0, 'fats': 9.0},
             {'meal_type': 'dinner', 'name': 'Lubina a la plancha con ensalada de rúcula', 'ingredients': ['200g lubina', 'rúcula', 'tomate cherry', 'parmesano', 'aceite de oliva', 'limón'], 'calories': isLose ? 340 : 460, 'protein': 42.0, 'carbs': 8.0, 'fats': 16.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Tortilla de claras con avena dulce', 'ingredients': ['5 claras', '60g avena', '200ml leche descremada', 'canela', '1 cda miel'], 'calories': isGain ? 460 : 340, 'protein': 32.0, 'carbs': isGain ? 56.0 : 42.0, 'fats': 6.0},
+            {'meal_type': 'lunch', 'name': 'Solomillo de cerdo con quinoa y verduras', 'ingredients': ['200g solomillo de cerdo', '120g quinoa', 'pimiento', 'calabacín', 'aceite de oliva'], 'calories': isGain ? 640 : 470, 'protein': 50.0, 'carbs': isGain ? 60.0 : 42.0, 'fats': 12.0},
+            {'meal_type': 'dinner', 'name': 'Brochetas de pavo y vegetales con bulgur', 'ingredients': ['200g pavo en cubos', 'pimiento', 'cebolla', 'calabacín', '100g bulgur', 'limón'], 'calories': isLose ? 360 : 470, 'protein': 48.0, 'carbs': 38.0, 'fats': 8.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Bowl proteico de skyr con frutos rojos', 'ingredients': ['200g skyr natural', '30g granola proteica', 'frutos rojos', '1 cda miel'], 'calories': isGain ? 430 : 320, 'protein': 34.0, 'carbs': isGain ? 48.0 : 34.0, 'fats': 6.0},
+            {'meal_type': 'lunch', 'name': 'Lomo de cerdo magro con arroz y judías verdes', 'ingredients': ['200g lomo de cerdo magro', '150g arroz', '120g judías verdes', 'ajo', 'aceite de oliva'], 'calories': isGain ? 660 : 490, 'protein': 52.0, 'carbs': isGain ? 64.0 : 46.0, 'fats': 10.0},
+            {'meal_type': 'dinner', 'name': 'Tartar de atún con aguacate y arroz integral', 'ingredients': ['180g atún fresco', '½ aguacate', '100g arroz integral', 'salsa de soja', 'sésamo', 'lima'], 'calories': isLose ? 380 : 500, 'protein': 44.0, 'carbs': 40.0, 'fats': 12.0},
           ],
         ];
 
@@ -810,6 +970,16 @@ class SimulatedAIService {
             {'meal_type': 'lunch', 'name': 'Arroz integral con salmón y aguacate', 'ingredients': ['150g arroz integral', '180g salmón a la plancha', '½ aguacate', 'sésamo', 'salsa de soja'], 'calories': isGain ? 660 : 490, 'protein': 40.0, 'carbs': isGain ? 70.0 : 52.0, 'fats': 20.0},
             {'meal_type': 'dinner', 'name': 'Ensalada César con pechuga y crutones', 'ingredients': ['150g pechuga a la plancha', 'lechuga romana', '20g parmesano', 'crutones integrales', 'salsa César ligera'], 'calories': isLose ? 340 : 470, 'protein': 38.0, 'carbs': 22.0, 'fats': 14.0},
           ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Bowl de skyr con manzana, canela y almendras', 'ingredients': ['200g skyr', '1 manzana', '20g almendras', 'canela', '1 cda miel'], 'calories': isGain ? 430 : 320, 'protein': 26.0, 'carbs': isGain ? 50.0 : 36.0, 'fats': 10.0},
+            {'meal_type': 'lunch', 'name': 'Salteado de ternera con verduras y arroz frito', 'ingredients': ['180g ternera magra', '150g arroz', 'pimiento', 'cebolla', 'zanahoria', 'salsa de soja', 'sésamo'], 'calories': isGain ? 640 : 480, 'protein': 40.0, 'carbs': isGain ? 70.0 : 52.0, 'fats': 14.0},
+            {'meal_type': 'dinner', 'name': 'Pollo asado con boniato y judías verdes', 'ingredients': ['200g muslo de pollo deshuesado', '150g boniato', 'judías verdes', 'romero', 'aceite de oliva'], 'calories': isLose ? 380 : 510, 'protein': 38.0, 'carbs': 38.0, 'fats': 16.0},
+          ],
+          [
+            {'meal_type': 'breakfast', 'name': 'Tortitas de avena y plátano con yogur', 'ingredients': ['60g avena', '1 plátano', '2 huevos', '150g yogur griego', 'canela'], 'calories': isGain ? 460 : 340, 'protein': 24.0, 'carbs': isGain ? 56.0 : 42.0, 'fats': 10.0},
+            {'meal_type': 'lunch', 'name': 'Paella de mariscos exprés', 'ingredients': ['150g arroz', '120g mezcla de mariscos', '50g guisantes', 'pimiento', 'azafrán', 'caldo de pescado'], 'calories': isGain ? 620 : 460, 'protein': 32.0, 'carbs': isGain ? 70.0 : 52.0, 'fats': 10.0},
+            {'meal_type': 'dinner', 'name': 'Hamburguesa casera de pavo con boniato al horno', 'ingredients': ['180g pavo picado', '1 pan de hamburguesa integral', '150g boniato', 'lechuga', 'tomate', 'mostaza'], 'calories': isLose ? 380 : 520, 'protein': 42.0, 'carbs': 50.0, 'fats': 12.0},
+          ],
         ];
     }
   }
@@ -827,8 +997,8 @@ class SimulatedAIService {
     };
   }
 
-  static List<Map<String, dynamic>> _meals2(String pref, {required bool isLose, required bool isGain, int dayIndex = 0}) {
-    final base = _meals3(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+  static List<Map<String, dynamic>> _meals2(String pref, {required bool isLose, required bool isGain, required int seed, int dayIndex = 0, String? cookingTime}) {
+    final base = _meals3(pref, isLose: isLose, isGain: isGain, seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
     final lunch = base.firstWhere((m) => m['meal_type'] == 'lunch');
     final dinner = base.firstWhere((m) => m['meal_type'] == 'dinner');
     return [
@@ -839,8 +1009,8 @@ class SimulatedAIService {
 
   // ── Ayuno intermitente (ventana 12-20h) ───────────────────────────────────
 
-  static List<Map<String, dynamic>> _mealsAyuno(String pref, {required bool isLose, required bool isGain, int dayIndex = 0}) {
-    final base = _meals3(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+  static List<Map<String, dynamic>> _mealsAyuno(String pref, {required bool isLose, required bool isGain, required int seed, int dayIndex = 0, String? cookingTime}) {
+    final base = _meals3(pref, isLose: isLose, isGain: isGain, seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
     final lunch = base.firstWhere((m) => m['meal_type'] == 'lunch');
     final dinner = base.firstWhere((m) => m['meal_type'] == 'dinner');
     return [
@@ -860,8 +1030,8 @@ class SimulatedAIService {
 
   // ── 4 comidas ─────────────────────────────────────────────────────────────
 
-  static List<Map<String, dynamic>> _meals4(String pref, {required bool isLose, required bool isGain, int dayIndex = 0}) {
-    final base = _meals3(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+  static List<Map<String, dynamic>> _meals4(String pref, {required bool isLose, required bool isGain, required int seed, int dayIndex = 0, String? cookingTime}) {
+    final base = _meals3(pref, isLose: isLose, isGain: isGain, seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
     final snack = {
       'meal_type': 'snack',
       'name': isGain ? 'Batido de proteína con plátano y mantequilla de maní' : 'Yogur griego con frutos rojos',
@@ -876,13 +1046,99 @@ class SimulatedAIService {
 
   // ── 5+ comidas ────────────────────────────────────────────────────────────
 
+  // Acepta tanto nombres del nuevo onboarding (lactose, gluten, nuts, seafood,
+  // egg, soy) como los legacy en español. Mapean al mismo set de keywords.
   static const Map<String, List<String>> _allergenKeywords = {
+    // Nuevos (onboarding actual)
+    'lactose':      ['leche', 'queso', 'yogur', 'yogurt', 'mantequilla', 'crema', 'whey', 'ricotta', 'cottage', 'feta', 'mozzarella', 'parmesano', 'gruyère', 'manchego'],
+    'nuts':         ['nueces', 'almendras', 'anacardos', 'avellanas', 'pistachos', 'mantequilla de almendra', 'mantequilla de maní', 'mantequilla de mani', 'cajuil', 'maranon', 'frutos secos'],
+    'seafood':      ['camarón', 'langostino', 'mejillón', 'almeja', 'calamar', 'pulpo', 'marisco', 'langosta', 'ostión', 'atún', 'salmón', 'merluza', 'bacalao', 'lubina', 'atun', 'salmon'],
+    'egg':          ['huevo', 'huevos', 'claras', 'yema'],
+    'soy':          ['soja', 'soya', 'tofu', 'tempeh', 'edamame', 'leche de soja'],
+    // Legacy (registros previos al cambio de onboarding)
     'lactosa':      ['leche', 'queso', 'yogur', 'yogurt', 'mantequilla', 'crema', 'whey', 'ricotta', 'cottage', 'feta', 'mozzarella', 'parmesano', 'gruyère', 'manchego'],
-    'gluten':       ['pan', 'pasta', 'harina', 'avena', 'granola', 'crutones', 'trigo', 'espelta', 'cebada', 'centeno', 'tostadas', 'rebanadas'],
     'frutos_secos': ['nueces', 'almendras', 'anacardos', 'avellanas', 'pistachos', 'mantequilla de almendra', 'mantequilla de maní', 'mantequilla de mani', 'cajuil', 'maranon', 'frutos secos'],
     'mariscos':     ['camarón', 'langostino', 'mejillón', 'almeja', 'calamar', 'pulpo', 'marisco', 'langosta', 'ostión', 'atún', 'salmón', 'merluza', 'bacalao', 'lubina', 'atun', 'salmon'],
     'huevo':        ['huevo', 'huevos', 'claras', 'yema'],
     'soja':         ['soja', 'soya', 'tofu', 'tempeh', 'edamame', 'leche de soja'],
+    // Compartido (siempre el mismo término)
+    'gluten':       ['pan', 'pasta', 'harina', 'avena', 'granola', 'crutones', 'trigo', 'espelta', 'cebada', 'centeno', 'tostadas', 'rebanadas'],
+  };
+
+  // Mapa de "alimentos no deseados" (catálogo `dislikedFoodsCommon` del onboarding).
+  // Cada key del catálogo se traduce a las palabras que aparecen realmente en
+  // los ingredientes de los planes. Si el ítem contiene uno de estos términos
+  // se marca para que el usuario sepa que debe sustituirlo.
+  static const Map<String, List<String>> _dislikedKeywords = {
+    // Proteínas animales
+    'beef':           ['ternera', 'res', 'vacuno', 'carne magra', 'filete'],
+    'pork':           ['cerdo', 'costilla'],
+    'chicken':        ['pollo', 'pechuga'],
+    'turkey':         ['pavo'],
+    'lamb':           ['cordero'],
+    'fish':           ['merluza', 'bacalao', 'lubina', 'pescado'],
+    'salmon':         ['salmón', 'salmon'],
+    'tuna':           ['atún', 'atun'],
+    'seafood':        ['marisco', 'camarón', 'langostino', 'mejillón', 'calamar', 'pulpo'],
+    'shrimp':         ['camarón', 'langostino'],
+    'eggs':           ['huevo', 'huevos', 'claras', 'yema'],
+    // Lácteos
+    'milk':           ['leche', 'leche descremada', 'leche entera'],
+    'cheese':         ['queso', 'feta', 'mozzarella', 'parmesano', 'manchego', 'ricotta', 'cottage'],
+    'yogurt':         ['yogur', 'yogurt'],
+    'butter':         ['mantequilla'],
+    // Carbohidratos
+    'bread':          ['pan', 'tostadas', 'rebanadas'],
+    'rice':           ['arroz'],
+    'pasta':          ['pasta', 'fideos', 'macarrones'],
+    'potato':         ['patata', 'papa'],
+    'sweet_potato':   ['batata', 'boniato', 'camote'],
+    'oats':           ['avena'],
+    'quinoa':         ['quinoa'],
+    'corn':           ['maíz', 'maiz', 'choclo'],
+    // Legumbres / semillas
+    'beans':          ['frijoles', 'porotos', 'alubias'],
+    'lentils':        ['lentejas'],
+    'chickpeas':      ['garbanzos'],
+    'peas':           ['guisantes', 'arvejas'],
+    'tofu':           ['tofu', 'tempeh', 'edamame', 'soja'],
+    'nuts':           ['nueces', 'almendras', 'anacardos', 'avellanas', 'pistachos', 'frutos secos'],
+    'peanuts':        ['mantequilla de maní', 'mantequilla de mani', 'maní', 'mani', 'cacahuete'],
+    // Vegetales
+    'tomato':         ['tomate'],
+    'onion':          ['cebolla'],
+    'garlic':         ['ajo'],
+    'lettuce':        ['lechuga'],
+    'spinach':        ['espinaca'],
+    'broccoli':       ['brócoli', 'brocoli'],
+    'cauliflower':    ['coliflor'],
+    'carrot':         ['zanahoria'],
+    'pepper':         ['pimiento', 'morrón'],
+    'cucumber':       ['pepino'],
+    'mushrooms':      ['champiñones', 'champinones', 'hongos'],
+    'eggplant':       ['berenjena'],
+    'zucchini':       ['calabacín', 'calabacin', 'zapallito'],
+    'olives':         ['aceitunas'],
+    'avocado':        ['aguacate', 'palta'],
+    // Frutas
+    'apple':          ['manzana'],
+    'banana':         ['plátano', 'platano', 'banana'],
+    'orange':         ['naranja'],
+    'strawberry':     ['fresa', 'frutilla', 'frutos rojos'],
+    'grapes':         ['uvas'],
+    'pineapple':      ['piña', 'pina', 'ananá'],
+    'mango':          ['mango'],
+    'papaya':         ['papaya'],
+    'coconut':        ['coco', 'leche de coco'],
+    // Otros
+    'spicy':          ['picante', 'curry', 'pimentón'],
+    'sugar':          ['azúcar', 'azucar', 'miel', 'sirope'],
+    'soda':           ['refresco', 'bebida azucarada'],
+    'coffee':         ['café', 'cafe'],
+    'alcohol':        ['cerveza', 'vino', 'alcohol'],
+    'processed_meat': ['chorizo', 'jamón', 'jamon', 'embutido'],
+    'fast_food':      ['hamburguesa', 'pizza'],
+    'fried_food':     ['frito', 'fritos'],
   };
 
   static List<Map<String, dynamic>> _filterAllergies(
@@ -918,8 +1174,49 @@ class SimulatedAIService {
     }).toList();
   }
 
-  static List<Map<String, dynamic>> _meals5(String pref, {required bool isLose, required bool isGain, int dayIndex = 0}) {
-    final base = _meals4(pref, isLose: isLose, isGain: isGain, dayIndex: dayIndex);
+  /// Marca los ítems que contienen alimentos no deseados por el usuario.
+  /// A diferencia de las alergias (riesgo de salud), aquí sólo añadimos una
+  /// nota sugerente: el usuario puede sustituir el ingrediente manualmente.
+  /// No modifica calorías ni macros — sólo orienta visualmente.
+  static List<Map<String, dynamic>> _filterDislikedFoods(
+    List<Map<String, dynamic>> items,
+    List<String> dislikedFoods,
+  ) {
+    if (dislikedFoods.isEmpty) return items;
+    final active = dislikedFoods
+        .where((d) => _dislikedKeywords.containsKey(d.toLowerCase()))
+        .map((d) => d.toLowerCase())
+        .toList();
+    if (active.isEmpty) return items;
+
+    return items.map((item) {
+      final ingredients = (item['ingredients'] as List?)?.cast<String>() ?? [];
+      final name = (item['name'] as String).toLowerCase();
+      final ingLower = ingredients.map((i) => i.toLowerCase()).toList();
+
+      final matched = <String>[];
+      for (final disliked in active) {
+        final keywords = _dislikedKeywords[disliked] ?? [disliked];
+        final hit = ingLower.any((ing) => keywords.any((kw) => ing.contains(kw)))
+            || keywords.any((kw) => name.contains(kw));
+        if (hit) matched.add(disliked);
+      }
+
+      if (matched.isEmpty) return item;
+
+      final names = matched.map((m) => m.replaceAll('_', ' ')).join(', ');
+      return {
+        ...item,
+        'ingredients': [
+          ...ingredients,
+          '💡 Incluye: $names — siéntete libre de sustituirlo',
+        ],
+      };
+    }).toList();
+  }
+
+  static List<Map<String, dynamic>> _meals5(String pref, {required bool isLose, required bool isGain, required int seed, int dayIndex = 0, String? cookingTime}) {
+    final base = _meals4(pref, isLose: isLose, isGain: isGain, seed: seed, dayIndex: dayIndex, cookingTime: cookingTime);
     final preWorkout = {
       'meal_type': 'snack',
       'name': 'Pre-entreno: banana con mantequilla de maní',

@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../services/analytics_service.dart';
 import '../../services/profile_photo_local.dart';
 import '../../services/post_service.dart';
@@ -302,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add_circle_outline,
+                      Icon(PhosphorIconsDuotone.plusCircle,
                           color: Color(0xFF00BFFF), size: 20),
                       SizedBox(width: 8),
                       Text(
@@ -377,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black,
-        child: const Icon(Icons.add, color: Colors.white),
+        child: const Icon(PhosphorIconsFill.plus, color: Colors.white),
         onPressed: () async {
           await Navigator.push(
             context,
@@ -575,7 +576,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                icon: const Icon(Icons.settings, color: Colors.black),
+                icon: const Icon(PhosphorIconsRegular.gear, color: Colors.black),
                 onPressed: _navigateToEditProfile,
               ),
             ),

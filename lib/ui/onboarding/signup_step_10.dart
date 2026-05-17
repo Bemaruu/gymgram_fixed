@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/input_sanitizers.dart';
 import '../shared/custom_button.dart';
 
 class SignupStep10 extends StatefulWidget {
@@ -19,15 +20,15 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
   late Animation<double> _fadeAnimation;
   late Map<String, dynamic> userData;
 
-  final List<Map<String, String>> restrictionOptions = [
-    {'label': 'Lactosa', 'value': 'lactosa'},
+  final List<Map<String, String>> restrictionOptions = const [
+    {'label': 'Lactosa', 'value': 'lactose'},
     {'label': 'Gluten', 'value': 'gluten'},
-    {'label': 'Frutos secos', 'value': 'frutos_secos'},
-    {'label': 'Mariscos / Pescado', 'value': 'mariscos'},
-    {'label': 'Huevo', 'value': 'huevo'},
-    {'label': 'Soja', 'value': 'soja'},
-    {'label': 'No tengo', 'value': 'ninguna'},
-    {'label': 'Otro', 'value': 'otro'},
+    {'label': 'Frutos secos', 'value': 'nuts'},
+    {'label': 'Mariscos / Pescado', 'value': 'seafood'},
+    {'label': 'Huevo', 'value': 'egg'},
+    {'label': 'Soja', 'value': 'soy'},
+    {'label': 'No tengo', 'value': 'none'},
+    {'label': 'Otro', 'value': 'other'},
   ];
 
   @override
@@ -61,32 +62,33 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
     setState(() {
       if (selectedRestrictions.contains(value)) {
         selectedRestrictions.remove(value);
-        if (value == 'otro') showOtherField = false;
+        if (value == 'other') showOtherField = false;
       } else {
         selectedRestrictions.add(value);
-        if (value == 'otro') showOtherField = true;
+        if (value == 'other') showOtherField = true;
       }
     });
   }
 
   void _onNext() {
-  if (selectedRestrictions.isNotEmpty) {
-    final restrictions = selectedRestrictions.toList();
+    if (selectedRestrictions.isNotEmpty) {
+      final restrictions = selectedRestrictions.toList();
 
-    if (restrictions.contains('otro') && _otherController.text.trim().isNotEmpty) {
-      restrictions.add(_otherController.text.trim());
+      if (restrictions.contains('other')) {
+        final extra = InputSanitizers.cleanOptional(_otherController.text, maxLen: 80);
+        if (extra != null) restrictions.add('custom:$extra');
+      }
+
+      // Lista tipada (no string concatenado) para datos limpios.
+      userData['dietaryRestrictions'] = restrictions;
+
+      Navigator.pushNamed(
+        context,
+        '/signup_cooking_time',
+        arguments: userData,
+      );
     }
-
-    // Convertir a string
-    userData['dietaryRestrictions'] = restrictions.join(', ');
-
-    Navigator.pushNamed(
-      context,
-      '/signup_step_11',
-      arguments: userData,
-    );
   }
-}
 
 
   Widget restrictionChip(String label, String value) {
@@ -136,12 +138,14 @@ class _SignupStep10State extends State<SignupStep10> with TickerProviderStateMix
           padding: const EdgeInsets.only(top: 8),
           child: TextField(
             controller: _otherController,
+            maxLength: 80,
             style: const TextStyle(color: Colors.black),
             decoration: InputDecoration(
-              hintText: 'Especifica tu restricción',
+              hintText: 'Especifica tu restricción (sin enlaces)',
               hintStyle: const TextStyle(color: Colors.black54),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.85),
+              counterText: '',
               prefixIcon: const Icon(Icons.edit, color: Colors.black54),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),

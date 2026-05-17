@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
+import '../core/app_radius.dart';
+import '../core/app_shadows.dart';
+import '../core/app_spacing.dart';
+import '../core/app_typography.dart';
+import 'muscle_icon.dart';
 
 class RoutineCard extends StatelessWidget {
   final Map<String, dynamic> routine;
@@ -45,36 +51,26 @@ class RoutineCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.base),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.neutral0,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          boxShadow: AppShadows.base,
         ),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF00BFFF).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.fitness_center,
-                color: Color(0xFF00BFFF),
-              ),
-            ),
-            const SizedBox(width: 12),
+            MuscleIcon(exerciseOrMuscle: title, size: 48),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: AppTypography.h3.copyWith(
+                      color: AppColors.sky900,
                       fontSize: 15,
-                      fontWeight: FontWeight.bold,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -86,28 +82,26 @@ class RoutineCard extends StatelessWidget {
                       goal,
                       '$exercises ejercicios',
                     ].join(' · '),
-                    style: const TextStyle(
-                      color: Colors.black54,
-                      fontSize: 12,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.neutral600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (copies >= 1) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         const Icon(
                           Icons.copy_rounded,
                           size: 12,
-                          color: Color(0xFF00BFFF),
+                          color: AppColors.sky400,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: AppSpacing.xs),
                         Text(
                           '$copies copias',
-                          style: const TextStyle(
-                            color: Color(0xFF00BFFF),
-                            fontSize: 11,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.sky400,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -120,25 +114,24 @@ class RoutineCard extends StatelessWidget {
             if (!isOwner)
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                    horizontal: AppSpacing.md, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00BFFF),
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.sky400,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.copy_rounded,
-                      color: Colors.white,
+                      color: AppColors.neutral0,
                       size: 14,
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: AppSpacing.xs),
                     Text(
                       'Copiar',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.neutral0,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -146,7 +139,7 @@ class RoutineCard extends StatelessWidget {
                 ),
               )
             else
-              const Icon(Icons.chevron_right, color: Colors.black38),
+              const Icon(Icons.chevron_right, color: AppColors.neutral400),
           ],
         ),
       ),

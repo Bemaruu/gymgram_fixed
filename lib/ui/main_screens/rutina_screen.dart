@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../services/analytics_service.dart';
 import '../../services/routine_service.dart';
 import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/skeletons/routine_skeleton.dart';
 import 'exercise_search_sheet.dart';
 
 class RoutineScreen extends StatefulWidget {
@@ -85,10 +87,19 @@ class _RoutineScreenState extends State<RoutineScreen> {
       final height = (profile?['height'] as num?)?.toDouble() ?? 170.0;
       final bmi = SimulatedAIService.calculateBMI(weight, height);
 
-      final rawDays =
-          (onboarding?['available_days'] as List?)?.cast<String>() ?? [];
-      final available =
-          List<bool>.generate(7, (i) => rawDays.contains(_dayKeys[i]));
+      // available_days puede venir en dos formatos:
+      //   - Nuevo (onboarding extendido): ['0','1','3','4']  (índices 0..6)
+      //   - Legacy: ['lunes','martes',...]  (strings en español)
+      // Aceptamos ambos para no romper cuentas viejas ni nuevas.
+      final rawDays = (onboarding?['available_days'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const <String>[];
+      final available = List<bool>.generate(7, (i) {
+        final idxStr = i.toString();
+        final legacyKey = _dayKeys[i];
+        return rawDays.contains(idxStr) || rawDays.contains(legacyKey);
+      });
       final anySelected = available.any((d) => d);
       final finalDays = anySelected ? available : List<bool>.filled(7, true);
 
@@ -125,7 +136,21 @@ class _RoutineScreenState extends State<RoutineScreen> {
   }
 
   void _generateExercises() {
-    // Primero revisar si hay una rutina guardada en Supabase para este día
+    // Si el día seleccionado NO está marcado como día de entrenamiento en el
+    // onboarding, es día de descanso: limpiar la pantalla y NO mostrar ninguna
+    // rutina previamente guardada. Esto evita que una rutina auto-guardada en
+    // sesiones anteriores (cuando _availableDays podía caer al fallback de 7
+    // días) siga apareciendo tras configurar el descanso.
+    if (!_availableDays[_selectedDayIndex]) {
+      setState(() {
+        _savedRoutineId = null;
+        _exercises = [];
+        _hasArchivedForDay = false;
+      });
+      return;
+    }
+
+    // Día de entrenamiento: primero revisar si hay rutina guardada
     final saved = _savedRoutines
         .where((r) => r['day_of_week'] == _selectedDayIndex)
         .firstOrNull;
@@ -247,7 +272,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(children: [
-            Icon(Icons.check_circle_rounded,
+            Icon(PhosphorIconsFill.checkCircle,
                 color: Color(0xFF00BFFF), size: 20),
             SizedBox(width: 10),
             Text('Rutina anterior restaurada'),
@@ -347,7 +372,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: const Row(children: [
-            Icon(Icons.check_circle_rounded, color: Color(0xFF00BFFF), size: 20),
+            Icon(PhosphorIconsFill.checkCircle, color: Color(0xFF00BFFF), size: 20),
             SizedBox(width: 10),
             Text('Rutina guardada'),
           ]),
@@ -382,7 +407,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Row(children: [
-          Icon(Icons.check_circle_rounded, color: Color(0xFF00BFFF), size: 20),
+          Icon(PhosphorIconsFill.checkCircle, color: Color(0xFF00BFFF), size: 20),
           SizedBox(width: 10),
           Text('Entrenamiento registrado'),
         ]),
@@ -467,7 +492,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
               content: Row(
                 children: [
                   const Icon(
-                    Icons.check_circle_rounded,
+                    PhosphorIconsFill.checkCircle,
                     color: Color(0xFF00BFFF),
                     size: 20,
                   ),
@@ -523,7 +548,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
           if (editMode)
             const Padding(
               padding: EdgeInsets.only(right: 8),
-              child: Icon(Icons.drag_handle, color: Colors.black38, size: 24),
+              child: Icon(PhosphorIconsRegular.dotsSixVertical, color: Colors.black38, size: 24),
             ),
           Container(
             width: 48,
@@ -532,7 +557,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
               color: const Color(0xFF00BFFF).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.fitness_center, color: Color(0xFF00BFFF)),
+            child: const Icon(PhosphorIconsDuotone.barbell, color: Color(0xFF00BFFF)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -573,7 +598,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                       replaceIndex: _exercises.indexOf(e),
                     ),
                     icon: const Icon(
-                      Icons.swap_horiz_rounded,
+                      PhosphorIconsRegular.arrowsLeftRight,
                       size: 16,
                       color: Color(0xFF00BFFF),
                     ),
@@ -597,7 +622,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
           if (editMode)
             IconButton(
               icon: const Icon(
-                Icons.close_rounded,
+                PhosphorIconsRegular.x,
                 color: Color(0xFFEF5350),
                 size: 20,
               ),
@@ -606,8 +631,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
           else
             Icon(
               e.isChecked
-                  ? Icons.check_circle
-                  : Icons.radio_button_unchecked,
+                  ? PhosphorIconsFill.checkCircle
+                  : PhosphorIconsRegular.circle,
               color: e.isChecked ? Colors.green : Colors.grey,
             ),
         ],
@@ -673,7 +698,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.add_circle_outline,
+                      PhosphorIconsFill.plusCircle,
                       color: Color(0xFF00BFFF),
                       size: 22,
                     ),
@@ -716,7 +741,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       child: Row(
         children: [
           const Icon(
-            Icons.star_outline_rounded,
+            PhosphorIconsRegular.star,
             color: Color(0xFF00BFFF),
             size: 18,
           ),
@@ -838,7 +863,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator()),
+        body: SafeArea(
+          child: RoutineSkeletonList(count: 2),
+        ),
       );
     }
 
@@ -903,7 +930,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                         )
                       : IconButton(
                           icon: const Icon(
-                            Icons.history_rounded,
+                            PhosphorIconsDuotone.clockCounterClockwise,
                             color: Color(0xFF00BFFF),
                           ),
                           tooltip: 'Volver a tu rutina anterior',
@@ -919,7 +946,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                 if (_exercises.isNotEmpty)
                   IconButton(
                     icon: const Icon(
-                      Icons.edit_outlined,
+                      PhosphorIconsRegular.pencilSimple,
                       color: Color(0xFF00BFFF),
                     ),
                     tooltip: 'Editar rutina',
@@ -947,7 +974,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.warning_amber_rounded,
+                      PhosphorIconsRegular.warning,
                       color: Colors.orange.shade700,
                       size: 18,
                     ),
@@ -1022,7 +1049,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.done_all_rounded, size: 20),
+                      : const Icon(PhosphorIconsRegular.checks, size: 20),
                   label: const Text(
                     'Completar entrenamiento',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),

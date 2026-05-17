@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'badge_service.dart';
 
 class WaterService {
   static final WaterService instance = WaterService._();
@@ -41,6 +42,10 @@ class WaterService {
     final current = await getGlassesToday();
     final next = current + 1;
     await setGlassesToday(next);
+    final uid = _uid;
+    if (uid != null) {
+      await BadgeService.instance.checkAndAwardBadges(uid, 'water_logged');
+    }
     return next;
   }
 

@@ -23,6 +23,8 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 .vscode/launch.json
+run_dev.bat
+run_release.bat
 
 # Flutter/Dart/Pub related
 **/doc/api/

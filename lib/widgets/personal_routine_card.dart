@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
+import '../core/app_radius.dart';
+import '../core/app_shadows.dart';
+import '../core/app_spacing.dart';
+import '../core/app_typography.dart';
 
 class PersonalRoutineCard extends StatelessWidget {
   final List<Map<String, dynamic>> routines;
@@ -39,25 +44,20 @@ class PersonalRoutineCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.base),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          color: AppColors.neutral0,
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF00BFFF),
-              Color(0xFF0096D6),
+              AppColors.sky50.withValues(alpha: 0.4),
+              AppColors.ember50.withValues(alpha: 0.4),
             ],
           ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF00BFFF).withValues(alpha: 0.20),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          boxShadow: AppShadows.base,
         ),
         child: Row(
           children: [
@@ -65,26 +65,26 @@ class PersonalRoutineCard extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.20),
-                borderRadius: BorderRadius.circular(14),
+                gradient: AppColors.auroraGradient,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                boxShadow: AppShadows.glow(AppColors.sky400),
               ),
               child: const Icon(
                 Icons.calendar_today_rounded,
-                color: Colors.white,
+                color: AppColors.neutral0,
                 size: 24,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: AppTypography.h3.copyWith(
+                      color: AppColors.sky900,
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -92,26 +92,24 @@ class PersonalRoutineCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 12,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.neutral600,
                     ),
                   ),
                   if (totalCopies >= 1) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         const Icon(
                           Icons.copy_rounded,
                           size: 12,
-                          color: Colors.white,
+                          color: AppColors.ember400,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: AppSpacing.xs),
                         Text(
                           '$totalCopies ${totalCopies == 1 ? "copia" : "copias"}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.ember400,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -123,16 +121,18 @@ class PersonalRoutineCard extends StatelessWidget {
                     isOwner
                         ? 'Toca para ver y editar la semana'
                         : 'Toca para ver y copiar la semana',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.70),
-                      fontSize: 11,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.neutral600,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.sky700,
+            ),
           ],
         ),
       ),

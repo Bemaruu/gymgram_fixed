@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/app_colors.dart';
-import '../shared/custom_button.dart';
+import '../../core/app_radius.dart';
+import '../../core/app_shadows.dart';
+import '../../core/app_typography.dart';
+import '../../core/input_sanitizers.dart';
 
 class SignupStep1 extends StatefulWidget {
   const SignupStep1({super.key});
@@ -29,16 +33,17 @@ class _SignupStep1State extends State<SignupStep1> {
 
  void _onNextPressed() {
   if (_formKey.currentState!.validate()) {
-    final userData = {
+    // Tipo explícito: a lo largo del flujo se agregan double, List, bool, etc.
+    final Map<String, dynamic> userData = {
       'fullName': _nameController.text.trim(),
       'email': _emailController.text.trim(),
       'username': _usernameController.text.trim(),
-      'password': _passwordController.text.trim(), // Solo si usarás Auth
+      'password': _passwordController.text.trim(),
     };
 
     Navigator.pushNamed(
       context,
-      '/signup_step_2',
+      '/signup_consent',
       arguments: userData,
     );
   }
@@ -56,6 +61,8 @@ class _SignupStep1State extends State<SignupStep1> {
             key: _formKey,
             child: Column(
               children: [
+                // [Aurora polish] contenido del onboarding step 1 con
+                // animación de entrada y botón "Siguiente" en gradiente.
                 // Logo y Título
                 const SizedBox(height: 20),
                  ClipRRect(
@@ -98,46 +105,37 @@ class _SignupStep1State extends State<SignupStep1> {
                       // Nombre completo
                       TextFormField(
                         controller: _nameController,
+                        maxLength: 50,
                         decoration: const InputDecoration(
                           hintText: 'Nombre completo',
+                          counterText: '',
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Este campo es obligatorio';
-                          }
-                          return null;
-                        },
+                        validator: InputSanitizers.validateFullName,
                       ),
                       const SizedBox(height: 20),
 
                       // Correo
                       TextFormField(
                         controller: _emailController,
+                        maxLength: 254,
                         decoration: const InputDecoration(
                           hintText: 'Correo electrónico',
+                          counterText: '',
                         ),
                         keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || !value.contains('@')) {
-                            return 'Ingresa un correo válido';
-                          }
-                          return null;
-                        },
+                        validator: InputSanitizers.validateEmail,
                       ),
                       const SizedBox(height: 20),
 
                       // Usuario
                       TextFormField(
                         controller: _usernameController,
+                        maxLength: 20,
                         decoration: const InputDecoration(
                           hintText: 'Nombre de usuario',
+                          counterText: '',
                         ),
-                        validator: (value) {
-                          if (value == null || value.contains(' ')) {
-                            return 'Sin espacios, por favor';
-                          }
-                          return null;
-                        },
+                        validator: InputSanitizers.validateUsername,
                       ),
                       const SizedBox(height: 20),
 
@@ -146,7 +144,7 @@ class _SignupStep1State extends State<SignupStep1> {
                         controller: _passwordController,
                         obscureText: !_showPassword,
                         decoration: InputDecoration(
-                          hintText: 'Contraseña',
+                          hintText: 'Contraseña (8+ con letras y números)',
                           suffixIcon: IconButton(
                             icon: Icon(
                               _showPassword
@@ -160,12 +158,7 @@ class _SignupStep1State extends State<SignupStep1> {
                             },
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.length < 6) {
-                            return 'Mínimo 6 caracteres';
-                          }
-                          return null;
-                        },
+                        validator: InputSanitizers.validatePassword,
                       ),
                     ],
                   ),
@@ -173,10 +166,32 @@ class _SignupStep1State extends State<SignupStep1> {
 
                 const SizedBox(height: 32),
 
-                // Botón Siguiente
-                CustomButton(
-                  text: 'Siguiente',
-                  onPressed: _onNextPressed,
+                // Botón Siguiente (aurora polish)
+                Container(
+                  height: 56,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.auroraGradient,
+                    borderRadius: BorderRadius.circular(AppRadius.base),
+                    boxShadow: AppShadows.glow(AppColors.ember400),
+                  ),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.base),
+                      ),
+                    ),
+                    onPressed: _onNextPressed,
+                    child: Text(
+                      'Siguiente',
+                      style: AppTypography.bodyLg.copyWith(
+                        color: AppColors.neutral0,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ),
                  const SizedBox(height: 16),
 
@@ -194,9 +209,10 @@ class _SignupStep1State extends State<SignupStep1> {
               ),
             ),
               ],
-            ),
-               
-
+            )
+                .animate()
+                .fadeIn(duration: 320.ms, curve: Curves.easeOutCubic)
+                .slideY(begin: 0.04, end: 0),
           ),
         ),
       ),

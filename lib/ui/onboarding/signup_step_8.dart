@@ -20,53 +20,68 @@ class _SignupStep8State extends State<SignupStep8> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    userData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final raw = ModalRoute.of(context)!.settings.arguments as Map;
+    // Map<String,dynamic>.from convierte el tipo real (no solo cast),
+    // permitiendo guardar double/List/bool además de String.
+    userData = Map<String, dynamic>.from(raw);
+  }
+
+  double? _parseNum(String raw) {
+    // Acepta coma decimal (típica en español) y punto.
+    final normalized = raw.trim().replaceAll(',', '.');
+    return double.tryParse(normalized);
+  }
+
+  void _showError(String msg) {
+    // Cierra el teclado primero para que el snackbar no quede tapado.
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _onNext() {
-    final currentWeight = double.tryParse(_currentWeightController.text);
-    final height = double.tryParse(_heightController.text);
-    final targetWeight = double.tryParse(_targetWeightController.text);
+    final currentWeight = _parseNum(_currentWeightController.text);
+    final height = _parseNum(_heightController.text);
+    final targetWeight = _parseNum(_targetWeightController.text);
 
     if (currentWeight == null || height == null || targetWeight == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos con números válidos')),
-      );
+      _showError('Completa peso, estatura y peso objetivo con números válidos');
       return;
     }
-
     if (currentWeight < 30 || currentWeight > 300) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El peso debe estar entre 30 y 300 kg')),
-      );
+      _showError('El peso debe estar entre 30 y 300 kg');
       return;
     }
-
     if (height < 100 || height > 250) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La estatura debe estar entre 100 y 250 cm')),
-      );
+      _showError('La estatura debe estar entre 100 y 250 cm');
       return;
     }
-
     if (targetWeight < 30 || targetWeight > 300) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El peso objetivo debe estar entre 30 y 300 kg')),
-      );
+      _showError('El peso objetivo debe estar entre 30 y 300 kg');
       return;
     }
 
     final heightInMeters = height / 100;
     final bmi = currentWeight / (heightInMeters * heightInMeters);
 
-    userData['currentWeight'] = currentWeight.toString();
-    userData['height'] = height.toString();
-    userData['targetWeight'] = targetWeight.toString();
-    userData['bmi'] = bmi.toStringAsFixed(2);
+    // Guardamos como número, no como string, para evitar parseos posteriores.
+    userData['currentWeight'] = currentWeight;
+    userData['weight'] = currentWeight;
+    userData['height'] = height;
+    userData['targetWeight'] = targetWeight;
+    userData['bmi'] = bmi;
 
     Navigator.pushNamed(
       context,
-      '/signup_step_9',
+      '/signup_step_4',
       arguments: userData,
     );
   }
@@ -168,7 +183,8 @@ class _SignupStep8State extends State<SignupStep8> {
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+        // Acepta dígitos y un único separador decimal (punto o coma).
+        FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
       ],
       style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(

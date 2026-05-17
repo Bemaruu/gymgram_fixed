@@ -132,9 +132,9 @@ class _SignupStep2State extends State<SignupStep2> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    genderButton('Hombre', Icons.male, 'Hombre', AppColors.primary),
-                    genderButton('Mujer', Icons.female, 'Mujer', AppColors.accentOrange),
-                    genderButton('Otro', Icons.transgender, 'Otro', AppColors.darkBlue),
+                    genderButton('Hombre', Icons.male, 'MALE', AppColors.primary),
+                    genderButton('Mujer', Icons.female, 'FEMALE', AppColors.accentOrange),
+                    genderButton('Otro', Icons.transgender, 'OTHER', AppColors.darkBlue),
                     const SizedBox(height: 32),
                     CustomButton(
                       text: 'Siguiente',

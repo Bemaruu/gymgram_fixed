@@ -11,7 +11,8 @@ class SignupStep5 extends StatefulWidget {
 }
 
 class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin {
-  final Set<String> selectedGoals = {};
+  // Single-select: el modelo de IA necesita un único objetivo principal.
+  String? selectedGoal;
   late Map<String, dynamic> userData;
 
   late AnimationController _fadeController;
@@ -43,32 +44,28 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
     super.dispose();
   }
 
-  void _toggleGoal(String goal) {
-    setState(() {
-      if (selectedGoals.contains(goal)) {
-        selectedGoals.remove(goal);
-      } else {
-        selectedGoals.add(goal);
-      }
-    });
+  void _selectGoal(String goal) {
+    setState(() => selectedGoal = goal);
   }
 
   void _onNext() {
-    if (selectedGoals.isNotEmpty) {
-      userData['goal'] = selectedGoals.join(', ');
+    if (selectedGoal != null) {
+      // Mantenemos 'goal' por compat con el mapeo de signup_step_13.
+      userData['goal'] = selectedGoal;
+      userData['fitnessGoal'] = selectedGoal;
 
       Navigator.pushNamed(
         context,
-        '/signup_step_6',
+        '/signup_routine_preferences',
         arguments: userData,
       );
     }
   }
 
   Widget goalButton(String label, IconData icon, String value, Color color) {
-    final isSelected = selectedGoals.contains(value);
+    final isSelected = selectedGoal == value;
     return GestureDetector(
-      onTap: () => _toggleGoal(value),
+      onTap: () => _selectGoal(value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
@@ -145,16 +142,19 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
                         ),
                       ),
                       const SizedBox(height: 32),
-                      goalButton('Perder peso', Icons.local_fire_department, 'perder', AppColors.primary),
-                      goalButton('Ganar masa muscular', Icons.fitness_center, 'ganar', AppColors.accentOrange),
-                      goalButton('Mantenerme sano', Icons.favorite, 'salud', AppColors.darkBlue),
+                      goalButton('Perder grasa', Icons.local_fire_department, 'LOSE_WEIGHT', AppColors.primary),
+                      goalButton('Ganar masa muscular', Icons.fitness_center, 'GAIN_MUSCLE', AppColors.accentOrange),
+                      goalButton('Recomposición', Icons.swap_horiz, 'RECOMPOSITION', AppColors.darkBlue),
+                      goalButton('Mantenerme sano', Icons.favorite, 'MAINTAIN', AppColors.primary),
+                      goalButton('Mejorar resistencia', Icons.directions_run, 'IMPROVE_ENDURANCE', AppColors.accentOrange),
+                      goalButton('Tonificar', Icons.self_improvement, 'TONE_BODY', AppColors.darkBlue),
                       const SizedBox(height: 32),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: CustomButton(
-                          key: ValueKey(selectedGoals.length),
+                          key: ValueKey(selectedGoal),
                           text: 'Siguiente',
-                          onPressed: selectedGoals.isNotEmpty ? _onNext : null,
+                          onPressed: selectedGoal != null ? _onNext : null,
                         ),
                       ),
                       const SizedBox(height: 16),

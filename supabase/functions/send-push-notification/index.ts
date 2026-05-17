@@ -105,13 +105,13 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // Fetch the FCM token for this user
-  const { data: profile, error } = await supabase
-    .from('profiles')
+  const { data: deviceToken, error } = await supabase
+    .from('device_tokens')
     .select('fcm_token')
-    .eq('id', user_id)
+    .eq('user_id', user_id)
     .single();
 
-  if (error || !profile?.fcm_token) {
+  if (error || !deviceToken?.fcm_token) {
     return new Response('No FCM token for user', { status: 404 });
   }
 
@@ -132,7 +132,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         message: {
-          token: profile.fcm_token,
+          token: deviceToken.fcm_token,
           notification: { title, body: msgBody },
         },
       }),

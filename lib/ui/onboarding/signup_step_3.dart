@@ -158,7 +158,7 @@ class _SignupStep3State extends State<SignupStep3> {
 
                               Navigator.pushNamed(
                                 context,
-                                '/signup_step_4',
+                                '/signup_step_8',
                                 arguments: userData,
                               );
                             }
