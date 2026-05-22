@@ -1,20 +1,42 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'subscription_service.dart';
 
-/// Reglas de cuota anual para cambios de campos sensibles del perfil.
-/// - Limite: 4 cambios/anio calendario para usuarios `free` en `fitness_goal`
-///   y `training_location`.
-/// - `plus` y `premium`: ilimitado.
+/// Cuota anual COMBINADA de cambios sensibles del perfil.
+/// Cuenta TODOS los campos en `trackedFields` juntos durante el ano calendario.
+///
+/// Limites por tier:
+/// - free:    4 cambios/ano
+/// - plus:    8 cambios/ano
+/// - premium: 12 cambios/ano
 class ChangeQuotaService {
   static final ChangeQuotaService instance = ChangeQuotaService._();
   ChangeQuotaService._();
 
+  static const Set<String> trackedFields = {
+    'fitness_goal',
+    'training_location',
+    'routine_ai_change',
+  };
+
+  /// Limite legacy (= free). Se mantiene por compat con UIs antiguas.
+  /// Las UIs nuevas deben leer `quotaFor()`.limit.
   static const int yearlyLimit = 4;
-  static const Set<String> trackedFields = {'fitness_goal', 'training_location'};
 
   final _client = Supabase.instance.client;
 
-  Future<int> usedThisYear(String field) async {
+  static int yearlyLimitFor(SubscriptionTier tier) {
+    switch (tier) {
+      case SubscriptionTier.free:
+        return 4;
+      case SubscriptionTier.plus:
+        return 8;
+      case SubscriptionTier.premium:
+        return 12;
+    }
+  }
+
+  /// Total combinado de cambios usados este ano (todos los campos juntos).
+  Future<int> usedThisYear() async {
     final uid = _client.auth.currentUser?.id;
     if (uid == null) return 0;
     final now = DateTime.now();
@@ -26,7 +48,7 @@ class ChangeQuotaService {
           .from('profile_change_logs')
           .select('id')
           .eq('user_id', uid)
-          .eq('field', field)
+          .inFilter('field', trackedFields.toList())
           .gte('changed_at', yearStart.toIso8601String())
           .lt('changed_at', yearEnd.toIso8601String());
       return (rows as List).length;
@@ -35,11 +57,11 @@ class ChangeQuotaService {
     }
   }
 
-  Future<bool> canChange(String field) async {
+  Future<bool> canChange() async {
     final tier = await SubscriptionService.instance.currentTier();
-    if (SubscriptionService.instance.isPremium(tier)) return true;
-    final used = await usedThisYear(field);
-    return used < yearlyLimit;
+    final limit = yearlyLimitFor(tier);
+    final used = await usedThisYear();
+    return used < limit;
   }
 
   Future<void> recordChange({
@@ -58,12 +80,10 @@ class ChangeQuotaService {
     });
   }
 
-  Future<({int used, int limit, bool unlimited})> quotaFor(String field) async {
+  Future<({int used, int limit})> quotaFor() async {
     final tier = await SubscriptionService.instance.currentTier();
-    if (SubscriptionService.instance.isPremium(tier)) {
-      return (used: 0, limit: yearlyLimit, unlimited: true);
-    }
-    final used = await usedThisYear(field);
-    return (used: used, limit: yearlyLimit, unlimited: false);
+    final limit = yearlyLimitFor(tier);
+    final used = await usedThisYear();
+    return (used: used, limit: limit);
   }
 }

@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_colors.dart';
 import '../../models/food_log.dart';
 import '../../services/analytics_service.dart';
 import '../../services/food_service.dart';
+import '../../services/meal_plan_generator.dart';
 import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
@@ -27,7 +30,13 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
   Map<String, dynamic>? _plan;
   List<Map<String, dynamic>> _items = [];
-  final Set<int> _checked = {};
+  // Unidad checkeable = "itemIndex:compIndex" (compIndex -1 = item completo/receta).
+  final Set<String> _checkedKeys = {};
+  // Mapea la unidad del plan al id de su food_log registrado.
+  Map<String, String> _registeredLogIds = {};
+  String _togglingKey = '';
+  // Variación por comida (slotIndex → nº de cambios), persistida por día.
+  Map<int, int> _slotVariations = {};
 
   List<FoodLog> _dailyLogs = [];
   Map<String, double> _dailyTotals = {};
@@ -80,8 +89,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final today = DateTime.now().weekday - 1;
       if (_selectedDayIndex != today) {
         setState(() => _selectedDayIndex = today);
-        _generatePlan();
-        _loadDailyLogs(_dateForDayIndex(today));
+        _refreshSelectedDay();
       }
     }
   }
@@ -139,11 +147,13 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _cookingTime = cookingTime;
         _userId = userId;
         _waterCount = water;
-        _isLoading = false;
+        // _isLoading se mantiene true hasta que el plan esté listo
       });
 
-      _generatePlan();
+      await _generatePlan();
+      if (mounted) setState(() => _isLoading = false);
       await _loadDailyLogs(DateTime.now());
+      _reconcilePlanChecks();
     } catch (e) {
       debugPrint('AlimentacionScreen load error: $e');
       if (!mounted) return;
@@ -151,11 +161,19 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     }
   }
 
-  void _generatePlan() {
+  Future<void> _refreshSelectedDay() async {
+    await _generatePlan();
+    await _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
+    _reconcilePlanChecks();
+  }
+
+  Future<void> _generatePlan() async {
     final selectedDate = _dateForDayIndex(_selectedDayIndex);
     final weekIndex = _weeksSinceEpoch(selectedDate);
 
-    final plan = SimulatedAIService.generateMealPlan(
+    _slotVariations = await _loadVariations(weekIndex);
+
+    final input = MealPlanInput(
       goal: _goal,
       gender: _gender,
       weightKg: _weight,
@@ -171,10 +189,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       userId: _userId,
       weekIndex: weekIndex,
       dayIndex: _selectedDayIndex,
+      slotVariations: _slotVariations,
     );
 
-    // DEBUG: ayuda a verificar que distintas cuentas reciben planes distintos.
-    // Aparece sólo en debug builds; queda fuera en release.
+    final plan = await MealPlanGeneratorProvider.current.generate(input);
+
     assert(() {
       final uidShort = (_userId ?? 'null').length >= 8
           ? (_userId ?? 'null').substring(0, 8)
@@ -182,16 +201,54 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       debugPrint(
         '[Dieta] userId=$uidShort week=$weekIndex day=$_selectedDayIndex '
         'mode=${plan['food_mode']} cookingTime=$_cookingTime '
-        'foodPrefs=$_foodPrefs items=${(plan['items'] as List).length}',
+        'items=${(plan['items'] as List).length}',
       );
       return true;
     }());
 
+    if (!mounted) return;
     setState(() {
       _plan = plan;
       _items = List<Map<String, dynamic>>.from(plan['items'] as List);
-      _checked.clear();
+      _checkedKeys.clear();
     });
+  }
+
+  // ── Persistencia de "cambios de comida" (swap) por día ──────────────────
+  String _variationsKey(int weekIndex) =>
+      'mealvar_${_userId ?? 'anon'}_${weekIndex}_$_selectedDayIndex';
+
+  Future<Map<int, int>> _loadVariations(int weekIndex) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_variationsKey(weekIndex));
+      if (raw == null || raw.isEmpty) return {};
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(int.parse(k), (v as num).toInt()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _saveVariations(int weekIndex, Map<int, int> v) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded =
+          jsonEncode(v.map((k, val) => MapEntry(k.toString(), val)));
+      await prefs.setString(_variationsKey(weekIndex), encoded);
+    } catch (_) {}
+  }
+
+  /// Cambia una comida del plan por otra alternativa (estable y persistida).
+  Future<void> _swapMeal(int itemIndex) async {
+    final selectedDate = _dateForDayIndex(_selectedDayIndex);
+    final weekIndex = _weeksSinceEpoch(selectedDate);
+    final next = Map<int, int>.from(_slotVariations);
+    next[itemIndex] = (next[itemIndex] ?? 0) + 1;
+    await _saveVariations(weekIndex, next);
+    await _generatePlan();
+    await _loadDailyLogs(selectedDate);
+    _reconcilePlanChecks();
   }
 
   /// Número de semana absoluto desde una referencia fija. Cambia cada lunes,
@@ -230,14 +287,105 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   int get _targetCarbs => _plan?['carbs_grams'] as int? ?? 0;
   int get _targetFat => _plan?['fats_grams'] as int? ?? 0;
 
-  void _toggleItem(int index) {
-    setState(() {
-      if (_checked.contains(index)) {
-        _checked.remove(index);
-      } else {
-        _checked.add(index);
+  /// Marca como registradas las unidades del plan (alimento o receta) que ya
+  /// existen en food_logs del día. Empareja 1-a-1 por tipo + nombre para no
+  /// checkear dos unidades con el mismo log.
+  void _reconcilePlanChecks() {
+    final checked = <String>{};
+    final ids = <String, String>{};
+    final consumed = <String>{}; // ids de logs ya emparejados
+
+    void match(int i, int c, String? name, String mealType) {
+      if (name == null) return;
+      for (final log in _dailyLogs) {
+        if (consumed.contains(log.id)) continue;
+        if (log.mealType == mealType && log.foodName == name) {
+          final key = '$i:$c';
+          checked.add(key);
+          ids[key] = log.id;
+          consumed.add(log.id);
+          break;
+        }
       }
+    }
+
+    for (var i = 0; i < _items.length; i++) {
+      final item = _items[i];
+      final mealType = item['meal_type'] as String?;
+      if (mealType == null) continue;
+      final comps =
+          (item['components'] as List?)?.cast<Map<String, dynamic>>() ??
+              const [];
+      if (comps.isEmpty) {
+        match(i, -1, item['name'] as String?, mealType);
+      } else {
+        for (var c = 0; c < comps.length; c++) {
+          match(i, c, comps[c]['name'] as String?, mealType);
+        }
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _checkedKeys
+        ..clear()
+        ..addAll(checked);
+      _registeredLogIds = ids;
     });
+  }
+
+  /// Registra (o elimina) una unidad del plan (alimento simple o receta) en el
+  /// registro real del día. key = "itemIndex:compIndex" (compIndex -1 = receta).
+  Future<void> _togglePlanUnit(String key) async {
+    if (_togglingKey.isNotEmpty) return; // evita doble tap mientras procesa
+    final messenger = ScaffoldMessenger.of(context);
+    final date = _dateForDayIndex(_selectedDayIndex);
+    final parts = key.split(':');
+    final itemIndex = int.parse(parts[0]);
+    final compIndex = int.parse(parts[1]);
+    if (itemIndex >= _items.length) return;
+    final item = _items[itemIndex];
+    final existingId = _registeredLogIds[key];
+
+    setState(() => _togglingKey = key);
+    try {
+      if (existingId != null) {
+        await FoodService.instance.deleteFoodLog(existingId);
+      } else if (compIndex < 0) {
+        final cals = item['calories'] as int? ?? 0;
+        if (cals <= 0) {
+          setState(() => _togglingKey = '');
+          return;
+        }
+        await FoodService.instance.logPlanMeal(item, date: date);
+      } else {
+        final comps =
+            (item['components'] as List).cast<Map<String, dynamic>>();
+        await FoodService.instance.logPlanComponent(
+          comps[compIndex],
+          item['meal_type'] as String? ?? 'snack',
+          date: date,
+        );
+      }
+      await _loadDailyLogs(date);
+      _reconcilePlanChecks();
+      if (mounted && existingId == null) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Registrado en tu día'),
+          backgroundColor: Color(0xFF00BFFF),
+          duration: Duration(milliseconds: 1400),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          content: Text('No se pudo actualizar: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _togglingKey = '');
+    }
   }
 
   Future<void> _addGlass() async {
@@ -350,7 +498,10 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
                       ),
                     );
                   }
-                  if (mounted) _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
+                  if (mounted) {
+                    await _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
+                    _reconcilePlanChecks();
+                  }
                 },
               ),
             ),
@@ -363,11 +514,13 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
               child: _PlanSection(
                 plan: _plan,
                 items: _items,
-                checked: _checked,
+                checkedKeys: _checkedKeys,
                 mealOrder: _mealOrder,
                 mealLabel: _mealLabel,
                 hasLogs: _dailyLogs.isNotEmpty,
-                onToggle: _toggleItem,
+                onToggle: _togglePlanUnit,
+                togglingKey: _togglingKey,
+                onSwap: _swapMeal,
               ),
             ),
           ),
@@ -420,8 +573,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             onTap: () {
               if (_selectedDayIndex == i) return;
               setState(() => _selectedDayIndex = i);
-              _generatePlan();
-              _loadDailyLogs(_dateForDayIndex(i));
+              _refreshSelectedDay();
             },
             child: Column(
               children: [
@@ -497,6 +649,9 @@ class _CalorieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = target > 0 ? (consumed / target).clamp(0.0, 1.0) : 0.0;
+    final remaining = target - consumed;
+    final over = remaining < 0;
+    const overColor = Color(0xFFE67E22);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -514,7 +669,7 @@ class _CalorieCard extends StatelessWidget {
               children: [
                 CustomPaint(
                   size: const Size(180, 130),
-                  painter: _CalorieArcPainter(progress: progress),
+                  painter: _CalorieArcPainter(progress: progress, over: over),
                 ),
                 Column(
                   mainAxisSize: MainAxisSize.min,
@@ -531,6 +686,17 @@ class _CalorieCard extends StatelessWidget {
                     Text(
                       'de $target kcal',
                       style: const TextStyle(fontSize: 13, color: Colors.black45),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      over
+                          ? '+${-remaining} kcal sobre la meta'
+                          : 'te faltan $remaining kcal',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: over ? overColor : const Color(0xFF00BFFF),
+                      ),
                     ),
                   ],
                 ),
@@ -570,7 +736,8 @@ class _CalorieCard extends StatelessWidget {
 
 class _CalorieArcPainter extends CustomPainter {
   final double progress;
-  const _CalorieArcPainter({required this.progress});
+  final bool over;
+  const _CalorieArcPainter({required this.progress, this.over = false});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -586,7 +753,7 @@ class _CalorieArcPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final fillPaint = Paint()
-      ..color = const Color(0xFF00BFFF)
+      ..color = over ? const Color(0xFFE67E22) : const Color(0xFF00BFFF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeW
       ..strokeCap = StrokeCap.round;
@@ -614,7 +781,8 @@ class _CalorieArcPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CalorieArcPainter old) => old.progress != progress;
+  bool shouldRepaint(_CalorieArcPainter old) =>
+      old.progress != progress || old.over != over;
 }
 
 class _MacroBar extends StatelessWidget {
@@ -633,16 +801,30 @@ class _MacroBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = target > 0 ? (consumed / target).clamp(0.0, 1.0) : 0.0;
+    final remaining = target - consumed;
+    final over = remaining < 0;
+    final met = remaining <= 0;
+    // Verde al cumplir; naranja si se pasa bastante (>10%).
+    const overColor = Color(0xFFE67E22);
+    final barColor = (over && consumed > target * 1.10) ? overColor : color;
+    final String statusText;
+    if (over) {
+      statusText = '+${(-remaining)}g';
+    } else if (met) {
+      statusText = '✓ meta';
+    } else {
+      statusText = 'faltan ${remaining}g';
+    }
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${consumed}g',
+            '$consumed / ${target}g',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: barColor,
             ),
           ),
           const SizedBox(height: 4),
@@ -652,7 +834,7 @@ class _MacroBar extends StatelessWidget {
               value: progress,
               minHeight: 4,
               backgroundColor: color.withValues(alpha: 0.15),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),
           const SizedBox(height: 4),
@@ -661,8 +843,14 @@ class _MacroBar extends StatelessWidget {
             style: const TextStyle(fontSize: 11, color: Colors.black45),
           ),
           Text(
-            'de ${target}g',
-            style: const TextStyle(fontSize: 10, color: Colors.black38),
+            statusText,
+            style: TextStyle(
+              fontSize: 10,
+              color: over
+                  ? overColor
+                  : (met ? const Color(0xFF4CAF50) : Colors.black38),
+              fontWeight: met ? FontWeight.w600 : FontWeight.normal,
+            ),
           ),
         ],
       ),
@@ -969,20 +1157,24 @@ class _MiniChip extends StatelessWidget {
 class _PlanSection extends StatelessWidget {
   final Map<String, dynamic>? plan;
   final List<Map<String, dynamic>> items;
-  final Set<int> checked;
+  final Set<String> checkedKeys;
   final List<String> mealOrder;
   final Map<String, String> mealLabel;
   final bool hasLogs;
-  final void Function(int) onToggle;
+  final void Function(String) onToggle;
+  final String togglingKey;
+  final void Function(int) onSwap;
 
   const _PlanSection({
     required this.plan,
     required this.items,
-    required this.checked,
+    required this.checkedKeys,
     required this.mealOrder,
     required this.mealLabel,
     required this.hasLogs,
     required this.onToggle,
+    required this.togglingKey,
+    required this.onSwap,
   });
 
   @override
@@ -1013,7 +1205,7 @@ class _PlanSection extends StatelessWidget {
             ),
           ),
           subtitle: const Text(
-            'Basado en tu objetivo',
+            'Toca un alimento para registrarlo · "Cambiar" para otra opción',
             style: TextStyle(fontSize: 12, color: Colors.black45),
           ),
           children: [
@@ -1032,8 +1224,10 @@ class _PlanSection extends StatelessWidget {
                       title: mealLabel[type] ?? type,
                       items: group,
                       allItems: items,
-                      checked: checked,
+                      checkedKeys: checkedKeys,
                       onToggle: onToggle,
+                      togglingKey: togglingKey,
+                      onSwap: onSwap,
                     );
                   }),
                 ],
@@ -1313,15 +1507,19 @@ class _MealSection extends StatelessWidget {
   final String title;
   final List<Map<String, dynamic>> items;
   final List<Map<String, dynamic>> allItems;
-  final Set<int> checked;
-  final void Function(int) onToggle;
+  final Set<String> checkedKeys;
+  final void Function(String) onToggle;
+  final String togglingKey;
+  final void Function(int) onSwap;
 
   const _MealSection({
     required this.title,
     required this.items,
     required this.allItems,
-    required this.checked,
+    required this.checkedKeys,
     required this.onToggle,
+    required this.togglingKey,
+    required this.onSwap,
   });
 
   @override
@@ -1338,75 +1536,194 @@ class _MealSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        ...items.map((item) {
-          final globalIndex = allItems.indexOf(item);
-          final isChecked = checked.contains(globalIndex);
-          final cals = item['calories'] as int? ?? 0;
-          final ingredients =
-              (item['ingredients'] as List?)?.cast<String>() ?? [];
-          return GestureDetector(
-            onTap: () => onToggle(globalIndex),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isChecked ? Colors.green[50] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: isChecked
-                    ? Border.all(color: Colors.green.shade300)
-                    : null,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
+        ...items.expand((item) => _itemWidgets(item)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  List<Widget> _itemWidgets(Map<String, dynamic> item) {
+    final itemIndex = allItems.indexOf(item);
+    final isSupplement = item['is_supplement'] == true;
+    final components =
+        (item['components'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
+    // Receta sola (sin componentes) → una fila checkeable.
+    if (components.isEmpty) {
+      final ingredients =
+          (item['ingredients'] as List?)?.cast<String>() ?? const [];
+      return [
+        _unitTile(
+          unitKey: '$itemIndex:-1',
+          name: item['name'] as String? ?? 'Comida',
+          detail: ingredients.isNotEmpty ? ingredients.join(' · ') : null,
+          kcal: item['calories'] as int? ?? 0,
+          bold: true,
+          onSwap: isSupplement ? null : () => onSwap(itemIndex),
+        ),
+      ];
+    }
+
+    // Combo / suplemento → encabezado + una fila por alimento.
+    return [
+      _blockHeader(
+        item['name'] as String? ?? '',
+        isSupplement: isSupplement,
+        onSwap: isSupplement ? null : () => onSwap(itemIndex),
+      ),
+      ...components.asMap().entries.map((e) {
+        final comp = e.value;
+        final units = comp['units'] as int? ?? 1;
+        final g = comp['grams'];
+        final parts = <String>[];
+        if (units > 1) parts.add('×$units');
+        if (g != null) parts.add('${(g as num).toStringAsFixed(0)}g');
+        return _unitTile(
+          unitKey: '$itemIndex:${e.key}',
+          name: comp['name'] as String? ?? '',
+          detail: parts.join(' · '),
+          kcal: (comp['calories'] as num?)?.round() ?? 0,
+          bold: false,
+        );
+      }),
+      const SizedBox(height: 4),
+    ];
+  }
+
+  Widget _blockHeader(String name,
+      {required bool isSupplement, VoidCallback? onSwap}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: isSupplement
+                ? Row(
+                    children: const [
+                      Icon(PhosphorIconsDuotone.sparkle,
+                          size: 14, color: Color(0xFF00BFFF)),
+                      SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Para completar tus macros',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF00BFFF)),
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    name,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+          ),
+          if (onSwap != null) _swapButton(onSwap),
+        ],
+      ),
+    );
+  }
+
+  Widget _swapButton(VoidCallback onSwap) {
+    return InkWell(
+      onTap: onSwap,
+      borderRadius: BorderRadius.circular(8),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.swap_horiz, size: 16, color: Color(0xFF00BFFF)),
+            SizedBox(width: 3),
+            Text('Cambiar',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF00BFFF),
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _unitTile({
+    required String unitKey,
+    required String name,
+    String? detail,
+    required int kcal,
+    required bool bold,
+    VoidCallback? onSwap,
+  }) {
+    final isChecked = checkedKeys.contains(unitKey);
+    final isToggling = togglingKey == unitKey;
+    return GestureDetector(
+      onTap: () => onToggle(unitKey),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isChecked ? Colors.green[50] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border:
+              isChecked ? Border.all(color: Colors.green.shade300) : null,
+        ),
+        child: Row(
+          children: [
+            isToggling
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
                     isChecked
                         ? PhosphorIconsFill.checkCircle
                         : PhosphorIconsRegular.circle,
                     color: isChecked ? Colors.green : Colors.grey,
+                    size: 22,
                   ),
-                  const SizedBox(width: 10),
-                  FoodIcon(foodName: item['name'] as String, size: 36),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item['name'] as String,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            decoration: isChecked
-                                ? TextDecoration.lineThrough
-                                : null,
-                            color:
-                                isChecked ? Colors.black45 : Colors.black,
-                          ),
-                        ),
-                        if (ingredients.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            ingredients.join(' · '),
-                            style: const TextStyle(
-                                color: Colors.black54, fontSize: 12),
-                          ),
-                        ],
-                      ],
+            const SizedBox(width: 10),
+            FoodIcon(foodName: name, size: 30),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                      fontSize: bold ? 14 : 13,
+                      decoration:
+                          isChecked ? TextDecoration.lineThrough : null,
+                      color: isChecked ? Colors.black45 : Colors.black87,
                     ),
                   ),
-                  Text(
-                    '$cals kcal',
-                    style: const TextStyle(
-                        color: Colors.black54, fontSize: 12),
-                  ),
+                  if (detail != null && detail.isNotEmpty)
+                    Text(
+                      detail,
+                      style: const TextStyle(
+                          color: Colors.black54, fontSize: 11),
+                    ),
                 ],
               ),
             ),
-          );
-        }),
-        const SizedBox(height: 8),
-      ],
+            if (onSwap != null) ...[
+              _swapButton(onSwap),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              '$kcal kcal',
+              style: const TextStyle(color: Colors.black54, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ProfileTab { fotos, rutinas, rango, guardados }
+enum ProfileTab { fotos, rutinas, recetas, rango, guardados }
 
 class ProfileTabsNav extends StatelessWidget {
   final ProfileTab selected;
@@ -19,6 +19,7 @@ class ProfileTabsNav extends StatelessWidget {
     final tabs = <_TabSpec>[
       const _TabSpec(ProfileTab.fotos, Icons.grid_on_rounded),
       const _TabSpec(ProfileTab.rutinas, Icons.fitness_center_rounded),
+      const _TabSpec(ProfileTab.recetas, Icons.restaurant_menu_rounded),
       const _TabSpec(ProfileTab.rango, Icons.workspace_premium_rounded),
       if (showSaved)
         const _TabSpec(ProfileTab.guardados, Icons.bookmark_border_rounded),

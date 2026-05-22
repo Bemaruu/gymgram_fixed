@@ -598,6 +598,8 @@ class SimulatedAIService {
 
     final effectiveTarget = targetWeightKg > 0 ? targetWeightKg : weightKg;
 
+    final pref = _dominantPref(foodPreferences);
+
     final nutrition = NutritionCalculator.calculate(
       gender: gender,
       age: age,
@@ -607,9 +609,9 @@ class SimulatedAIService {
       fitnessGoal: goal,
       trainingDaysPerWeek: trainingDaysPerWeek,
       dailyActivityLevel: dailyActivityLevel,
+      dietPref: pref,
     );
 
-    final pref = _dominantPref(foodPreferences);
     final seed = _userSeed(userId, weekIndex);
 
     var items = _buildMeals(
@@ -676,6 +678,10 @@ class SimulatedAIService {
   /// Acepta tanto los valores nuevos del onboarding (vegan, vegetarian,
   /// low_carb, high_protein, keto, omnivore, no_preference) como los legacy
   /// (vegana, vegetariana, lowcarb, proteica).
+  /// Versión pública para que otros generadores (DbMealPlanGenerator) reutilicen
+  /// la misma normalización de preferencia de dieta.
+  static String dominantDietPref(List<String> prefs) => _dominantPref(prefs);
+
   static String _dominantPref(List<String> prefs) {
     if (prefs.isEmpty) return 'normal';
     final normalized = prefs.map((p) => p.toLowerCase()).toSet();
@@ -1213,6 +1219,39 @@ class SimulatedAIService {
         ],
       };
     }).toList();
+  }
+
+  /// Normaliza las alergias del usuario a las claves conocidas del catálogo
+  /// (descarta prefs dietarias y valores como 'ninguna'/'otro').
+  static List<String> _normalizeAllergies(List<String> allergies) => allergies
+      .map((a) => a.toLowerCase())
+      .where(_allergenKeywords.containsKey)
+      .toList();
+
+  /// True si [text] (nombre + ingredientes) contiene algún alérgeno del usuario.
+  /// Usado por la rama de IA (DB) para EXCLUIR recetas del pool, no solo advertir.
+  static bool textHasAllergen(String text, List<String> allergies) {
+    final active = _normalizeAllergies(allergies);
+    if (active.isEmpty) return false;
+    final lower = text.toLowerCase();
+    for (final allergen in active) {
+      final keywords = _allergenKeywords[allergen] ?? [allergen];
+      if (keywords.any((kw) => lower.contains(kw))) return true;
+    }
+    return false;
+  }
+
+  /// Aplica solo la nota de "alimentos no deseados" (los disgustos no son riesgo
+  /// de salud). Reutilizable desde la rama de IA (DB).
+  static List<Map<String, dynamic>> annotateDislikes(
+    List<Map<String, dynamic>> items,
+    List<String> dislikedFoods,
+  ) {
+    final cleaned = dislikedFoods
+        .where((d) => d.isNotEmpty && !d.startsWith('custom:'))
+        .toList();
+    if (cleaned.isEmpty) return items;
+    return _filterDislikedFoods(items, cleaned);
   }
 
   static List<Map<String, dynamic>> _meals5(String pref, {required bool isLose, required bool isGain, required int seed, int dayIndex = 0, String? cookingTime}) {

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/exercise_service.dart';
 
@@ -271,6 +272,7 @@ class _ExerciseItemState extends State<_ExerciseItem> {
   @override
   Widget build(BuildContext context) {
     final ex = widget.exercise;
+    final mediaUrl = ex['media_url'] as String?;
     final tags = <String>[];
     if (ex['location'] == 'gym') tags.add('Gym');
     if (ex['location'] == 'home') tags.add('Casa');
@@ -280,6 +282,33 @@ class _ExerciseItemState extends State<_ExerciseItem> {
     }
     final equipment = (ex['equipment'] as List?)?.cast<String>() ?? [];
     if (equipment.isNotEmpty) tags.add(equipment.first);
+
+    Widget iconFallback() => Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFF00BFFF).withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.fitness_center, color: Color(0xFF00BFFF)),
+        );
+
+    Widget buildThumb() {
+      if (mediaUrl != null && mediaUrl.isNotEmpty) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CachedNetworkImage(
+            imageUrl: mediaUrl,
+            width: 48,
+            height: 48,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => iconFallback(),
+            errorWidget: (_, __, ___) => iconFallback(),
+          ),
+        );
+      }
+      return iconFallback();
+    }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -297,18 +326,7 @@ class _ExerciseItemState extends State<_ExerciseItem> {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00BFFF).withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.fitness_center,
-                      color: Color(0xFF00BFFF),
-                    ),
-                  ),
+                  buildThumb(),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -382,6 +400,29 @@ class _ExerciseItemState extends State<_ExerciseItem> {
               padding: const EdgeInsets.all(14),
               child: Column(
                 children: [
+                  if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: CachedNetworkImage(
+                        imageUrl: mediaUrl,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          height: 160,
+                          color: const Color(0xFF00BFFF).withValues(alpha: 0.07),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF00BFFF),
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   Row(
                     children: [
                       Expanded(

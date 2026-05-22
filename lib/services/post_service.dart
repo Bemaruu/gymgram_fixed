@@ -14,14 +14,17 @@ class PostService {
   final _client = Supabase.instance.client;
   String? get _uid => _client.auth.currentUser?.id;
 
-  // Carga los posts del feed desde Supabase (limit 30 por defecto para egress).
-  Future<List<Map<String, dynamic>>> getFeedPosts({int limit = 30}) async {
-    final result = await _client
-        .from('posts')
-        .select('id, user_id, media_url, media_type, caption, likes_count, comments_count, created_at, profiles(username, avatar_url)')
-        .order('created_at', ascending: false)
-        .limit(limit);
-    return List<Map<String, dynamic>>.from(result);
+  // Feed rankeado por el algoritmo de GymGram (RPC en Supabase).
+  // Score = (likes×1 + comments×3 + saves×5 + 1) × time_decay × social_boost
+  Future<List<Map<String, dynamic>>> getFeedPosts({int limit = 30, int offset = 0}) async {
+    final uid = _uid;
+    if (uid == null) return [];
+    final result = await _client.rpc('get_ranked_feed', params: {
+      'p_user_id': uid,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    return List<Map<String, dynamic>>.from(result as List);
   }
 
   // Fetch en batch de likes y guardados para una lista de posts.
@@ -222,5 +225,19 @@ class PostService {
         .map((row) => row['posts'] as Map<String, dynamic>?)
         .whereType<Map<String, dynamic>>()
         .toList();
+  }
+
+  // Registra cuánto tiempo el usuario vio un post (señal de interés real).
+  // Ignorado si < 1 segundo o si falla — no bloquea ningún flujo.
+  Future<void> logPostView(String postId, int viewMs) async {
+    final uid = _uid;
+    if (uid == null || postId.isEmpty || viewMs < 1000) return;
+    try {
+      await _client.from('post_views').insert({
+        'post_id': postId,
+        'user_id': uid,
+        'view_ms': viewMs,
+      });
+    } catch (_) {}
   }
 }

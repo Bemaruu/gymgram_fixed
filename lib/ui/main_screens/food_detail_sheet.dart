@@ -44,8 +44,21 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
   void initState() {
     super.initState();
     _mealType = widget.initialMealType;
-    _gramsCtrl = TextEditingController(text: '100');
+    // Si el alimento tiene una porción de referencia (custom_foods), parte de ahí.
+    final serving = widget.food.servingGrams;
+    _grams = (serving != null && serving > 0) ? serving : 100.0;
+    _gramsCtrl = TextEditingController(text: _grams.toStringAsFixed(0));
     _sheetController = DraggableScrollableController();
+  }
+
+  List<(String, double)> _quickOptions() {
+    final opts = <(String, double)>[];
+    final serving = widget.food.servingGrams;
+    if (serving != null && serving > 0) opts.add(('1 porción', serving));
+    for (final g in _quickGrams) {
+      opts.add(('${g.toStringAsFixed(0)}g', g));
+    }
+    return opts;
   }
 
   @override
@@ -198,7 +211,8 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: _quickGrams.map((g) {
+                        children: _quickOptions().map((opt) {
+                          final (label, g) = opt;
                           final selected = _grams == g;
                           return GestureDetector(
                             onTap: () => _selectQuick(g),
@@ -213,7 +227,7 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '${g.toStringAsFixed(0)}g',
+                                label,
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -228,6 +242,14 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                   ),
                 ],
               ),
+              if (widget.food.servingDescription != null &&
+                  widget.food.servingDescription!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Porción de referencia: ${widget.food.servingDescription}',
+                  style: const TextStyle(fontSize: 12, color: Colors.black45),
+                ),
+              ],
               const SizedBox(height: 20),
 
               // Preview de macros en tiempo real

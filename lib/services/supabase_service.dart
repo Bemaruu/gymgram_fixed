@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'badge_service.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -49,7 +48,11 @@ class SupabaseService {
   Future<Map<String, dynamic>?> getRawMyProfile() async {
     final uid = currentUserId;
     if (uid == null) return null;
-    return await client.from('profiles').select().eq('id', uid).maybeSingle();
+    return await client
+        .from('profiles')
+        .select('id, username, full_name, bio, avatar_url, weight, height, target_weight, fitness_goal, training_location, gender, age')
+        .eq('id', uid)
+        .maybeSingle();
   }
 
   // Posts del feed con username del autor (join directo vía FK profiles)
@@ -147,6 +150,19 @@ class SupabaseService {
       final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       if (exercises.isEmpty) continue;
 
+      // Archiva la rutina personal activa del dia (si existe) para respetar
+      // "un dia = una rutina activa" (indice unico) y poder restaurarla luego.
+      final dow = day['day_of_week'];
+      if (dow != null) {
+        await client
+            .from('routines')
+            .update({'is_archived': true, 'is_public': false})
+            .eq('user_id', userId)
+            .eq('kind', 'personal')
+            .eq('day_of_week', dow)
+            .eq('is_archived', false);
+      }
+
       final routine = await client.from('routines').insert({
         'user_id': userId,
         'title': day['title'] ?? 'Día',
@@ -183,7 +199,7 @@ class SupabaseService {
     final uid = currentUserId;
     if (query.trim().isEmpty) return [];
     var q = client
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, full_name, avatar_url, bio, fitness_goal')
         .ilike('username', '%${query.trim()}%');
     if (uid != null) q = q.neq('id', uid);
@@ -193,7 +209,7 @@ class SupabaseService {
 
   Future<Map<String, dynamic>?> getProfileById(String userId) async {
     return await client
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, full_name, avatar_url, bio, fitness_goal, training_location')
         .eq('id', userId)
         .maybeSingle();
@@ -229,7 +245,8 @@ class SupabaseService {
       'follower_id': uid,
       'following_id': targetUserId,
     });
-    await BadgeService.instance.checkAndAwardBadges(targetUserId, 'follower_gained');
+    // La medalla "Referente" la recalcula el propio dueno via syncSelfBadges al abrir
+    // su perfil (award_badge solo permite auto-otorgar, no otorgar a terceros).
     try {
       await client.rpc('notify_follow', params: {'p_following_id': targetUserId});
     } catch (_) {}
@@ -248,15 +265,17 @@ class SupabaseService {
   Future<Map<String, int>> getFollowCounts(String userId) async {
     final followersRes = await client
         .from('follows')
-        .select('id')
-        .eq('following_id', userId);
+        .select()
+        .eq('following_id', userId)
+        .count(CountOption.exact);
     final followingRes = await client
         .from('follows')
-        .select('id')
-        .eq('follower_id', userId);
+        .select()
+        .eq('follower_id', userId)
+        .count(CountOption.exact);
     return {
-      'followers': (followersRes as List).length,
-      'following': (followingRes as List).length,
+      'followers': followersRes.count,
+      'following': followingRes.count,
     };
   }
 

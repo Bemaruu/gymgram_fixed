@@ -76,6 +76,9 @@ class NutritionCalculator {
     required String fitnessGoal,
     int trainingDaysPerWeek = 3,
     String dailyActivityLevel = DailyActivityLevel.moderate,
+    // Preferencia de dieta normalizada: 'vegana'|'vegetariana'|'lowcarb'|
+    // 'proteica'|'normal'. Ajusta el reparto de macros (keto/low-carb, etc.).
+    String dietPref = 'normal',
   }) {
     final isFemale = gender.toUpperCase() == 'FEMALE';
     final isSenior = age >= 60;
@@ -119,6 +122,8 @@ class NutritionCalculator {
       calories: recommended,
       fitnessGoal: fitnessGoal.toUpperCase(),
       goalInterpretation: goal.interpretation,
+      weightKg: weightKg,
+      dietPref: dietPref,
     );
 
     // 7. Texto explicativo (lenguaje simple, no técnico)
@@ -281,6 +286,8 @@ class NutritionCalculator {
     required int calories,
     required String fitnessGoal,
     required String goalInterpretation,
+    required double weightKg,
+    required String dietPref,
   }) {
     final isGain = fitnessGoal == 'GAIN_MUSCLE' &&
         !goalInterpretation.toLowerCase().contains('recomposición');
@@ -288,16 +295,44 @@ class NutritionCalculator {
         goalInterpretation.toLowerCase().contains('pérdida') ||
         goalInterpretation.toLowerCase().contains('recomposición');
 
-    // Distribución: proteína preserva músculo en déficit; carbs empujan rendimiento en ganancia
-    final double protPct = isGain ? 0.30 : (isLoss ? 0.35 : 0.28);
-    final double carbPct = isGain ? 0.45 : (isLoss ? 0.35 : 0.45);
-    final double fatPct  = isGain ? 0.25 : (isLoss ? 0.30 : 0.27);
+    // Reparto base por objetivo: proteína preserva músculo en déficit; carbs
+    // empujan rendimiento en ganancia.
+    double protPct = isGain ? 0.30 : (isLoss ? 0.35 : 0.28);
+    double carbPct = isGain ? 0.45 : (isLoss ? 0.35 : 0.45);
+    double fatPct  = isGain ? 0.25 : (isLoss ? 0.30 : 0.27);
 
-    return (
-      (calories * protPct / 4).round(), // proteína: 4 kcal/g
-      (calories * carbPct / 4).round(), // carbos:   4 kcal/g
-      (calories * fatPct  / 9).round(), // grasas:   9 kcal/g
-    );
+    // Ajuste por preferencia de dieta (sobrescribe el reparto de carbos/grasas).
+    switch (dietPref) {
+      case 'lowcarb': // incluye keto en nuestra normalización
+        protPct = 0.32;
+        carbPct = 0.13;
+        fatPct = 0.55;
+        break;
+      case 'proteica': // alta en proteína
+        protPct = isGain ? 0.35 : 0.40;
+        carbPct = isGain ? 0.40 : 0.35;
+        fatPct = 0.25;
+        break;
+      // vegana/vegetariana/normal mantienen el reparto por objetivo.
+    }
+
+    // Piso de proteína por peso corporal (g/kg): evita planes bajos en proteína
+    // aunque el % calórico sea chico. Más alto si está en déficit o ganancia.
+    final double gPerKg = (isLoss || isGain) ? 1.8 : 1.6;
+    final int proteinFloor = (weightKg * gPerKg).round();
+
+    int proteinG = (calories * protPct / 4).round();
+    if (proteinG < proteinFloor) proteinG = proteinFloor;
+
+    // Reparte las calorías restantes entre carbos y grasas según su ratio,
+    // así el total se mantiene ≈ calorías objetivo tras aplicar el piso.
+    final double remainingKcal =
+        (calories - proteinG * 4).clamp(0, calories).toDouble();
+    final double cfSum = carbPct + fatPct;
+    final int carbsG = (remainingKcal * (carbPct / cfSum) / 4).round();
+    final int fatsG = (remainingKcal * (fatPct / cfSum) / 9).round();
+
+    return (proteinG, carbsG, fatsG);
   }
 
   // ── Texto explicativo para el usuario ──────────────────────────────────────

@@ -77,3 +77,6 @@ firebase.exe
 # Firebase keys duplicates (keep only the ones in correct paths)
 GoogleService-Info (*).plist
 google-services (*).json
+
+# Supabase CLI local state
+supabase/.temp/

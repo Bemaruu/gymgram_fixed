@@ -274,6 +274,7 @@ class PostWidget extends StatefulWidget {
 
 class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   VideoPlayerController? _videoController;
+  DateTime? _viewStartTime;
 
   bool _isLiked = false;
   bool _isSaved = false;
@@ -302,6 +303,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _viewStartTime = DateTime.now();
     _isLiked       = widget.initialIsLiked;
     _isSaved       = widget.initialIsSaved;
     _likesCount    = (widget.post['likes_count']    as int?) ?? 0;
@@ -363,6 +365,10 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    if (_viewStartTime != null && _postId.isNotEmpty) {
+      final ms = DateTime.now().difference(_viewStartTime!).inMilliseconds;
+      PostService.instance.logPostView(_postId, ms);
+    }
     _videoController?.dispose();
     _heartBounceCtrl.dispose();
     _floatingHeartCtrl.dispose();
@@ -751,10 +757,11 @@ class _NotifTile extends StatelessWidget {
     final createdAt = DateTime.tryParse((notif['created_at'] as String?) ?? '');
 
     final (IconData icon, Color iconColor, String actionText) = switch (type) {
-      'like'    => (PhosphorIconsFill.heart, Colors.red, 'le dio like a tu publicación.'),
-      'follow'  => (PhosphorIconsFill.userPlus, const Color(0xFF00BFFF), 'empezó a seguirte.'),
-      'comment' => (PhosphorIconsFill.chatCircle, Colors.amber, 'comentó en tu publicación.'),
-      _         => (PhosphorIconsFill.bell, Colors.white54, 'interactuó contigo.'),
+      'like'          => (PhosphorIconsFill.heart, Colors.red, 'le dio like a tu publicación.'),
+      'follow'        => (PhosphorIconsFill.userPlus, const Color(0xFF00BFFF), 'empezó a seguirte.'),
+      'comment'       => (PhosphorIconsFill.chatCircle, Colors.amber, 'comentó en tu publicación.'),
+      'coach_message' => (PhosphorIconsFill.barbell, const Color(0xFF00BFFF), 'Tu entrenador respondió tu entrenamiento.'),
+      _               => (PhosphorIconsFill.bell, Colors.white54, 'interactuó contigo.'),
     };
 
     return Container(
@@ -771,27 +778,28 @@ class _NotifTile extends StatelessWidget {
         title: RichText(
           text: TextSpan(
             children: [
-              WidgetSpan(
-                alignment: PlaceholderAlignment.middle,
-                child: GestureDetector(
-                  onTap: actorId.isNotEmpty
-                      ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => UserProfileScreen(userId: actorId, username: username),
-                            ),
-                          )
-                      : null,
-                  child: Text(
-                    '@$username ',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+              if (type != 'coach_message')
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: GestureDetector(
+                    onTap: actorId.isNotEmpty
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => UserProfileScreen(userId: actorId, username: username),
+                              ),
+                            )
+                        : null,
+                    child: Text(
+                      '@$username ',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
-              ),
               TextSpan(
                 text: actionText,
                 style: const TextStyle(color: Colors.white70, fontSize: 14),

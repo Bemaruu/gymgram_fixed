@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/recipe_service.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
 import '../messaging/chat_conversation_screen.dart';
@@ -13,6 +14,7 @@ import '../../widgets/post_grid.dart';
 import '../../widgets/premium_rank_preview.dart';
 import '../../widgets/profile_tabs_nav.dart';
 import '../../widgets/routine_card.dart';
+import '../recipes/widgets/recipes_grid.dart';
 import '../social/follow_list_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -43,6 +45,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   List<Map<String, dynamic>> _personalRoutines = [];
   List<Map<String, dynamic>> _communityRoutines = [];
   bool _routinesLoaded = false;
+  List<Map<String, dynamic>> _publicRecipes = [];
+  bool _recipesLoaded = false;
 
   @override
   void initState() {
@@ -95,9 +99,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
+  Future<void> _loadUserRecipes() async {
+    if (_recipesLoaded) return;
+    try {
+      final list =
+          await RecipeService.instance.getPublicRecipesOf(widget.userId);
+      if (!mounted) return;
+      setState(() {
+        _publicRecipes = list;
+        _recipesLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('loadUserRecipes error: $e');
+      if (mounted) setState(() => _recipesLoaded = true);
+    }
+  }
+
   void _onTabChanged(ProfileTab tab) {
     setState(() => _selectedTab = tab);
     if (tab == ProfileTab.rutinas) _loadUserRoutines();
+    if (tab == ProfileTab.recetas) _loadUserRecipes();
   }
 
   Widget _buildTabContent() {
@@ -192,6 +213,28 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ],
             ],
           ),
+        );
+      case ProfileTab.recetas:
+        if (!_recipesLoaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_publicRecipes.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+            child: Center(
+              child: Text(
+                'Este usuario aun no comparte recetas',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: RecipesGrid(recipes: _publicRecipes),
         );
       case ProfileTab.rango:
         return const PremiumRankPreview();

@@ -10,6 +10,8 @@ import '../../services/change_quota_service.dart';
 import '../../services/profile_photo_local.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
+import '../plans/manage_subscription_screen.dart';
+import '../plans/plans_screen.dart';
 import 'settings/legal_document_screen.dart';
 import 'settings/sections/danger_zone.dart';
 import 'settings/sections/hero_profile_header.dart';
@@ -17,6 +19,8 @@ import 'settings/sections/premium_promo_card.dart';
 import 'settings/sections/settings_pill.dart';
 import 'settings/sections/settings_section.dart';
 import 'settings/sections/settings_tile.dart';
+import '../ai_trainer/monthly_report_screen.dart';
+import '../ai_trainer/weekly_checkin_sheet.dart';
 import 'settings/sheets/change_goal_sheet.dart';
 import 'settings/sheets/change_location_sheet.dart';
 import 'settings/sheets/delete_account_sheet.dart';
@@ -52,8 +56,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   String? _trainingLocation;
   SubscriptionTier _tier = SubscriptionTier.free;
 
-  int _goalUsed = 0;
-  int _locUsed = 0;
+  int _changesUsed = 0;
+  int _changesLimit = ChangeQuotaService.yearlyLimit;
 
   bool _loading = true;
   bool _uploadingAvatar = false;
@@ -89,8 +93,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     try {
       final profile = await SupabaseService.instance.getRawMyProfile();
       final tier = await SubscriptionService.instance.currentTier();
-      final goalUsed = await ChangeQuotaService.instance.usedThisYear('fitness_goal');
-      final locUsed = await ChangeQuotaService.instance.usedThisYear('training_location');
+      final quota = await ChangeQuotaService.instance.quotaFor();
 
       if (!mounted) return;
       setState(() {
@@ -103,8 +106,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         _fitnessGoal = profile?['fitness_goal'] as String?;
         _trainingLocation = profile?['training_location'] as String?;
         _tier = tier;
-        _goalUsed = goalUsed;
-        _locUsed = locUsed;
+        _changesUsed = quota.used;
+        _changesLimit = quota.limit;
         if (_usernameController.text.isEmpty) _usernameController.text = _origUsername;
         if (_bioController.text.isEmpty) _bioController.text = _origBio;
         _loading = false;
@@ -258,7 +261,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _fitnessGoal = selected;
-        _goalUsed += 1;
+        _changesUsed += 1;
       });
       _snack('Objetivo actualizado', icon: PhosphorIconsFill.checkCircle);
     }
@@ -270,7 +273,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _trainingLocation = selected;
-        _locUsed += 1;
+        _changesUsed += 1;
       });
       _snack('Lugar actualizado', icon: PhosphorIconsFill.checkCircle);
     }
@@ -310,7 +313,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       await SupabaseService.instance.client.auth.signOut();
     }
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
   }
 
   Future<void> _confirmDelete() async {
@@ -318,21 +321,18 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   }
 
   void _openPremiumPaywall() {
-    _snack('Proximamente disponible');
-    // TODO(paywall): navegar a /premium
+    PlansScreen.open(context);
   }
 
   SettingsPillState _pillStateFor(int used) {
-    if (_tier != SubscriptionTier.free) return SettingsPillState.unlimited;
-    final remaining = ChangeQuotaService.yearlyLimit - used;
+    final remaining = _changesLimit - used;
     if (remaining <= 0) return SettingsPillState.locked;
     if (remaining <= 1) return SettingsPillState.warning;
     return SettingsPillState.hidden;
   }
 
   String _pillLabelFor(int used) {
-    if (_tier != SubscriptionTier.free) return 'Ilimitado';
-    final remaining = ChangeQuotaService.yearlyLimit - used;
+    final remaining = _changesLimit - used;
     if (remaining <= 0) return 'Bloqueado';
     return 'Quedan $remaining';
   }
@@ -390,8 +390,10 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
             _publicProfileSection(),
             _physicalSection(),
             _trainingSection(),
+            if (_tier != SubscriptionTier.free) _aiSection(),
             if (_tier == SubscriptionTier.free)
               PremiumPromoCard(onTap: _openPremiumPaywall),
+            _subscriptionSection(),
             _legalSection(),
             _accountSection(),
             DangerZone(onDeleteAccount: _confirmDelete),
@@ -501,17 +503,57 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           leadingIcon: PhosphorIconsDuotone.target,
           title: 'Objetivo',
           subtitle: labelForGoal(_fitnessGoal),
-          pillState: _pillStateFor(_goalUsed),
-          pillLabel: _pillLabelFor(_goalUsed),
+          pillState: _pillStateFor(_changesUsed),
+          pillLabel: _pillLabelFor(_changesUsed),
           onTap: _openGoalSheet,
         ),
         SettingsTile(
           leadingIcon: PhosphorIconsDuotone.mapPin,
           title: 'Lugar de entrenamiento',
           subtitle: labelForLocation(_trainingLocation),
-          pillState: _pillStateFor(_locUsed),
-          pillLabel: _pillLabelFor(_locUsed),
+          pillState: _pillStateFor(_changesUsed),
+          pillLabel: _pillLabelFor(_changesUsed),
           onTap: _openLocationSheet,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openManageSubscription() async {
+    await ManageSubscriptionScreen.open(context);
+    if (!mounted) return;
+    SubscriptionService.instance.invalidate();
+    final tier = await SubscriptionService.instance.currentTier(
+      forceRefresh: true,
+    );
+    if (!mounted) return;
+    setState(() => _tier = tier);
+  }
+
+  String _tierLabelFor(SubscriptionTier t) {
+    switch (t) {
+      case SubscriptionTier.plus:
+        return 'Plus';
+      case SubscriptionTier.premium:
+        return 'Premium';
+      case SubscriptionTier.free:
+        return 'Free';
+    }
+  }
+
+  Widget _subscriptionSection() {
+    final isPaid = _tier != SubscriptionTier.free;
+    return SettingsSection(
+      title: 'Suscripcion',
+      children: [
+        SettingsTile(
+          leadingIcon: PhosphorIconsDuotone.crown,
+          leadingColor: isPaid
+              ? AppColors.accentOrange
+              : Colors.white70,
+          title: isPaid ? 'Gestionar suscripcion' : 'Ver planes',
+          subtitle: 'Plan actual: ${_tierLabelFor(_tier)}',
+          onTap: isPaid ? _openManageSubscription : _openPremiumPaywall,
         ),
       ],
     );
@@ -550,6 +592,34 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           title: 'Cerrar sesion',
           showChevron: true,
           onTap: _confirmLogout,
+        ),
+      ],
+    );
+  }
+
+  Widget _aiSection() {
+    return SettingsSection(
+      title: 'Entrenador IA',
+      children: [
+        SettingsTile(
+          leadingIcon: PhosphorIconsDuotone.calendarCheck,
+          title: 'Check-in semanal',
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: AppColors.darkSurfaceCard,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              builder: (_) => const WeeklyCheckinSheet(),
+            );
+          },
+        ),
+        SettingsTile(
+          leadingIcon: PhosphorIconsDuotone.chartBar,
+          title: 'Reporte mensual IA',
+          onTap: () => MonthlyReportScreen.open(context),
         ),
       ],
     );

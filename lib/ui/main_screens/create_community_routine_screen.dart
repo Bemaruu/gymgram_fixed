@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/routine_service.dart';
+import '../plans/plans_screen.dart';
 import 'exercise_search_sheet.dart';
 
 class CreateCommunityRoutineScreen extends StatefulWidget {
@@ -70,6 +71,34 @@ class _CreateCommunityRoutineScreenState
           backgroundColor: Colors.orange,
         ),
       );
+      return;
+    }
+    final canPublish =
+        await RoutineService.instance.canPublishCommunityRoutine();
+    if (!canPublish) {
+      if (!mounted) return;
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Limite Free alcanzado'),
+          content: const Text(
+            'Los planes Free pueden publicar hasta 5 rutinas para la comunidad. Hazte Plus o Premium para publicaciones ilimitadas.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Ver planes'),
+            ),
+          ],
+        ),
+      );
+      if (go == true && mounted) {
+        await PlansScreen.open(context);
+      }
       return;
     }
     setState(() => _isSaving = true);

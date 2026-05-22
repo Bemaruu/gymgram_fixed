@@ -54,6 +54,7 @@ class _SignupStep3State extends State<SignupStep3> {
 
     if (picked != null) {
       if (picked.isBefore(minDate) || picked.isAfter(maxDate)) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Debes tener entre 16 y 90 años para registrarte'),

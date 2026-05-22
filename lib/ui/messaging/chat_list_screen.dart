@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/chat.dart';
+import '../../services/ai_trainer_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/subscription_service.dart';
+import '../ai_trainer/ai_trainer_chat_list_item.dart';
+import '../ai_trainer/ai_trainer_chat_screen.dart';
 import '../search/search_screen.dart';
 import 'chat_conversation_screen.dart';
 import 'widgets/chat_empty_state.dart';
@@ -16,6 +20,8 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   bool _loading = true;
   List<Chat> _chats = [];
+  AITrainerConfig? _trainerConfig;
+  bool _isPremium = false;
 
   @override
   void initState() {
@@ -25,15 +31,33 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Future<void> _load() async {
     try {
-      final chats = await ChatService.instance.listChats();
+      final results = await Future.wait<dynamic>([
+        ChatService.instance.listChats(),
+        SubscriptionService.instance.currentTier(),
+      ]);
+      final chats = results[0] as List<Chat>;
+      final tier = results[1] as SubscriptionTier;
+      final isPremium = tier == SubscriptionTier.premium;
+      AITrainerConfig? config;
+      if (isPremium) {
+        config = await AITrainerService.instance.getConfig();
+        config ??= AITrainerConfig.defaults();
+      }
       if (!mounted) return;
       setState(() {
         _chats = chats;
+        _trainerConfig = config;
+        _isPremium = isPremium;
         _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _openTrainer() async {
+    await AITrainerChatScreen.open(context);
+    _load();
   }
 
   Future<void> _openChat(Chat chat) async {
@@ -70,7 +94,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               onRefresh: _load,
               color: const Color(0xFF00BFFF),
               backgroundColor: const Color(0xFF1A1A1A),
-              child: _chats.isEmpty
+              child: (_chats.isEmpty && !_isPremium)
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
@@ -119,16 +143,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     )
                   : ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: _chats.length,
+                      itemCount: _chats.length + (_isPremium ? 1 : 0),
                       separatorBuilder: (_, __) => const Divider(
                         color: Color(0xFF1A1A1A),
                         height: 1,
                         indent: 76,
                       ),
-                      itemBuilder: (_, i) => ChatListItem(
-                        chat: _chats[i],
-                        onTap: () => _openChat(_chats[i]),
-                      ),
+                      itemBuilder: (_, i) {
+                        if (_isPremium && i == 0) {
+                          return AITrainerChatListItem(
+                            config: _trainerConfig ?? AITrainerConfig.defaults(),
+                            onTap: _openTrainer,
+                          );
+                        }
+                        final idx = _isPremium ? i - 1 : i;
+                        return ChatListItem(
+                          chat: _chats[idx],
+                          onTap: () => _openChat(_chats[idx]),
+                        );
+                      },
                     ),
             ),
     );

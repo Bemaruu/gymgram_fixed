@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/badge_model.dart';
 import '../../services/badge_service.dart';
+import '../../services/medal_proof_service.dart';
 import '../../widgets/medal_widget.dart';
 
 /// Bottom sheet con el detalle completo de una medalla.
@@ -46,7 +49,9 @@ class _MedalDetailSheet extends StatefulWidget {
 
 class _MedalDetailSheetState extends State<_MedalDetailSheet> {
   bool _featuredLoading = false;
+  bool _proofLoading = false;
   late bool _isFeatured;
+  bool _earnedViaProof = false;
 
   @override
   void initState() {
@@ -54,7 +59,9 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
     _isFeatured = widget.userBadge?.isFeatured ?? false;
   }
 
-  bool get _isEarned => widget.userBadge != null && widget.userBadge!.progress >= 1.0;
+  bool get _isEarned =>
+      _earnedViaProof ||
+      (widget.userBadge != null && widget.userBadge!.progress >= 1.0);
 
   String _formatDate(DateTime dt) {
     const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -96,6 +103,81 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
     } finally {
       if (mounted) setState(() => _featuredLoading = false);
     }
+  }
+
+  Future<void> _submitProof() async {
+    if (_proofLoading) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined, color: Colors.white70),
+              title: const Text('Tomar foto', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: Colors.white70),
+              title: const Text('Elegir de galería', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final XFile? picked =
+        await ImagePicker().pickImage(source: source, imageQuality: 85);
+    if (picked == null) return;
+
+    setState(() => _proofLoading = true);
+    try {
+      final result = await MedalProofService.instance
+          .submitProof(widget.badge.id, File(picked.path));
+      if (!mounted) return;
+
+      if (result.approved) {
+        setState(() => _earnedViaProof = true);
+        widget.onFeaturedChanged?.call();
+        _showResult(true, result.reason.isEmpty
+            ? '¡Medalla desbloqueada!'
+            : result.reason);
+      } else {
+        _showResult(false, result.reason.isEmpty
+            ? 'La foto no cumple el reto. Intenta otra.'
+            : result.reason);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showResult(false, e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _proofLoading = false);
+    }
+  }
+
+  void _showResult(bool ok, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: ok ? const Color(0xFF1B5E20) : const Color(0xFF3A1A1A),
+        content: Row(
+          children: [
+            Icon(ok ? Icons.verified : Icons.error_outline,
+                color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -251,6 +333,25 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
+              ),
+            ],
+
+            // Botón subir foto para validar (medallas con verificación por IA)
+            if (widget.isOwner &&
+                !_isEarned &&
+                widget.badge.requiresPhotoProof) ...[
+              const SizedBox(height: 28),
+              _ProofButton(
+                isLoading: _proofLoading,
+                rankColor: rankColor,
+                onPressed: _submitProof,
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'La IA revisa tu foto al instante.',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ),
             ],
@@ -422,6 +523,54 @@ class _ProgressBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProofButton extends StatelessWidget {
+  final bool isLoading;
+  final Color rankColor;
+  final VoidCallback onPressed;
+
+  const _ProofButton({
+    required this.isLoading,
+    required this.rankColor,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: isLoading
+          ? Column(
+              children: const [
+                CircularProgressIndicator(color: Colors.white54),
+                SizedBox(height: 10),
+                Text(
+                  'Verificando con IA…',
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ],
+            )
+          : ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+              label: const Text(
+                'Subir foto para validar',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: rankColor.withValues(alpha: 0.25),
+                foregroundColor: rankColor,
+                side: BorderSide(color: rankColor.withValues(alpha: 0.6)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+            ),
     );
   }
 }

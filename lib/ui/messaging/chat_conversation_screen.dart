@@ -109,10 +109,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _handleSend(String text) async {
+    // Optimistic insert: el mensaje del usuario aparece de inmediato.
+    final myUid = _myUid;
+    Message? optimistic;
+    if (myUid != null) {
+      optimistic = Message(
+        id: '__optimistic__${DateTime.now().microsecondsSinceEpoch}',
+        chatId: widget.chatId,
+        senderId: myUid,
+        receiverId: widget.otherUserId,
+        text: text,
+        status: MessageStatus.sent,
+        readAt: null,
+        isDeleted: false,
+        createdAt: DateTime.now(),
+      );
+      setState(() => _messages.insert(0, optimistic!));
+    }
     try {
       await ChatService.instance.sendMessage(widget.chatId, text);
-      // Reload after send so sender sees their message immediately,
-      // regardless of whether realtime is working.
+      // Reload after send: trae la versión real (con id real) y reemplaza el
+      // optimista. Realtime tambien empuja al receptor sin tocar al sender.
       final list = await ChatService.instance.loadMessages(widget.chatId);
       if (!mounted) return;
       setState(() {
@@ -122,6 +139,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         _hasMore = list.length >= ChatService.messagesPageSize;
       });
     } catch (e) {
+      // Rollback del optimista
+      if (optimistic != null && mounted) {
+        setState(() => _messages.removeWhere((m) => m.id == optimistic!.id));
+      }
       if (kDebugMode) debugPrint('sendMessage error: $e');
       if (!mounted) return;
       final msg = e.toString();
@@ -315,7 +336,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                             );
                           }
                           final m = _messages[i];
-                          return MessageBubble(message: m, isMine: m.senderId == _myUid);
+                          return TweenAnimationBuilder<double>(
+                            key: ValueKey('msg-${m.id}'),
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                            builder: (context, t, child) => Opacity(
+                              opacity: t,
+                              child: Transform.translate(
+                                offset: Offset(0, (1 - t) * 8),
+                                child: child,
+                              ),
+                            ),
+                            child: MessageBubble(
+                              message: m,
+                              isMine: m.senderId == _myUid,
+                            ),
+                          );
                         },
                       ),
           ),

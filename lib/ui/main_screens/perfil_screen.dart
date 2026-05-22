@@ -2,8 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../services/analytics_service.dart';
+import '../../services/badge_service.dart';
 import '../../services/profile_photo_local.dart';
 import '../../services/post_service.dart';
+import '../../services/recipe_service.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/copy_routine_bottom_sheet.dart';
@@ -13,6 +15,8 @@ import '../../widgets/post_grid.dart';
 import '../../widgets/premium_rank_preview.dart';
 import '../../widgets/profile_tabs_nav.dart';
 import '../../widgets/routine_card.dart';
+import '../recipes/create_recipe_screen.dart';
+import '../recipes/widgets/recipes_grid.dart';
 import '../social/follow_list_screen.dart';
 import 'create_post_screen.dart';
 
@@ -39,10 +43,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoadingProfile = true;
   String? _displayName;
   String? _avatarUrl;
-  double? _weight;
-  double? _height;
-  String? _fitnessGoal;
-  String? _trainingLocation;
   List<Map<String, dynamic>> _userPosts = [];
   int _followersCount = 0;
   int _followingCount = 0;
@@ -53,6 +53,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _routinesLoaded = false;
   List<Map<String, dynamic>> _savedPosts = [];
   bool _savedLoaded = false;
+  List<Map<String, dynamic>> _myRecipes = [];
+  List<Map<String, dynamic>> _savedRecipes = [];
+  bool _recipesLoaded = false;
 
   @override
   void initState() {
@@ -63,6 +66,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadProfile();
     _loadUserPosts();
     _loadFollowCounts();
+    // Recalcula medallas que dependen de datos propios o de terceros (seguidores,
+    // likes recibidos) y hace backfill de logros antiguos. Fire-and-forget.
+    BadgeService.instance.syncSelfBadges();
   }
 
   Future<void> _loadFollowCounts() async {
@@ -91,12 +97,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (dn != null && dn.isNotEmpty) _displayName = dn;
           final b = raw['bio'] as String?;
           if (b != null && b.isNotEmpty) bio = b;
-          final w = raw['weight'];
-          _weight = w != null ? (w as num).toDouble() : null;
-          final h = raw['height'];
-          _height = h != null ? (h as num).toDouble() : null;
-          _fitnessGoal = raw['fitness_goal'] as String?;
-          _trainingLocation = raw['training_location'] as String?;
         }
         _isLoadingProfile = false;
       });
@@ -161,9 +161,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _loadRecipes() async {
+    if (_recipesLoaded) return;
+    try {
+      final results = await Future.wait([
+        RecipeService.instance.getMyRecipes(),
+        RecipeService.instance.getSavedRecipes(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _myRecipes = results[0];
+        _savedRecipes = results[1];
+        _recipesLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('loadRecipes error: $e');
+      if (mounted) setState(() => _recipesLoaded = true);
+    }
+  }
+
   void _onTabChanged(ProfileTab tab) {
     setState(() => _selectedTab = tab);
     if (tab == ProfileTab.rutinas) _loadMyRoutines();
+    if (tab == ProfileTab.recetas) _loadRecipes();
     if (tab == ProfileTab.guardados) _loadSavedPosts();
   }
 
@@ -192,30 +212,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (newAvatar != null && newAvatar.isNotEmpty) {
         widget.onAvatarChanged?.call(newAvatar);
       }
-    }
-  }
-
-  String _formatFitnessGoal(String? goal) {
-    switch (goal) {
-      case 'LOSE_WEIGHT':
-        return 'Perder peso';
-      case 'GAIN_MUSCLE':
-        return 'Ganar músculo';
-      case 'MAINTAIN':
-        return 'Mantener';
-      default:
-        return 'Sin objetivo';
-    }
-  }
-
-  String _formatTrainingLocation(String? location) {
-    switch (location) {
-      case 'HOME':
-        return 'Casa';
-      case 'GYM':
-        return 'Gimnasio';
-      default:
-        return 'Sin definir';
     }
   }
 
@@ -321,6 +317,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         );
+      case ProfileTab.recetas:
+        if (!_recipesLoaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              RecipesGrid(recipes: _myRecipes),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () async {
+                  final created = await CreateRecipeScreen.open(context);
+                  if (created == true) {
+                    _recipesLoaded = false;
+                    _loadRecipes();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: const Color(0xFF00BFFF), width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(PhosphorIconsDuotone.plusCircle,
+                          color: Color(0xFF00BFFF), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Crear receta',
+                        style: TextStyle(
+                          color: Color(0xFF00BFFF),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_savedRecipes.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Text(
+                    'Recetas guardadas',
+                    style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                RecipesGrid(recipes: _savedRecipes),
+              ],
+            ],
+          ),
+        );
       case ProfileTab.rango:
         return const PremiumRankPreview();
       case ProfileTab.guardados:
@@ -348,24 +409,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           physics: const NeverScrollableScrollPhysics(),
         );
     }
-  }
-
-  Widget _buildInfoChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.black87,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
   }
 
   @override
@@ -446,24 +489,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   bio.isNotEmpty ? bio : 'No definido',
                   style: const TextStyle(color: Colors.black54),
                   textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 18),
-
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    if (_weight != null)
-                      _buildInfoChip('Peso: ${_weight!.toStringAsFixed(1)} kg'),
-                    if (_height != null)
-                      _buildInfoChip('Altura: ${_height!.toStringAsFixed(1)} cm'),
-                    if (_fitnessGoal != null && _fitnessGoal!.isNotEmpty)
-                      _buildInfoChip(_formatFitnessGoal(_fitnessGoal)),
-                    if (_trainingLocation != null && _trainingLocation!.isNotEmpty)
-                      _buildInfoChip(_formatTrainingLocation(_trainingLocation)),
-                  ],
                 ),
 
                 const SizedBox(height: 24),

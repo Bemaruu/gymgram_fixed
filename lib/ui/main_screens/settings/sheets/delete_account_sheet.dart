@@ -42,7 +42,7 @@ class _DeleteAccountSheetState extends State<DeleteAccountSheet> {
       await AuthService().deleteAccount();
       if (!mounted) return;
       Navigator.pop(context, true);
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
     } catch (e) {
       if (!mounted) return;
       setState(() {

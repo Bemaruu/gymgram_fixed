@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/app_colors.dart';
 import '../../../../services/change_quota_service.dart';
 import '../../../../services/supabase_service.dart';
+import '../../../plans/plans_screen.dart';
 
 class _GoalOption {
   final String value;
@@ -46,7 +47,7 @@ class _ChangeGoalSheetState extends State<ChangeGoalSheet> {
   bool _loading = true;
   bool _saving = false;
   int _used = 0;
-  bool _unlimited = false;
+  int _limit = ChangeQuotaService.yearlyLimit;
   bool _canChange = true;
 
   @override
@@ -57,12 +58,12 @@ class _ChangeGoalSheetState extends State<ChangeGoalSheet> {
   }
 
   Future<void> _loadQuota() async {
-    final q = await ChangeQuotaService.instance.quotaFor('fitness_goal');
-    final can = await ChangeQuotaService.instance.canChange('fitness_goal');
+    final q = await ChangeQuotaService.instance.quotaFor();
+    final can = await ChangeQuotaService.instance.canChange();
     if (!mounted) return;
     setState(() {
       _used = q.used;
-      _unlimited = q.unlimited;
+      _limit = q.limit;
       _canChange = can;
       _loading = false;
     });
@@ -142,13 +143,7 @@ class _ChangeGoalSheetState extends State<ChangeGoalSheet> {
                     child: Center(
                       child: _LockedCta(onTap: () {
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: AppColors.settingsElevated,
-                            content: Text('Proximamente disponible'),
-                          ),
-                        );
-                        // TODO(paywall): navegar a /premium
+                        PlansScreen.open(context);
                       }),
                     ),
                   ),
@@ -190,20 +185,8 @@ class _ChangeGoalSheetState extends State<ChangeGoalSheet> {
   }
 
   Widget _quotaBanner() {
-    if (_unlimited) {
-      return Row(
-        children: [
-          Icon(Icons.bolt, color: AppColors.accentOrange, size: 16),
-          const SizedBox(width: 6),
-          const Text(
-            'Cambios ilimitados',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-        ],
-      );
-    }
     return Text(
-      '$_used/${ChangeQuotaService.yearlyLimit} usados este ano',
+      '$_used/$_limit cambios usados este ano',
       style: const TextStyle(color: Colors.white70, fontSize: 13),
     );
   }

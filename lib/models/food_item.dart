@@ -9,6 +9,9 @@ class FoodItem {
   final double? fatPer100g;
   final double? fiberPer100g;
   final bool isCustom;
+  // Porción de referencia (solo alimentos curados de custom_foods).
+  final double? servingGrams;
+  final String? servingDescription;
 
   bool get hasCalories => kcalPer100g != null && kcalPer100g! > 0;
 
@@ -23,6 +26,8 @@ class FoodItem {
     this.fatPer100g,
     this.fiberPer100g,
     this.isCustom = false,
+    this.servingGrams,
+    this.servingDescription,
   });
 
   double? kcalFor(double grams) => kcalPer100g != null ? _calc(kcalPer100g!, grams) : null;
@@ -68,6 +73,7 @@ class FoodItem {
       if (v is num) return v.toDouble();
       return double.tryParse(v.toString());
     }
+    final serving = d(row['serving_grams']);
     return FoodItem(
       name: row['name'] as String,
       brand: null,
@@ -79,6 +85,8 @@ class FoodItem {
       fatPer100g: d(row['fat_per_100g']),
       fiberPer100g: d(row['fiber_per_100g']),
       isCustom: true,
+      servingGrams: (serving != null && serving > 0) ? serving : null,
+      servingDescription: row['serving_description'] as String?,
     );
   }
 }

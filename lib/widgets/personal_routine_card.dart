@@ -23,6 +23,8 @@ class PersonalRoutineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final daysWithExercises = routines
         .where((r) => ((r['routine_exercises'] as List?)?.isNotEmpty ?? false))
+        .map((r) => r['day_of_week'])
+        .toSet()
         .length;
     final totalExercises = routines.fold<int>(
       0,

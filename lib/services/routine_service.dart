@@ -1,28 +1,46 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'badge_service.dart';
+import 'subscription_service.dart';
 
 class RoutineService {
   static final RoutineService instance = RoutineService._();
   RoutineService._();
 
+  static const int freeCommunityLimit = 5;
+
   final _client = Supabase.instance.client;
   String? get _uid => _client.auth.currentUser?.id;
 
+  /// Cuantas rutinas comunitarias activas tiene el usuario. Free maximo 5.
+  Future<int> myCommunityRoutinesCount() async {
+    final uid = _uid;
+    if (uid == null) return 0;
+    try {
+      final rows = await _client
+          .from('routines')
+          .select('id')
+          .eq('user_id', uid)
+          .eq('kind', 'community')
+          .neq('is_archived', true);
+      return (rows as List).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Si el usuario puede publicar mas rutinas comunitarias.
+  /// Free: max 5. Plus/Premium: ilimitado.
+  Future<bool> canPublishCommunityRoutine() async {
+    final tier = await SubscriptionService.instance.currentTier();
+    if (tier != SubscriptionTier.free) return true;
+    final count = await myCommunityRoutinesCount();
+    return count < freeCommunityLimit;
+  }
+
   // Devuelve todas las rutinas del usuario (con sus ejercicios)
   // (kind='personal' por compatibilidad con RoutineScreen)
-  Future<List<Map<String, dynamic>>> getMyRoutines() async {
-    final uid = _uid;
-    if (uid == null) return [];
-    final result = await _client
-        .from('routines')
-        .select('*, routine_exercises(*)')
-        .eq('user_id', uid)
-        .eq('kind', 'personal')
-        .eq('is_archived', false)
-        .order('day_of_week');
-    return List<Map<String, dynamic>>.from(result);
-  }
+  Future<List<Map<String, dynamic>>> getMyRoutines() => getMyPersonalRoutines();
 
   // Rutina personal (semanal) propia: una entrada por dia
   Future<List<Map<String, dynamic>>> getMyPersonalRoutines() async {
@@ -274,13 +292,26 @@ class RoutineService {
       ignoreDuplicates: true,
     );
 
-    // 4) Clonar la rutina al usuario actual
+    // 4) Archivar la rutina personal activa del dia destino (si existe) para
+    //    respetar "un dia = una rutina" (indice unico) y permitir restaurarla.
+    final effectiveDay = dayOfWeek ?? src['day_of_week'] as int?;
+    if (effectiveDay != null) {
+      await _client
+          .from('routines')
+          .update({'is_archived': true, 'is_public': false})
+          .eq('user_id', uid)
+          .eq('kind', 'personal')
+          .eq('day_of_week', effectiveDay)
+          .eq('is_archived', false);
+    }
+
+    // 5) Clonar la rutina al usuario actual
     final newRoutine = await _client.from('routines').insert({
       'user_id': uid,
       'title': src['title'],
       'goal': src['goal'],
       'training_location': src['training_location'],
-      'day_of_week': dayOfWeek ?? src['day_of_week'],
+      'day_of_week': effectiveDay,
       'kind': 'personal',
       'source_routine_id': sourceRoutineId,
       'is_public': false,
@@ -288,7 +319,7 @@ class RoutineService {
 
     final newRoutineId = newRoutine['id'] as String;
 
-    // 5) Clonar ejercicios
+    // 6) Clonar ejercicios
     final exercises =
         (src['routine_exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     if (exercises.isNotEmpty) {
@@ -343,16 +374,37 @@ class RoutineService {
     final uid = _uid;
     if (uid == null) throw Exception('No hay usuario autenticado');
 
-    // Inserta la rutina
-    final routine = await _client.from('routines').insert({
-      'user_id': uid,
-      'title': title,
-      'goal': goal,
-      'training_location': trainingLocation,
-      'day_of_week': dayOfWeek,
-    }).select().single();
+    // Reutiliza la rutina personal activa del dia si ya existe, para no crear
+    // duplicados (un dia = una rutina). Garantizado tambien por indice unico en DB.
+    final existing = await _client
+        .from('routines')
+        .select('id')
+        .eq('user_id', uid)
+        .eq('kind', 'personal')
+        .eq('is_archived', false)
+        .eq('day_of_week', dayOfWeek)
+        .maybeSingle();
 
-    final routineId = routine['id'] as String;
+    final String routineId;
+    if (existing != null) {
+      routineId = existing['id'] as String;
+      await _client.from('routines').update({
+        'title': title,
+        'goal': goal,
+        'training_location': trainingLocation,
+      }).eq('id', routineId);
+      // Reemplaza los ejercicios del dia
+      await _client.from('routine_exercises').delete().eq('routine_id', routineId);
+    } else {
+      final routine = await _client.from('routines').insert({
+        'user_id': uid,
+        'title': title,
+        'goal': goal,
+        'training_location': trainingLocation,
+        'day_of_week': dayOfWeek,
+      }).select().single();
+      routineId = routine['id'] as String;
+    }
 
     // Inserta los ejercicios
     if (exercises.isNotEmpty) {
@@ -394,9 +446,10 @@ class RoutineService {
     await _client.from('routines').delete().eq('id', routineId);
   }
 
-  Future<void> logWorkoutExecution({String? routineId}) async {
+  Future<String?> logWorkoutExecution({String? routineId}) async {
     final uid = _uid;
-    if (uid == null) return;
+    if (uid == null) return null;
+    String? workoutLogId;
     try {
       final today = DateTime.now().toIso8601String().substring(0, 10);
       final existing = await _client
@@ -406,15 +459,19 @@ class RoutineService {
           .eq('logged_at', today)
           .maybeSingle();
       if (existing == null) {
-        await _client.from('workout_logs').insert({
+        final inserted = await _client.from('workout_logs').insert({
           'user_id': uid,
           'routine_id': routineId,
           'logged_at': today,
-        });
+        }).select('id').single();
+        workoutLogId = inserted['id'] as String?;
+      } else {
+        workoutLogId = existing['id'] as String?;
       }
     } catch (e) {
-      debugPrint('logWorkoutExecution error: $e');
+      if (kDebugMode) debugPrint('logWorkoutExecution error: $e');
     }
     await BadgeService.instance.checkAndAwardBadges(uid, 'workout_completed');
+    return workoutLogId;
   }
 }

@@ -35,6 +35,8 @@ class _UserMedalsScreenState extends State<UserMedalsScreen>
     (label: 'Plata', rank: BadgeRank.plata),
     (label: 'Oro', rank: BadgeRank.oro),
     (label: 'Diamante', rank: BadgeRank.diamante),
+    (label: 'Mineral', rank: BadgeRank.mineral),
+    (label: 'Evento', rank: BadgeRank.evento),
     (label: 'Especial', rank: BadgeRank.especial),
   ];
 

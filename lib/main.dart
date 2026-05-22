@@ -3,6 +3,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/app_colors.dart';
@@ -11,6 +12,7 @@ import 'firebase_options.dart';
 import 'routes.dart';
 import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
+import 'services/purchase_service.dart';
 
 const _supabaseUrl     = String.fromEnvironment('SUPABASE_URL');
 const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -25,7 +27,7 @@ Future<void> main() async {
     );
   }
   await runZonedGuarded(_boot, (error, stack) {
-    debugPrint('GymGram fatal: $error\n$stack');
+    if (kDebugMode) debugPrint('GymGram fatal: $error\n$stack');
     runApp(const MaterialApp(
       home: Scaffold(
         body: Center(child: Text('Error al iniciar la app. Por favor reiníciala.')),
@@ -36,6 +38,7 @@ Future<void> main() async {
 
 Future<void> _boot() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -44,13 +47,21 @@ Future<void> _boot() async {
       appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
     );
   } catch (e) {
-    debugPrint('Firebase init error (notificaciones no disponibles): $e');
+    if (kDebugMode) debugPrint('Firebase init error (notificaciones no disponibles): $e');
   }
 
   await Supabase.initialize(
     url: _supabaseUrl,
     anonKey: _supabaseAnonKey,
   );
+
+  // Listener de sesión: redirige a /welcome si la sesión expira
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    if (data.event == AuthChangeEvent.signedOut) {
+      NotificationService.navigatorKey.currentState
+          ?.pushNamedAndRemoveUntil('/welcome', (route) => false);
+    }
+  });
 
   // Analytics no bloquea el arranque — se inicializa en segundo plano
   unawaited(Future(() async {
@@ -59,7 +70,7 @@ Future<void> _boot() async {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) AnalyticsService.instance.identify(user.id);
     } catch (e) {
-      debugPrint('Mixpanel init error: $e');
+      if (kDebugMode) debugPrint('Mixpanel init error: $e');
     }
   }));
 
@@ -70,7 +81,17 @@ Future<void> _boot() async {
         await NotificationService.instance.initialize();
       }
     } catch (e) {
-      debugPrint('NotificationService init error: $e');
+      if (kDebugMode) debugPrint('NotificationService init error: $e');
+    }
+  }));
+
+  // Pagos (RevenueCat) — no bloquea el arranque. Si las claves no están
+  // configuradas, simplemente queda inactivo.
+  unawaited(Future(() async {
+    try {
+      await PurchaseService.instance.init();
+    } catch (e) {
+      if (kDebugMode) debugPrint('PurchaseService init error: $e');
     }
   }));
 

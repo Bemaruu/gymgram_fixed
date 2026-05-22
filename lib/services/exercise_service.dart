@@ -22,6 +22,18 @@ class ExerciseService {
     'Cadena posterior',
   ];
 
+  Future<Map<String, String?>> mediaUrlsByName(List<String> names) async {
+    if (names.isEmpty) return {};
+    final result = await _client
+        .from('exercise_catalog')
+        .select('name_es, media_url')
+        .inFilter('name_es', names);
+    return {
+      for (final row in (result as List))
+        row['name_es'] as String: row['media_url'] as String?
+    };
+  }
+
   Future<List<Map<String, dynamic>>> getExercises({
     String? muscleGroup,
     String? location,
@@ -30,7 +42,7 @@ class ExerciseService {
     var q = _client
         .from('exercise_catalog')
         .select(
-          'id, name_es, slug, muscle_group_primary, muscle_group_secondary, location, equipment, exercise_type, difficulty',
+          'id, name_es, slug, muscle_group_primary, muscle_group_secondary, location, equipment, exercise_type, difficulty, media_url',
         )
         .eq('is_active', true);
 

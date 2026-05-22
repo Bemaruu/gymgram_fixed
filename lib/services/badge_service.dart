@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/badge_model.dart';
 
@@ -250,10 +250,11 @@ class BadgeService {
       title: 'Transformación real',
       medalName: 'Renacido',
       description: 'Tu cuerpo habla por sí solo. El cambio es visible.',
-      condition: 'Registra un cambio físico medible y documentado.',
+      condition: 'Sube una foto de tu progreso físico y la IA lo valida.',
       rank: BadgeRank.diamante,
       difficulty: 9,
       imagePath: 'assets/medals/renacido.png',
+      requiresPhotoProof: true,
     ),
     BadgeModel(
       id: 'control_total',
@@ -291,17 +292,19 @@ class BadgeService {
       difficulty: 6,
       imagePath: 'assets/medals/conquistador.png',
       isGlobalEvent: true,
+      requiresPhotoProof: true,
     ),
     BadgeModel(
       id: 'runner',
       title: '5K GymGram',
       medalName: 'Runner',
       description: 'Corriste 5 kilómetros y lo demostraste.',
-      condition: 'Corre 5km y sube la evidencia.',
+      condition: 'Corre 5km y sube la captura de tu app de running.',
       rank: BadgeRank.evento,
       difficulty: 5,
       imagePath: 'assets/medals/runner.png',
       isGlobalEvent: true,
+      requiresPhotoProof: true,
     ),
     BadgeModel(
       id: 'full_mode',
@@ -382,7 +385,7 @@ class BadgeService {
         'p_badge_id': badgeId,
       });
     } catch (e) {
-      debugPrint('awardBadge [$badgeId] error: $e');
+      if (kDebugMode) debugPrint('awardBadge [$badgeId] error: $e');
     }
   }
 
@@ -399,7 +402,7 @@ class BadgeService {
         'p_progress': progress.clamp(0.0, 0.99),
       });
     } catch (e) {
-      debugPrint('updateBadgeProgress [$badgeId] error: $e');
+      if (kDebugMode) debugPrint('updateBadgeProgress [$badgeId] error: $e');
     }
   }
 
@@ -421,7 +424,7 @@ class BadgeService {
         break;
       case 'workout_completed':
         await awardBadge(userId, 'primera_rutina');
-        await _checkSevenConsecutiveDays(userId);
+        await _checkWorkoutStreaksAndCounts(userId);
         break;
       case 'post_created':
         await awardBadge(userId, 'primera_publicacion');
@@ -445,7 +448,12 @@ class BadgeService {
         await _checkWeightLogs(userId);
         break;
       case 'follower_gained':
+        // Solo efectivo si se ejecuta en la sesion del dueno. La via principal es
+        // syncSelfBadges() al abrir el perfil propio (no se puede otorgar a terceros).
         await _checkFollowerCount(userId);
+        break;
+      case 'set_logged':
+        await _checkStrengthBadges(userId);
         break;
       case 'challenge_completed':
         // Para uso manual por administración de eventos
@@ -453,38 +461,156 @@ class BadgeService {
     }
   }
 
-  Future<void> _checkSevenConsecutiveDays(String userId) async {
+  /// Otorga la medalla si [current] >= [target]; si no, guarda el progreso parcial.
+  Future<void> _awardOrProgress(
+    String userId,
+    String badgeId,
+    num current,
+    num target,
+  ) async {
+    if (current >= target) {
+      await awardBadge(userId, badgeId);
+    } else {
+      await updateBadgeProgress(userId, badgeId, current / target);
+    }
+  }
+
+  /// Revisa el historial de entrenamientos y otorga (o actualiza progreso de)
+  /// las medallas por conteo total y por racha de dias consecutivos.
+  Future<void> _checkWorkoutStreaksAndCounts(String userId) async {
     try {
       final result = await _client
           .from('workout_logs')
           .select('logged_at')
           .eq('user_id', userId)
           .order('logged_at', ascending: false)
-          .limit(30);
+          .limit(400);
 
       final dates = (result as List)
           .map((r) => DateTime.parse(r['logged_at'] as String))
+          .map((d) => DateTime(d.year, d.month, d.day))
           .toSet()
           .toList()
         ..sort((a, b) => b.compareTo(a));
 
-      if (dates.length < 7) return;
+      if (dates.isEmpty) return;
 
-      int consecutive = 1;
+      // ── Conteo total de dias entrenados ──
+      final total = dates.length;
+      await _awardOrProgress(userId, 'disciplinado', total, 10);
+      await _awardOrProgress(userId, 'bestia', total, 50);
+
+      // ── Maquina: kcal quemadas (estimadas) ──
+      // No registramos kcal reales; estimamos ~280 kcal por sesion de fuerza.
+      final estimatedKcal = total * 280;
+      await _awardOrProgress(userId, 'maquina', estimatedKcal, 10000);
+
+      // ── Racha maxima de dias consecutivos ──
+      int maxStreak = 1;
+      int streak = 1;
       for (int i = 1; i < dates.length; i++) {
         final diff = dates[i - 1].difference(dates[i]).inDays;
         if (diff == 1) {
-          consecutive++;
-          if (consecutive >= 7) {
-            await awardBadge(userId, 'siete_dias_activo');
-            return;
-          }
-        } else {
-          consecutive = 1;
+          streak++;
+          if (streak > maxStreak) maxStreak = streak;
+        } else if (diff > 1) {
+          streak = 1;
         }
       }
+      await _awardOrProgress(userId, 'siete_dias_activo', maxStreak, 7);
+      await _awardOrProgress(userId, 'ritmo_constante', maxStreak, 14);
+      await _awardOrProgress(userId, 'inquebrantable', maxStreak, 30);
+      await _awardOrProgress(userId, 'cobalto_core', maxStreak, 60);
+      await _awardOrProgress(userId, 'mente_y_cuerpo', maxStreak, 90);
     } catch (e) {
-      debugPrint('_checkSevenConsecutiveDays error: $e');
+      if (kDebugMode) debugPrint('_checkWorkoutStreaksAndCounts error: $e');
+    }
+  }
+
+  /// Recalcula y otorga las medallas que dependen de datos propios o de acciones
+  /// de OTROS usuarios (seguidores, likes recibidos). Debe ejecutarse en la sesion
+  /// del dueno (auth.uid() == userId), ya que award_badge solo permite auto-otorgar.
+  /// Tambien sirve de backfill para usuarios que ya cumplian condiciones antiguas.
+  Future<void> syncSelfBadges() async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _checkWorkoutStreaksAndCounts(uid);
+    await _checkFollowerCount(uid);
+    await _checkTopPostLikes(uid);
+    await _checkStrengthBadges(uid);
+  }
+
+  /// Medallas de fuerza basadas en set_logs / user_strength_records:
+  ///  - rompe_limites: tener al menos 1 PR de fuerza registrado.
+  ///  - mas_fuerte: subir el peso de un mismo ejercicio 3 veces (sesion a sesion).
+  Future<void> _checkStrengthBadges(String userId) async {
+    // Rompe Limites: cualquier PR registrado.
+    try {
+      final prs = await _client
+          .from('user_strength_records')
+          .select('id')
+          .eq('user_id', userId)
+          .limit(1);
+      if ((prs as List).isNotEmpty) {
+        await awardBadge(userId, 'rompe_limites');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('_checkStrengthBadges PR error: $e');
+    }
+
+    // Mas Fuerte: 3 incrementos de peso en un mismo ejercicio.
+    try {
+      final rows = await _client
+          .from('set_logs')
+          .select('exercise_name, weight_kg, logged_at')
+          .eq('user_id', userId)
+          .order('logged_at', ascending: true)
+          .limit(1000);
+
+      // Por ejercicio: peso maximo por dia, en orden cronologico.
+      final Map<String, Map<String, double>> dailyMaxByExercise = {};
+      for (final r in (rows as List)) {
+        final name = r['exercise_name'] as String?;
+        final w = (r['weight_kg'] as num?)?.toDouble();
+        final loggedAt = r['logged_at'] as String?;
+        if (name == null || w == null || loggedAt == null) continue;
+        final day = loggedAt.substring(0, 10);
+        final byDay = dailyMaxByExercise.putIfAbsent(name, () => {});
+        if (w > (byDay[day] ?? 0)) byDay[day] = w;
+      }
+
+      int bestIncreases = 0;
+      for (final byDay in dailyMaxByExercise.values) {
+        final days = byDay.keys.toList()..sort();
+        int increases = 0;
+        double prev = -1;
+        for (final d in days) {
+          final w = byDay[d]!;
+          if (prev >= 0 && w > prev) increases++;
+          prev = w;
+        }
+        if (increases > bestIncreases) bestIncreases = increases;
+      }
+      await _awardOrProgress(userId, 'mas_fuerte', bestIncreases, 3);
+    } catch (e) {
+      if (kDebugMode) debugPrint('_checkStrengthBadges progression error: $e');
+    }
+  }
+
+  /// Inspiracion: 50 likes en una sola publicacion propia.
+  Future<void> _checkTopPostLikes(String userId) async {
+    try {
+      final rows = await _client
+          .from('posts')
+          .select('likes_count')
+          .eq('user_id', userId)
+          .order('likes_count', ascending: false)
+          .limit(1);
+      if ((rows as List).isEmpty) return;
+      final maxLikes = (rows.first['likes_count'] as num?)?.toInt() ?? 0;
+      await _awardOrProgress(userId, 'inspiracion', maxLikes, 50);
+    } catch (e) {
+      if (kDebugMode) debugPrint('_checkTopPostLikes error: $e');
     }
   }
 
@@ -495,14 +621,14 @@ class BadgeService {
     try {
       final result = await _client
           .from('user_badges')
-          .select()
+          .select('badge_id, progress, earned_at, is_featured, featured_order')
           .eq('user_id', userId)
           .order('earned_at', ascending: false);
       return (result as List)
           .map((m) => UserBadgeModel.fromMap(m as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('getUserBadges error: $e');
+      if (kDebugMode) debugPrint('getUserBadges error: $e');
       return [];
     }
   }
@@ -520,7 +646,7 @@ class BadgeService {
           .order('featured_order');
       return (result as List).map((m) => m['badge_id'] as String).toList();
     } catch (e) {
-      debugPrint('getMyFeaturedBadgeIds error: $e');
+      if (kDebugMode) debugPrint('getMyFeaturedBadgeIds error: $e');
       return [];
     }
   }
@@ -536,7 +662,7 @@ class BadgeService {
           .order('featured_order');
       return (result as List).map((m) => m['badge_id'] as String).toList();
     } catch (e) {
-      debugPrint('getFeaturedBadgeIds error: $e');
+      if (kDebugMode) debugPrint('getFeaturedBadgeIds error: $e');
       return [];
     }
   }
@@ -565,7 +691,7 @@ class BadgeService {
             .eq('badge_id', limited[i]);
       }
     } catch (e) {
-      debugPrint('setFeaturedBadges error: $e');
+      if (kDebugMode) debugPrint('setFeaturedBadges error: $e');
     }
   }
 
@@ -593,7 +719,8 @@ class BadgeService {
           .select('target_date')
           .eq('user_id', userId)
           .gt('glasses_count', 0)
-          .order('target_date', ascending: false);
+          .order('target_date', ascending: false)
+          .limit(400);
 
       final dates = (rows as List)
           .map((r) => DateTime.parse(r['target_date'] as String))
@@ -619,7 +746,7 @@ class BadgeService {
         await updateBadgeProgress(userId, 'hidratado', maxConsecutive / 7);
       }
     } catch (e) {
-      debugPrint('_checkWaterStreak error: $e');
+      if (kDebugMode) debugPrint('_checkWaterStreak error: $e');
     }
   }
 
@@ -639,7 +766,7 @@ class BadgeService {
         await updateBadgeProgress(userId, 'enfocado', distinctDays / 5);
       }
     } catch (e) {
-      debugPrint('_checkMealPlanDays error: $e');
+      if (kDebugMode) debugPrint('_checkMealPlanDays error: $e');
     }
   }
 
@@ -656,7 +783,7 @@ class BadgeService {
         await updateBadgeProgress(userId, 'evolucion_visible', count / 5);
       }
     } catch (e) {
-      debugPrint('_checkWeightLogs error: $e');
+      if (kDebugMode) debugPrint('_checkWeightLogs error: $e');
     }
   }
 
@@ -673,7 +800,7 @@ class BadgeService {
         await updateBadgeProgress(userId, 'referente', count / 20);
       }
     } catch (e) {
-      debugPrint('_checkFollowerCount error: $e');
+      if (kDebugMode) debugPrint('_checkFollowerCount error: $e');
     }
   }
 }

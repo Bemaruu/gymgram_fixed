@@ -92,6 +92,10 @@ class BadgeModel {
   final bool isLimited;
   final bool isGlobalEvent;
 
+  /// Si true, la medalla se obtiene subiendo una foto que la IA verifica
+  /// (edge function verify-medal-photo). El criterio vive en el servidor.
+  final bool requiresPhotoProof;
+
   const BadgeModel({
     required this.id,
     required this.title,
@@ -103,6 +107,7 @@ class BadgeModel {
     required this.imagePath,
     this.isLimited = false,
     this.isGlobalEvent = false,
+    this.requiresPhotoProof = false,
   });
 }
 

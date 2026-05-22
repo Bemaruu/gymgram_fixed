@@ -38,7 +38,7 @@ class FoodService {
     try {
       final rows = await _client
           .from('custom_foods')
-          .select('name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g')
+          .select('name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, serving_grams, serving_description')
           .or('name_normalized.ilike.%$q%,name.ilike.%$q%')
           .order('name')
           .limit(20);
@@ -129,6 +129,93 @@ class FoodService {
     );
     final inserted =
         await _client.from('food_logs').insert(log.toInsertMap()).select().single();
+    await BadgeService.instance.checkAndAwardBadges(uid, 'meal_plan_completed');
+    return FoodLog.fromMap(inserted);
+  }
+
+  /// Registra una comida del plan sugerido como una entrada en food_logs,
+  /// usando los totales ya calculados del item (suma de sus componentes).
+  Future<FoodLog> logPlanMeal(
+    Map<String, dynamic> meal, {
+    DateTime? date,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    final logDate = date ?? DateTime.now();
+    final mealType = (meal['meal_type'] as String?) ?? 'snack';
+
+    final components =
+        (meal['components'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    double grams = 0;
+    for (final c in components) {
+      grams += (c['grams'] as num?)?.toDouble() ?? 0;
+    }
+    if (grams <= 0) grams = (meal['porcion_g'] as num?)?.toDouble() ?? 0;
+    if (grams <= 0) grams = 1; // food_logs exige grams > 0
+
+    double? d(dynamic v) => v == null ? null : (v as num).toDouble();
+
+    final log = FoodLog(
+      id: '',
+      userId: uid,
+      logDate: logDate,
+      mealType: mealType,
+      foodName: (meal['name'] as String?)?.trim().isNotEmpty == true
+          ? meal['name'] as String
+          : 'Comida del plan',
+      grams: grams,
+      kcalTotal: d(meal['calories']),
+      proteinTotal: d(meal['protein']),
+      carbsTotal: d(meal['carbs']),
+      fatTotal: d(meal['fats']),
+      createdAt: DateTime.now(),
+    );
+
+    final inserted = await _client
+        .from('food_logs')
+        .insert(log.toInsertMap())
+        .select()
+        .single();
+    await BadgeService.instance.checkAndAwardBadges(uid, 'meal_plan_completed');
+    return FoodLog.fromMap(inserted);
+  }
+
+  /// Registra un componente suelto (alimento simple) de una comida del plan,
+  /// para poder checkear alimento por alimento estilo Fitia.
+  Future<FoodLog> logPlanComponent(
+    Map<String, dynamic> component,
+    String mealType, {
+    DateTime? date,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    final logDate = date ?? DateTime.now();
+    double? d(dynamic v) => v == null ? null : (v as num).toDouble();
+
+    double grams = (component['grams'] as num?)?.toDouble() ?? 0;
+    if (grams <= 0) grams = 1; // food_logs exige grams > 0
+
+    final log = FoodLog(
+      id: '',
+      userId: uid,
+      logDate: logDate,
+      mealType: mealType,
+      foodName: (component['name'] as String?)?.trim().isNotEmpty == true
+          ? component['name'] as String
+          : 'Alimento del plan',
+      grams: grams,
+      kcalTotal: d(component['calories']),
+      proteinTotal: d(component['protein']),
+      carbsTotal: d(component['carbs']),
+      fatTotal: d(component['fats']),
+      createdAt: DateTime.now(),
+    );
+
+    final inserted = await _client
+        .from('food_logs')
+        .insert(log.toInsertMap())
+        .select()
+        .single();
     await BadgeService.instance.checkAndAwardBadges(uid, 'meal_plan_completed');
     return FoodLog.fromMap(inserted);
   }
