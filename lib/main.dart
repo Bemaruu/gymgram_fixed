@@ -42,9 +42,12 @@ Future<void> _boot() async {
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    // Beta/sideload: usamos debug provider para evitar que Play Integrity
+    // bloquee el registro del token FCM en APKs no instaladas desde Play Store.
+    // Cambiar a playIntegrity / deviceCheck cuando se publique en las tiendas.
     await FirebaseAppCheck.instance.activate(
-      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
     );
   } catch (e) {
     if (kDebugMode) debugPrint('Firebase init error (notificaciones no disponibles): $e');

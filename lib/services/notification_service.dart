@@ -26,25 +26,36 @@ class NotificationService {
   }
 
   Future<void> _saveToken() async {
-    final token = await _fcm.getToken();
-    if (token == null) return;
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return;
-    await Supabase.instance.client.from('device_tokens').upsert({
-      'user_id': uid,
-      'fcm_token': token,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+    try {
+      final token = await _fcm.getToken();
+      if (kDebugMode) debugPrint('FCM token: $token');
+      if (token == null) {
+        if (kDebugMode) debugPrint('FCM getToken() returned null');
+        return;
+      }
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      await Supabase.instance.client.from('device_tokens').upsert(
+        {'user_id': uid, 'fcm_token': token, 'updated_at': DateTime.now().toIso8601String()},
+        onConflict: 'user_id',
+      );
+      if (kDebugMode) debugPrint('FCM token guardado para $uid');
+    } catch (e) {
+      debugPrint('_saveToken error: $e');
+    }
   }
 
   Future<void> _updateToken(String token) async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return;
-    await Supabase.instance.client.from('device_tokens').upsert({
-      'user_id': uid,
-      'fcm_token': token,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      await Supabase.instance.client.from('device_tokens').upsert(
+        {'user_id': uid, 'fcm_token': token, 'updated_at': DateTime.now().toIso8601String()},
+        onConflict: 'user_id',
+      );
+    } catch (e) {
+      debugPrint('_updateToken error: $e');
+    }
   }
 
   void _handleForeground(RemoteMessage message) {
