@@ -3,6 +3,9 @@
     <!-- Supabase y assets remotos -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- FCM push notifications (obligatorio en Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- image_picker: galería y cámara -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>

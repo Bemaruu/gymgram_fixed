@@ -12,15 +12,15 @@ class NotificationService {
   final _fcm = FirebaseMessaging.instance;
 
   Future<void> initialize() async {
-    final settings = await _fcm.requestPermission(
+    // Solicitar permiso (Android 13+ lo necesita declarado en el manifest).
+    // El token se guarda independientemente — el permiso solo controla si el
+    // sistema muestra la UI de la notificación, no si se puede recibir.
+    await _fcm.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional) {
-      await _saveToken();
-    }
+    await _saveToken();
     FirebaseMessaging.instance.onTokenRefresh.listen(_updateToken);
     FirebaseMessaging.onMessage.listen(_handleForeground);
   }
