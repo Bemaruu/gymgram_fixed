@@ -353,6 +353,41 @@ class RoutineService {
     return result != null;
   }
 
+  /// Archiva las rutinas personales de días que NO son de entrenamiento.
+  /// Corrige datos históricos donde el fallback de 7 días creó rutinas de más.
+  /// Las rutinas archivadas no aparecen en el perfil propio ni en el ajeno.
+  Future<void> archiveNonTrainingDays(List<int> trainingDayIndices) async {
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      // Primero desarchivamos los días activos para que vuelvan a ser visibles
+      // si el usuario re-activó un día antes deshabilitado.
+      if (trainingDayIndices.isNotEmpty) {
+        await _client
+            .from('routines')
+            .update({'is_archived': false, 'is_public': true})
+            .eq('user_id', uid)
+            .eq('kind', 'personal')
+            .inFilter('day_of_week', trainingDayIndices);
+      }
+      // Archivamos los días que no son de entrenamiento
+      final restDays = List.generate(7, (i) => i)
+          .where((i) => !trainingDayIndices.contains(i))
+          .toList();
+      if (restDays.isNotEmpty) {
+        await _client
+            .from('routines')
+            .update({'is_archived': true, 'is_public': false})
+            .eq('user_id', uid)
+            .eq('kind', 'personal')
+            .eq('is_archived', false)
+            .inFilter('day_of_week', restDays);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('archiveNonTrainingDays error: $e');
+    }
+  }
+
   // Devuelve los ejercicios de una rutina específica
   Future<List<Map<String, dynamic>>> getExercises(String routineId) async {
     final result = await _client
@@ -402,6 +437,8 @@ class RoutineService {
         'goal': goal,
         'training_location': trainingLocation,
         'day_of_week': dayOfWeek,
+        'kind': 'personal',
+        'is_public': true,
       }).select().single();
       routineId = routine['id'] as String;
     }

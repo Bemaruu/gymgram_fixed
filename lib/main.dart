@@ -19,13 +19,6 @@ const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 const _mixpanelToken   = String.fromEnvironment('MIXPANEL_TOKEN');
 
 Future<void> main() async {
-  if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
-    throw StateError(
-      'Credenciales no configuradas. Usa:\n'
-      'flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...\n'
-      'O configura .vscode/launch.json con los valores reales.',
-    );
-  }
   await runZonedGuarded(_boot, (error, stack) {
     if (kDebugMode) debugPrint('GymGram fatal: $error\n$stack');
     runApp(const MaterialApp(
@@ -39,6 +32,13 @@ Future<void> main() async {
 Future<void> _boot() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+  if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
+    throw StateError(
+      'Credenciales no configuradas. Usa:\n'
+      'flutter build apk --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...',
+    );
+  }
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -55,11 +55,15 @@ Future<void> _boot() async {
     anonKey: _supabaseAnonKey,
   );
 
-  // Listener de sesión: redirige a /welcome si la sesión expira
+  // Listener de sesión: redirige a /welcome al cerrar sesión,
+  // y registra el token FCM al hacer login (cubre usuarios nuevos y login fresco).
   Supabase.instance.client.auth.onAuthStateChange.listen((data) {
     if (data.event == AuthChangeEvent.signedOut) {
       NotificationService.navigatorKey.currentState
           ?.pushNamedAndRemoveUntil('/welcome', (route) => false);
+    }
+    if (data.event == AuthChangeEvent.signedIn) {
+      unawaited(NotificationService.instance.initialize().catchError((_) {}));
     }
   });
 

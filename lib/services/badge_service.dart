@@ -430,12 +430,16 @@ class BadgeService {
         await awardBadge(userId, 'primera_publicacion');
         break;
       case 'like_given':
-        final likeRows = await _client
-            .from('likes')
-            .select('id')
-            .eq('user_id', userId);
-        if ((likeRows as List).length >= 5) {
-          await awardBadge(userId, 'social_inicial');
+        try {
+          final likeRows = await _client
+              .from('likes')
+              .select('id')
+              .eq('user_id', userId);
+          if ((likeRows as List).length >= 5) {
+            await awardBadge(userId, 'social_inicial');
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('checkAndAwardBadges [like_given] error: $e');
         }
         break;
       case 'water_logged':

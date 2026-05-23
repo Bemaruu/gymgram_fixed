@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/message.dart';
 import '../../services/chat_service.dart';
+import '../search/user_profile_screen.dart';
 import 'widgets/chat_empty_state.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/message_input.dart';
@@ -248,36 +249,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         titleSpacing: 0,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.18),
-              backgroundImage: hasValidAvatar ? CachedNetworkImageProvider(avatar) : null,
-              child: !hasValidAvatar
-                  ? Text(
-                      initial,
-                      style: const TextStyle(
-                        color: Color(0xFF00BFFF),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '@${widget.otherUsername}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
+        title: GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserProfileScreen(
+                userId: widget.otherUserId,
+                username: widget.otherUsername,
               ),
             ),
-          ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.18),
+                backgroundImage: hasValidAvatar ? CachedNetworkImageProvider(avatar) : null,
+                child: !hasValidAvatar
+                    ? Text(
+                        initial,
+                        style: const TextStyle(
+                          color: Color(0xFF00BFFF),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '@${widget.otherUsername}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           PopupMenuButton<String>(

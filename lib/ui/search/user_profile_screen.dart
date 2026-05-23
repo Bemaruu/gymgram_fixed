@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../models/ranked_profile_model.dart';
 import '../../services/analytics_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/ranked_service.dart';
 import '../../services/recipe_service.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
@@ -37,6 +39,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _followLoading = false;
 
   Map<String, dynamic>? _profile;
+  RankedProfile? _rankedProfile;
   List<Map<String, dynamic>> _posts = [];
   int _followersCount = 0;
   int _followingCount = 0;
@@ -61,6 +64,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         SupabaseService.instance.getPostsByUserId(widget.userId),
         SupabaseService.instance.isFollowing(widget.userId),
         SupabaseService.instance.getFollowCounts(widget.userId),
+        RankedService.instance.getProfileOf(widget.userId),
       ]);
 
       if (!mounted) return;
@@ -71,6 +75,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         final counts = results[3] as Map<String, int>;
         _followersCount = counts['followers'] ?? 0;
         _followingCount = counts['following'] ?? 0;
+        _rankedProfile = results[4] as RankedProfile?;
         _isLoading = false;
       });
       AnalyticsService.instance.userProfileViewed(widget.userId);
@@ -237,7 +242,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           child: RecipesGrid(recipes: _publicRecipes),
         );
       case ProfileTab.rango:
-        return const PremiumRankPreview();
+        return PremiumRankPreview(userId: widget.userId);
       case ProfileTab.guardados:
         return const SizedBox.shrink();
     }
@@ -298,30 +303,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
-  String _formatGoal(String? g) {
-    switch ((g ?? '').toUpperCase()) {
-      case 'LOSE_WEIGHT': return 'Perder peso';
-      case 'GAIN_MUSCLE': return 'Ganar músculo';
-      case 'MAINTAIN': return 'Mantener';
-      default: return '';
-    }
-  }
-
-  String _formatLocation(String? l) {
-    switch ((l ?? '').toUpperCase()) {
-      case 'GYM': return 'Gimnasio';
-      case 'HOME': return 'Casa';
-      default: return '';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final username = _profile?['username'] as String? ?? widget.username;
     final fullName = _profile?['full_name'] as String? ?? '';
     final bio = _profile?['bio'] as String? ?? '';
-    final goalLabel = _formatGoal(_profile?['fitness_goal'] as String?);
-    final locationLabel = _formatLocation(_profile?['training_location'] as String?);
     final avatarUrl = _profile?['avatar_url'] as String?;
     final initial = username.isNotEmpty ? username[0].toUpperCase() : '?';
 
@@ -402,18 +388,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ],
 
                         const SizedBox(height: 16),
-
-                        // Chips de info
-                        if (goalLabel.isNotEmpty || locationLabel.isNotEmpty)
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              if (goalLabel.isNotEmpty) _Chip(goalLabel),
-                              if (locationLabel.isNotEmpty) _Chip(locationLabel),
-                            ],
-                          ),
 
                         const SizedBox(height: 20),
 
@@ -535,6 +509,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     selected: _selectedTab,
                     onChanged: _onTabChanged,
                     showSaved: false,
+                    showRango: _rankedProfile != null,
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildTabContent()),
@@ -547,23 +522,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 }
 
 // ── Widgets auxiliares ────────────────────────────────────────────────────────
-
-class _Chip extends StatelessWidget {
-  final String label;
-  const _Chip(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-    );
-  }
-}
 
 class _Stat extends StatelessWidget {
   final String label;

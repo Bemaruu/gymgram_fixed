@@ -7,12 +7,18 @@ import '../services/subscription_service.dart';
 import '../ui/ranked/ranked_screen.dart';
 
 /// Preview de Rango Fitness en la pestaña de perfil.
-/// 3 estados:
+///
+/// Perfil propio (userId == null):
 ///  - Free                     -> teaser candado
 ///  - Plus/Premium sin datos   -> card "Sin rango" tappable -> RankedScreen
-///  - Plus/Premium con datos   -> tier + division + RP + mini progreso (tappable -> RankedScreen)
+///  - Plus/Premium con datos   -> tier + division + RP + mini progreso
+///
+/// Perfil ajeno (userId != null):
+///  - Con datos   -> muestra su tier/RP (read-only, sin botón RankedScreen)
+///  - Sin datos   -> "Sin rango aún"
 class PremiumRankPreview extends StatefulWidget {
-  const PremiumRankPreview({super.key});
+  final String? userId;
+  const PremiumRankPreview({super.key, this.userId});
 
   @override
   State<PremiumRankPreview> createState() => _PremiumRankPreviewState();
@@ -27,6 +33,8 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
   SubscriptionTier _tier = SubscriptionTier.free;
   RankedProfile? _profile;
 
+  bool get _isOwnProfile => widget.userId == null;
+
   @override
   void initState() {
     super.initState();
@@ -34,17 +42,26 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
   }
 
   Future<void> _load() async {
-    final tier = await SubscriptionService.instance.currentTier();
-    RankedProfile? profile;
-    if (tier != SubscriptionTier.free) {
-      profile = await RankedService.instance.getMyProfile();
+    if (_isOwnProfile) {
+      final tier = await SubscriptionService.instance.currentTier();
+      RankedProfile? profile;
+      if (tier != SubscriptionTier.free) {
+        profile = await RankedService.instance.getMyProfile();
+      }
+      if (!mounted) return;
+      setState(() {
+        _tier = tier;
+        _profile = profile;
+        _loading = false;
+      });
+    } else {
+      final profile = await RankedService.instance.getProfileOf(widget.userId!);
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _loading = false;
+      });
     }
-    if (!mounted) return;
-    setState(() {
-      _tier = tier;
-      _profile = profile;
-      _loading = false;
-    });
   }
 
   void _openRankedScreen() {
@@ -68,6 +85,14 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
       );
     }
 
+    // Perfil ajeno: solo muestra datos del otro usuario
+    if (!_isOwnProfile) {
+      return _profile != null
+          ? _buildRankedCard(_profile!)
+          : _buildUnrankedCard();
+    }
+
+    // Perfil propio
     if (_tier == SubscriptionTier.free) {
       return _buildFreeTeaser();
     }
@@ -240,7 +265,7 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: _openRankedScreen,
+      onTap: _isOwnProfile ? _openRankedScreen : null,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(

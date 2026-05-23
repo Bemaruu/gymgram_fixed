@@ -118,6 +118,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
       final anySelected = available.any((d) => d);
       final finalDays = anySelected ? available : List<bool>.filled(7, true);
 
+      // Archiva rutinas de días de descanso. Corrige datos históricos donde
+      // el fallback de 7 días generaba rutinas de más.
+      final trainingIndices = [
+        for (int i = 0; i < 7; i++) if (finalDays[i]) i,
+      ];
+      RoutineService.instance.archiveNonTrainingDays(trainingIndices);
+
       final goal =
           (profile?['fitness_goal'] as String? ?? 'MAINTAIN').toUpperCase();
       final location =

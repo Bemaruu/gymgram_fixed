@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +13,7 @@ import '../../models/weekly_mission_model.dart';
 import '../../services/ranked_service.dart';
 import '../../services/subscription_service.dart';
 import 'all_tiers_screen.dart';
+import 'tier_up_overlay.dart';
 import 'season_recap_screen.dart';
 
 class RankedScreen extends StatefulWidget {
@@ -102,81 +102,26 @@ class _RankedScreenState extends State<RankedScreen> {
       final lastIdx = lastRaw == null
           ? -1
           : RankedTier.values.indexWhere((t) => t.name == lastRaw);
-      if (lastIdx >= 0 && tierIdx > lastIdx && mounted) {
-        await _showPromotionDialog(currentTier);
+      final profile = _profile;
+      if (lastIdx >= 0 && tierIdx > lastIdx && mounted && profile != null) {
+        await TierUpOverlay.show(
+          context,
+          oldTier: RankedTier.values[lastIdx],
+          profile: profile,
+          username: _currentUsername(),
+        );
       }
       await prefs.setString(_prefsLastTierKey, currentTier.name);
     } catch (_) {}
   }
 
-  Future<void> _showPromotionDialog(RankedTier newTier) async {
-    HapticFeedback.heavyImpact();
-    await showGeneralDialog<void>(
-      context: context,
-      barrierLabel: 'promotion',
-      barrierDismissible: true,
-      barrierColor: Colors.black87,
-      transitionDuration: const Duration(milliseconds: 900),
-      pageBuilder: (ctx, a1, a2) => const SizedBox.shrink(),
-      transitionBuilder: (ctx, anim, _, __) {
-        final scale = CurvedAnimation(parent: anim, curve: Curves.elasticOut)
-            .drive(Tween<double>(begin: 0.4, end: 1.0));
-        final opacity = CurvedAnimation(parent: anim, curve: Curves.easeIn);
-        return Opacity(
-          opacity: opacity.value,
-          child: ScaleTransition(
-            scale: scale,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                margin: const EdgeInsets.symmetric(horizontal: 32),
-                decoration: BoxDecoration(
-                  color: AppColors.darkSurfaceCard,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                      color: _tierColor(newTier).withValues(alpha: 0.6),
-                      width: 2),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TierEmblem(tier: newTier, size: 140, animated: true),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'ASCENSO',
-                      style: TextStyle(
-                        color: AppColors.accentOrange,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        letterSpacing: 4,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _tierLabel(newTier),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                      ),
-                      child: const Text('CONTINUAR'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  /// Username del usuario actual, leído de los boards (best-effort).
+  String _currentUsername() {
+    final uid = RankedService.instance.currentUserId;
+    for (final e in [..._friendsBoard, ..._globalBoard]) {
+      if (e.userId == uid && e.username.isNotEmpty) return e.username;
+    }
+    return 'tú';
   }
 
   int _daysRemaining() {
@@ -1985,6 +1930,25 @@ Color tierColorOf(RankedTier t) {
       return const Color(0xFF6A8DFF);
     case RankedTier.inmortal:
       return const Color(0xFFB14CFF);
+  }
+}
+
+String tierLabelOf(RankedTier t) {
+  switch (t) {
+    case RankedTier.hierro:
+      return 'Hierro';
+    case RankedTier.bronce:
+      return 'Bronce';
+    case RankedTier.plata:
+      return 'Plata';
+    case RankedTier.oro:
+      return 'Oro';
+    case RankedTier.platino:
+      return 'Platino';
+    case RankedTier.diamante:
+      return 'Diamante';
+    case RankedTier.inmortal:
+      return 'Inmortal';
   }
 }
 

@@ -6,12 +6,14 @@ class ProfileTabsNav extends StatelessWidget {
   final ProfileTab selected;
   final ValueChanged<ProfileTab> onChanged;
   final bool showSaved;
+  final bool showRango;
 
   const ProfileTabsNav({
     super.key,
     required this.selected,
     required this.onChanged,
     this.showSaved = true,
+    this.showRango = true,
   });
 
   @override
@@ -20,7 +22,8 @@ class ProfileTabsNav extends StatelessWidget {
       const _TabSpec(ProfileTab.fotos, Icons.grid_on_rounded),
       const _TabSpec(ProfileTab.rutinas, Icons.fitness_center_rounded),
       const _TabSpec(ProfileTab.recetas, Icons.restaurant_menu_rounded),
-      const _TabSpec(ProfileTab.rango, Icons.workspace_premium_rounded),
+      if (showRango)
+        const _TabSpec(ProfileTab.rango, Icons.workspace_premium_rounded),
       if (showSaved)
         const _TabSpec(ProfileTab.guardados, Icons.bookmark_border_rounded),
     ];

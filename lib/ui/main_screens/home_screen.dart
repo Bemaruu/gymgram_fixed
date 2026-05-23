@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/analytics_service.dart';
 import '../../services/chat_service.dart';
@@ -33,17 +34,63 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _likedIds = {};
   Set<String> _savedIds = {};
 
+  RealtimeChannel? _notifChannel;
+  RealtimeChannel? _chatChannel;
+
   @override
   void initState() {
     super.initState();
     _loadPosts();
     _checkUnreadNotifications();
     _loadUnreadChats();
+    _subscribeRealtime();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationService.instance.initialize().catchError(
         (e) => debugPrint('NotificationService error: $e'),
       );
     });
+  }
+
+  void _subscribeRealtime() {
+    final uid = SupabaseService.instance.currentUserId;
+    if (uid == null) return;
+    final client = SupabaseService.instance.client;
+
+    _notifChannel = client
+        .channel('home-notif-$uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          callback: (payload) {
+            if ((payload.newRecord['user_id'] as String?) == uid) {
+              if (mounted) setState(() => _hasNotifications = true);
+            }
+          },
+        )
+        .subscribe();
+
+    _chatChannel = client
+        .channel('home-chat-$uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chat_participants',
+          callback: (payload) {
+            if ((payload.newRecord['user_id'] as String?) == uid) {
+              _loadUnreadChats();
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _notifChannel?.unsubscribe();
+    _chatChannel?.unsubscribe();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUnreadChats() async {
