@@ -34,8 +34,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _likedIds = {};
   Set<String> _savedIds = {};
 
-  RealtimeChannel? _notifChannel;
-  RealtimeChannel? _chatChannel;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  static const int _pageSize = 30;
+
+  RealtimeChannel? _homeChannel;
 
   @override
   void initState() {
@@ -56,39 +59,40 @@ class _HomeScreenState extends State<HomeScreen> {
     if (uid == null) return;
     final client = SupabaseService.instance.client;
 
-    _notifChannel = client
-        .channel('home-notif-$uid')
+    // Un solo canal con filtros server-side (user_id) para ambas tablas:
+    // reduce conexiones por usuario y el fan-out de mensajes en realtime.
+    _homeChannel = client
+        .channel('home-$uid')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'notifications',
-          callback: (payload) {
-            if ((payload.newRecord['user_id'] as String?) == uid) {
-              if (mounted) setState(() => _hasNotifications = true);
-            }
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: uid,
+          ),
+          callback: (_) {
+            if (mounted) setState(() => _hasNotifications = true);
           },
         )
-        .subscribe();
-
-    _chatChannel = client
-        .channel('home-chat-$uid')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'chat_participants',
-          callback: (payload) {
-            if ((payload.newRecord['user_id'] as String?) == uid) {
-              _loadUnreadChats();
-            }
-          },
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: uid,
+          ),
+          callback: (_) => _loadUnreadChats(),
         )
         .subscribe();
   }
 
   @override
   void dispose() {
-    _notifChannel?.unsubscribe();
-    _chatChannel?.unsubscribe();
+    _homeChannel?.unsubscribe();
     _pageController.dispose();
     super.dispose();
   }
@@ -117,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadPosts() async {
     if (!_isLoading) setState(() => _isLoading = true);
     try {
-      final posts = await PostService.instance.getFeedPosts();
+      final posts = await PostService.instance.getFeedPosts(limit: _pageSize);
       final postIds = posts.map((p) => p['id'] as String).toList();
       final batch = await PostService.instance.batchGetLikedAndSaved(postIds);
       if (!mounted) return;
@@ -125,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _posts = posts;
         _likedIds = batch.likedIds;
         _savedIds = batch.savedIds;
+        _hasMore = posts.length == _pageSize;
         _isLoading = false;
       });
       AnalyticsService.instance.feedViewed();
@@ -132,6 +137,37 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('Error cargando posts: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Carga la siguiente página del feed y la agrega al final (scroll infinito).
+  /// Se dispara desde el itemBuilder al acercarse al último post.
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    _isLoadingMore = true;
+    try {
+      final more = await PostService.instance
+          .getFeedPosts(limit: _pageSize, offset: _posts.length);
+      final existing = _posts.map((p) => p['id']).toSet();
+      final fresh =
+          more.where((p) => !existing.contains(p['id'])).toList();
+      if (fresh.isEmpty) {
+        _hasMore = false;
+        return;
+      }
+      final ids = fresh.map((p) => p['id'] as String).toList();
+      final batch = await PostService.instance.batchGetLikedAndSaved(ids);
+      if (!mounted) return;
+      setState(() {
+        _posts.addAll(fresh);
+        _likedIds.addAll(batch.likedIds);
+        _savedIds.addAll(batch.savedIds);
+        _hasMore = more.length == _pageSize;
+      });
+    } catch (e) {
+      debugPrint('Error cargando más posts: $e');
+    } finally {
+      _isLoadingMore = false;
     }
   }
 
@@ -188,6 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               itemCount: _posts.length,
               itemBuilder: (context, index) {
+                if (index >= _posts.length - 3) _loadMore();
                 final post = _posts[index];
                 final id = post['id'] as String? ?? '';
                 return PostWidget(

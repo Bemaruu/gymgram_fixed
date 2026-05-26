@@ -1,13 +1,13 @@
 TERMINOS Y CONDICIONES DE USO DE GYMGRAM
 
-Ultima actualizacion: [DD/MM/AAAA]
+Ultima actualizacion: 27/05/2026
 Version: 1.0 Beta
 Aplicacion: GymGram
-Titular y Responsable del Tratamiento: [NOMBRE_EMPRESA_O_PERSONA_NATURAL]
-RUT o identificacion legal: [RUT_EMPRESA_O_RUN_PERSONA]
-Domicilio legal: [DIRECCION_LEGAL], [CIUDAD], Chile
-Correo legal: [CORREO_LEGAL@GYMGRAM.APP]
-Correo proteccion de datos: [CORREO_PRIVACIDAD@GYMGRAM.APP]
+Titular y Responsable del Tratamiento: Benjamin Rodriguez (persona natural)
+RUT o identificacion legal: RUN 22.074.633-K
+Domicilio legal: Conchali, Santiago, Chile
+Correo legal: gymgrambn@gmail.com
+Correo proteccion de datos: gymgrambn@gmail.com
 
 AVISO IMPORTANTE ANTES DE CONTINUAR
 
@@ -57,7 +57,7 @@ Al registrarte, declaras bajo tu responsabilidad que cumples con la edad minima 
 
 Si GymGram detecta o recibe notificacion fundada de que una cuenta fue creada por una persona menor de 16 anos, procedera a: (a) suspender o eliminar la cuenta de forma inmediata; (b) eliminar todos los datos personales asociados sin demora injustificada; y (c) no utilizar dichos datos para ningun fin.
 
-Para reportar una cuenta de un menor de edad, escribir a: [CORREO_PRIVACIDAD@GYMGRAM.APP]
+Para reportar una cuenta de un menor de edad, escribir a: gymgrambn@gmail.com
 
 
 4. CUENTA DE USUARIO
@@ -72,7 +72,7 @@ Eres responsable de:
 - Toda actividad realizada desde tu cuenta.
 - Actualizar tus datos si cambian de manera relevante.
 
-Si sospechas que alguien accedio sin autorizacion a tu cuenta, debes informarlo a GymGram lo antes posible escribiendo a [CORREO_LEGAL@GYMGRAM.APP].
+Si sospechas que alguien accedio sin autorizacion a tu cuenta, debes informarlo a GymGram lo antes posible escribiendo a gymgrambn@gmail.com.
 
 GymGram no se responsabiliza por perdidas derivadas del uso no autorizado de tu cuenta cuando dicho uso resulte de que no tomaste medidas razonables para proteger tus credenciales.
 
@@ -172,11 +172,11 @@ GymGram no sera responsable por lesiones, danos o consecuencias derivadas del us
 
 El uso de GymGram implica el tratamiento de datos personales, incluyendo datos de caracter sensible relacionados con tu salud, cuerpo, actividad fisica, habitos y caracteristicas personales.
 
-El tratamiento de datos personales se rige por la Politica de Privacidad de GymGram, disponible en [URL_POLITICA_PRIVACIDAD] y accesible desde la aplicacion en todo momento. La Politica de Privacidad explica:
+El tratamiento de datos personales se rige por la Politica de Privacidad de GymGram, disponible en https://gymgram.app/privacy (disponible en la app desde Ajustes > Legal) y accesible desde la aplicacion en todo momento. La Politica de Privacidad explica:
 
 - Que datos se recopilan y con que finalidad especifica.
 - Base legal del tratamiento (consentimiento, obligacion legal, interes legitimo cuando aplique).
-- Como y donde se almacenan los datos (Supabase, servidores en [PAIS_SERVIDORES_SUPABASE]).
+- Como y donde se almacenan los datos (Supabase, servidores en Estados Unidos).
 - Con quienes se comparten (Supabase, Mixpanel y otros proveedores de servicio detallados).
 - Derechos del titular y como ejercerlos.
 - Plazos de conservacion de cada categoria de dato.
@@ -212,7 +212,7 @@ Conforme a la Ley N° 19.628 y a la Ley N° 21.719, tienes los siguientes derech
 - Derecho de portabilidad (Ley 21.719, vigente desde 2026): Solicitar una copia de tus datos en formato estructurado y de uso comun.
 - Derecho a no ser objeto de decisiones automatizadas: Solicitar revision humana de decisiones que te afecten tomadas exclusivamente por medios automaticos.
 
-Para ejercer cualquiera de estos derechos, escribe a: [CORREO_PRIVACIDAD@GYMGRAM.APP]
+Para ejercer cualquiera de estos derechos, escribe a: gymgrambn@gmail.com
 
 GymGram respondera tu solicitud en un plazo maximo de 15 dias habiles desde su recepcion. En casos complejos, este plazo podra extenderse hasta 30 dias habiles adicionales, informandote del motivo.
 
@@ -244,7 +244,7 @@ Queda prohibido:
 
 Cualquier actividad sospechosa podra ser investigada, bloqueada, denunciada o informada a las autoridades competentes.
 
-Si descubres una vulnerabilidad de seguridad en GymGram, te pedimos que la reportes responsablemente a [CORREO_LEGAL@GYMGRAM.APP] antes de divulgarla publicamente. GymGram se compromete a responder en un plazo de 5 dias habiles.
+Si descubres una vulnerabilidad de seguridad en GymGram, te pedimos que la reportes responsablemente a gymgrambn@gmail.com antes de divulgarla publicamente. GymGram se compromete a responder en un plazo de 5 dias habiles.
 
 
 13. MODERACION, DENUNCIAS Y SUSPENSION DE CUENTAS
@@ -286,12 +286,12 @@ Las condiciones especificas de pago, precio, duracion, renovacion, cancelacion, 
 
 Si las compras se realizan a traves de App Store o Google Play, tambien se aplicaran las reglas, condiciones y politicas de dichas plataformas, incluyendo sus politicas de reembolso, que pueden diferir de las de GymGram.
 
-Durante la Beta, GymGram no ofrece funciones de pago. Cualquier cobro durante esta etapa seria un error que debe reportarse a [CORREO_LEGAL@GYMGRAM.APP].
+Durante la Beta, GymGram no ofrece funciones de pago. Cualquier cobro durante esta etapa seria un error que debe reportarse a gymgrambn@gmail.com.
 
 
 16. PROPIEDAD INTELECTUAL DE GYMGRAM
 
-GymGram, su nombre, logo, diseno, interfaz, codigo, marca, graficos, textos, estructura, funcionalidades, sistemas, bases de datos, algoritmos, contenido propio y elementos visuales son propiedad de [NOMBRE_EMPRESA_O_PERSONA_NATURAL] o de sus respectivos titulares, y estan protegidos por la legislacion de propiedad intelectual e industrial de Chile y los tratados internacionales aplicables.
+GymGram, su nombre, logo, diseno, interfaz, codigo, marca, graficos, textos, estructura, funcionalidades, sistemas, bases de datos, algoritmos, contenido propio y elementos visuales son propiedad de Benjamin Rodriguez (persona natural) o de sus respectivos titulares, y estan protegidos por la legislacion de propiedad intelectual e industrial de Chile y los tratados internacionales aplicables.
 
 No puedes copiar, modificar, distribuir, vender, arrendar, explotar, descompilar, realizar ingenieria inversa ni crear productos derivados de GymGram sin autorizacion previa y por escrito del titular.
 
@@ -344,7 +344,7 @@ Nada en estos Terminos limitara derechos irrenunciables que correspondan al usua
 El usuario podra solicitar la eliminacion de su cuenta en cualquier momento mediante:
 
 - La opcion "Eliminar cuenta" disponible en la configuracion de la app; o
-- Enviando una solicitud escrita a [CORREO_PRIVACIDAD@GYMGRAM.APP] con el asunto "Solicitud de eliminacion de cuenta".
+- Enviando una solicitud escrita a gymgrambn@gmail.com con el asunto "Solicitud de eliminacion de cuenta".
 
 Efectos de la eliminacion:
 
@@ -367,7 +367,7 @@ Para cambios menores o formales (correcciones ortograficas, clarificaciones sin 
 
 El uso continuado de GymGram despues de la entrada en vigencia de los cambios implica aceptacion de los nuevos Terminos. Si no aceptas los cambios, puedes eliminar tu cuenta antes de la fecha de vigencia.
 
-La version vigente de los Terminos siempre estara disponible en la aplicacion y en [URL_TERMINOS_Y_CONDICIONES].
+La version vigente de los Terminos siempre estara disponible en la aplicacion y en https://gymgram.app/terms (disponible en la app desde Ajustes > Legal).
 
 
 22. LEGISLACION APLICABLE Y RESOLUCION DE CONFLICTOS
@@ -395,11 +395,11 @@ Nada en estos Terminos impide al usuario ejercer sus derechos ante las autoridad
 
 Para consultas legales, reportes, solicitudes de ejercicio de derechos o reclamos relacionados con estos Terminos o con el tratamiento de datos personales:
 
-Correo legal general: [CORREO_LEGAL@GYMGRAM.APP]
-Correo proteccion de datos (privacidad): [CORREO_PRIVACIDAD@GYMGRAM.APP]
-Responsable: [NOMBRE_EMPRESA_O_PERSONA_NATURAL]
-RUT o identificacion legal: [RUT_EMPRESA_O_RUN_PERSONA]
-Domicilio: [DIRECCION_LEGAL], [CIUDAD], Chile
+Correo legal general: gymgrambn@gmail.com
+Correo proteccion de datos (privacidad): gymgrambn@gmail.com
+Responsable: Benjamin Rodriguez (persona natural)
+RUT o identificacion legal: RUN 22.074.633-K
+Domicilio: Conchali, Santiago, Chile
 Plazo de respuesta: hasta 15 dias habiles desde recibida la solicitud.
 
 
@@ -420,12 +420,12 @@ GymGram puede usar herramientas de analisis de uso como Mixpanel para recopilar 
 
 Esta informacion se usa exclusivamente para mejorar la experiencia de uso, detectar errores tecnicos y priorizar el desarrollo de la app. No se vende a terceros ni se usa para publicidad personalizada externa.
 
-Tienes derecho a oponerte al seguimiento de comportamiento. Para ejercer este derecho, puedes: (a) ajustar la configuracion de privacidad de la app en la seccion "Privacidad y datos" (disponible antes del lanzamiento oficial); o (b) enviar una solicitud a [CORREO_PRIVACIDAD@GYMGRAM.APP].
+Tienes derecho a oponerte al seguimiento de comportamiento. Para ejercer este derecho, puedes: (a) ajustar la configuracion de privacidad de la app en la seccion "Privacidad y datos" (disponible antes del lanzamiento oficial); o (b) enviar una solicitud a gymgrambn@gmail.com.
 
 En dispositivos iOS, el uso de seguimiento publicitario (si aplica en el futuro) estara sujeto al marco App Tracking Transparency (ATT) de Apple, que requerira tu consentimiento explicito previo.
 
 
 ---
 Version: 1.0 Beta
-Documento revisado el: [DD/MM/AAAA]
-Proxima revision programada: [DD/MM/AAAA] o antes de lanzamiento oficial.
+Documento revisado el: 27/05/2026
+Proxima revision programada: 27/05/2026 o antes de lanzamiento oficial.

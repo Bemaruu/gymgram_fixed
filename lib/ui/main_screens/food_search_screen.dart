@@ -48,7 +48,7 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
       });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(q));
+    _debounce = Timer(const Duration(milliseconds: 800), () => _search(q));
   }
 
   Future<void> _search(String query) async {

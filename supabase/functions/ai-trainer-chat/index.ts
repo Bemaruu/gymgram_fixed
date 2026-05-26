@@ -17,6 +17,7 @@ import { errorResponse, handlePreflight, jsonResponse } from '../_shared/cors.ts
 import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chat, ChatMessage, OpenAIError } from '../_shared/openai.ts';
 import { profileContext, trainerPersona, UserProfile } from '../_shared/prompts.ts';
+import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
 
 const DAILY_LIMIT = 10;
 
@@ -35,6 +36,14 @@ serve(async (req) => {
   if (content.length > 2000) return errorResponse('content too long', 400);
 
   const supabase = serviceClient();
+
+  // Tope duro de costo IA (safety net mensual)
+  try {
+    await enforceMonthlyCap(supabase, user.id, 'ai-trainer-chat');
+  } catch (e) {
+    if (e instanceof UsageCapError) return errorResponse('Monthly AI limit reached', 429);
+    throw e;
+  }
 
   // 1) Tier check
   const { data: profile } = await supabase

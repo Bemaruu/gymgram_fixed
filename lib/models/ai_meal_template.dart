@@ -1,3 +1,26 @@
+/// Un ingrediente estructurado de una receta: referencia a un alimento del
+/// catálogo (custom_foods, por name_normalized) y los gramos base con los que
+/// participa en la porción de referencia de la receta. Los macros se derivan
+/// del alimento al generar el plan, no se guardan aquí.
+class RecipeIngredient {
+  final String food; // name_normalized del alimento en custom_foods
+  final double grams; // gramos base en la porción de referencia
+
+  const RecipeIngredient({required this.food, required this.grams});
+
+  factory RecipeIngredient.fromMap(Map<String, dynamic> m) {
+    double toG(dynamic v) {
+      if (v is num) return v.toDouble();
+      return double.tryParse(v?.toString() ?? '') ?? 0;
+    }
+
+    return RecipeIngredient(
+      food: (m['food'] as String? ?? '').toLowerCase().trim(),
+      grams: toG(m['g'] ?? m['grams']),
+    );
+  }
+}
+
 /// Receta curada del catálogo GymGram (tabla ai_meal_templates).
 /// Los macros son por porción servida, no por 100g.
 class AiMealTemplate {
@@ -23,6 +46,7 @@ class AiMealTemplate {
   final String? sourceUrl;
   final String confiabilidad;
   final String paisOrigen;
+  final List<RecipeIngredient> ingredientesEstructurados;
 
   const AiMealTemplate({
     required this.id,
@@ -46,6 +70,7 @@ class AiMealTemplate {
     this.sourceUrl,
     required this.confiabilidad,
     this.paisOrigen = 'CL',
+    this.ingredientesEstructurados = const [],
   });
 
   bool get esMuyFacil => categoriaDificultad == 'Muy fácil';
@@ -86,6 +111,13 @@ class AiMealTemplate {
       sourceUrl: m['source_url'] as String?,
       confiabilidad: m['confiabilidad'] as String? ?? 'estimado',
       paisOrigen: m['pais_origen'] as String? ?? 'CL',
+      ingredientesEstructurados: (m['ingredientes_estructurados'] as List?)
+              ?.whereType<Map>()
+              .map((e) =>
+                  RecipeIngredient.fromMap(e.cast<String, dynamic>()))
+              .where((r) => r.food.isNotEmpty && r.grams > 0)
+              .toList() ??
+          const [],
     );
   }
 }

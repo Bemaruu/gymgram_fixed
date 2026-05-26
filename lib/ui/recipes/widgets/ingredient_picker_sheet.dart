@@ -43,7 +43,7 @@ class _IngredientPickerSheetState extends State<IngredientPickerSheet> {
 
   void _onSearchChanged(String v) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
+    _debounce = Timer(const Duration(milliseconds: 800), () async {
       final q = v.trim();
       if (q.length < 2) {
         setState(() => _results = []);

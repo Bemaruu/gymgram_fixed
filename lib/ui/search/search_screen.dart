@@ -17,6 +17,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final _focusNode = FocusNode();
 
   List<Map<String, dynamic>> _results = [];
+  List<Map<String, dynamic>> _suggested = [];
   bool _isLoading = false;
   bool _hasSearched = false;
   Timer? _debounce;
@@ -26,6 +27,14 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+    _loadSuggested();
+  }
+
+  Future<void> _loadSuggested() async {
+    try {
+      final s = await SupabaseService.instance.getSuggestedProfiles();
+      if (mounted) setState(() => _suggested = s);
+    } catch (_) {/* silencioso: el prompt vacío sigue sirviendo */}
   }
 
   @override
@@ -140,18 +149,41 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     if (!_hasSearched) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.person_search, color: Colors.white24, size: 72),
-            SizedBox(height: 16),
-            Text(
-              'Busca personas por nombre de usuario',
-              style: TextStyle(color: Colors.white38, fontSize: 15),
-            ),
-          ],
-        ),
+      if (_suggested.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.person_search, color: Colors.white24, size: 72),
+              SizedBox(height: 16),
+              Text(
+                'Busca personas por nombre de usuario',
+                style: TextStyle(color: Colors.white38, fontSize: 15),
+              ),
+            ],
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _suggested.length + 1,
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            return const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Sugerencias para ti',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+          }
+          final p = _suggested[i - 1];
+          return _UserTile(profile: p, onTap: () => _openProfile(p));
+        },
       );
     }
 

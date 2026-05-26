@@ -12,6 +12,7 @@ import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../plans/manage_subscription_screen.dart';
 import '../plans/plans_screen.dart';
+import '../social/referral_screen.dart';
 import 'settings/legal_document_screen.dart';
 import 'settings/sections/danger_zone.dart';
 import 'settings/sections/hero_profile_header.dart';
@@ -313,7 +314,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       await SupabaseService.instance.client.auth.signOut();
     }
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
   }
 
   Future<void> _confirmDelete() async {
@@ -390,6 +391,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
             _publicProfileSection(),
             _physicalSection(),
             _trainingSection(),
+            _communitySection(),
             if (_tier != SubscriptionTier.free) _aiSection(),
             if (_tier == SubscriptionTier.free)
               PremiumPromoCard(onTap: _openPremiumPaywall),
@@ -400,6 +402,25 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _communitySection() {
+    return SettingsSection(
+      title: 'Comunidad',
+      children: [
+        SettingsTile(
+          leadingIcon: Icons.card_giftcard_rounded,
+          leadingColor: AppColors.accentOrange,
+          title: 'Invita amigos',
+          subtitle: 'Comparte tu código y haz crecer la comunidad',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ReferralScreen()),
+            );
+          },
+        ),
+      ],
     );
   }
 

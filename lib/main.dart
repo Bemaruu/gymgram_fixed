@@ -73,9 +73,11 @@ Future<void> _boot() async {
   // Analytics no bloquea el arranque — se inicializa en segundo plano
   unawaited(Future(() async {
     try {
-      await AnalyticsService.instance.init(_mixpanelToken);
+      await AnalyticsService.instance.initIfConsented(_mixpanelToken);
       final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) AnalyticsService.instance.identify(user.id);
+      if (user != null && AnalyticsService.instance.isInitialized) {
+        AnalyticsService.instance.identify(user.id);
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Mixpanel init error: $e');
     }

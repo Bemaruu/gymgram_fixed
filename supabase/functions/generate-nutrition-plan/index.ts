@@ -11,6 +11,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { errorResponse, handlePreflight, jsonResponse } from '../_shared/cors.ts';
 import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chatJson, OpenAIError } from '../_shared/openai.ts';
+import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
 
 type FoodRow = {
   id: string;
@@ -63,6 +64,14 @@ serve(async (req) => {
   if (!user) return errorResponse('Unauthorized', 401);
 
   const supabase = serviceClient();
+
+  // Tope duro de costo IA (safety net mensual)
+  try {
+    await enforceMonthlyCap(supabase, user.id, 'generate-nutrition-plan');
+  } catch (e) {
+    if (e instanceof UsageCapError) return errorResponse('Monthly AI limit reached', 429);
+    throw e;
+  }
 
   // 1) profile
   const { data: profile } = await supabase

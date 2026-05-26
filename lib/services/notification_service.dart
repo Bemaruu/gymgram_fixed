@@ -28,7 +28,6 @@ class NotificationService {
   Future<void> _saveToken() async {
     try {
       final token = await _fcm.getToken();
-      if (kDebugMode) debugPrint('FCM token: $token');
       if (token == null) {
         if (kDebugMode) debugPrint('FCM getToken() returned null');
         return;
@@ -39,7 +38,7 @@ class NotificationService {
         {'user_id': uid, 'fcm_token': token, 'updated_at': DateTime.now().toIso8601String()},
         onConflict: 'user_id',
       );
-      if (kDebugMode) debugPrint('FCM token guardado para $uid');
+      if (kDebugMode) debugPrint('[FCM] token registered (len=${token.length}) for $uid');
     } catch (e) {
       debugPrint('_saveToken error: $e');
     }

@@ -1,14 +1,49 @@
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyticsService {
+  static const _consentKey = 'analytics_consent';
+
   static final AnalyticsService instance = AnalyticsService._();
   AnalyticsService._();
 
   Mixpanel? _mp;
+  String? _pendingToken;
+
+  bool get isInitialized => _mp != null;
 
   Future<void> init(String token) async {
+    if (_mp != null) return;
     _mp = await Mixpanel.init(token, trackAutomaticEvents: true);
     _mp?.setLoggingEnabled(false);
+  }
+
+  /// Inicializa Mixpanel solo si el usuario ya dio consentimiento de analytics.
+  /// Guarda el token para activarlo más tarde cuando el usuario consienta.
+  Future<void> initIfConsented(String token) async {
+    _pendingToken = token;
+    if (token.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_consentKey) ?? false) {
+      await init(token);
+    }
+  }
+
+  /// Llamar tras aceptar el consentimiento de analytics.
+  Future<void> enableAnalytics() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_consentKey, true);
+    final token = _pendingToken;
+    if (token != null && token.isNotEmpty && _mp == null) {
+      await init(token);
+    }
+  }
+
+  Future<void> disableAnalytics() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_consentKey, false);
+    _mp?.reset();
+    _mp = null;
   }
 
   // Asocia todos los eventos futuros al usuario autenticado

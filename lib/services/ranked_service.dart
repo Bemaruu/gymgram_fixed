@@ -101,7 +101,9 @@ class RankedService {
             final m = row as Map<String, dynamic>;
             progressByMission[m['mission_id'] as String] = m;
           }
-        } catch (_) {}
+        } catch (e) {
+          if (kDebugMode) debugPrint('[RankedService.getWeeklyMissions] progress fetch error: $e');
+        }
       }
 
       return (missions as List).map((row) {
@@ -301,7 +303,9 @@ class RankedService {
             finalRp = profile.currentRp;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[RankedService.getMySeasonRecap] reward fetch error: $e');
+      }
 
       // 3) Stats agregadas
       int daysTrained = 0;
@@ -319,7 +323,9 @@ class RankedService {
             .whereType<String>()
             .toSet()
             .length;
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[RankedService.getMySeasonRecap] workout_logs error: $e');
+      }
 
       try {
         final prsRows = await _client
@@ -328,7 +334,9 @@ class RankedService {
             .eq('user_id', uid)
             .gte('achieved_at', startDate.toIso8601String());
         prs = (prsRows as List).length;
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[RankedService.getMySeasonRecap] strength_records error: $e');
+      }
 
       try {
         // copias recibidas en rutinas propias
@@ -351,7 +359,9 @@ class RankedService {
               .toSet()
               .length;
         }
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[RankedService.getMySeasonRecap] routine_copies error: $e');
+      }
 
       // 4) Volumen, racha y PRs exactos via RPC get_user_season_stats.
       // Si el RPC existe (migracion aplicada) preferimos sus valores.

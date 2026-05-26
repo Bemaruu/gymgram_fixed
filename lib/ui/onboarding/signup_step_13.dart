@@ -1,13 +1,17 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/country_utils.dart';
+import '../../core/error_messages.dart';
 import '../../core/onboarding_constants.dart';
+import '../../core/onboarding_flow.dart';
 import '../../models/user_register_model.dart';
 import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/badge_service.dart';
 import '../../services/supabase_service.dart';
 import '../shared/custom_button.dart';
+import 'shared/onboarding_scaffold.dart';
 
 class SignupStep13 extends StatefulWidget {
   const SignupStep13({super.key});
@@ -135,6 +139,7 @@ String _mapTrainingLocation(String value) {
       final trainingLocationValue =
           _mapTrainingLocation(model.trainingLocation ?? '');
       final trainingTime = model.trainingTime ?? 'variable';
+      final countryCode = CountryUtils.detectDeviceCountry();
 
       // 1) Crear usuario en Supabase Auth
       await AuthService().registerWithEmail(email: email, password: password);
@@ -156,6 +161,7 @@ String _mapTrainingLocation(String value) {
         trainingLocation: trainingLocationValue,
         timeAvailability: trainingTime,
         birthDate: model.birthDate,
+        countryCode: countryCode,
       );
 
       // 3) Medallas de bienvenida
@@ -212,6 +218,7 @@ String _mapTrainingLocation(String value) {
           notificationsEnabled: model.notificationsEnabled,
           privacyConsentAt: model.privacyConsentAt,
           termsConsentAt: model.termsConsentAt,
+          countryCode: countryCode,
         );
       } catch (e) {
         debugPrint('saveOnboardingData warning: $e');
@@ -253,10 +260,9 @@ String _mapTrainingLocation(String value) {
     } catch (e) {
       if (!mounted) return;
 
-      final msg = e.toString().replaceFirst('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg.isNotEmpty ? msg : 'No se pudo crear la cuenta.'),
+          content: Text(humanizeError(e)),
           backgroundColor: Colors.red,
         ),
       );
@@ -332,6 +338,10 @@ String _mapTrainingLocation(String value) {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Builder(builder: (_) {
+                        final p = OnboardingFlow.progressFor('/signup_step_13', userData);
+                        return OnboardingProgress(step: p.step, total: p.total);
+                      }),
                       const Text(
                         '¡Último paso! 🔔',
                         textAlign: TextAlign.center,

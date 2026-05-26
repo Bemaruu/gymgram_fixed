@@ -1,14 +1,20 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_colors.dart';
+import '../../core/country_utils.dart';
 import '../../models/food_log.dart';
 import '../../services/analytics_service.dart';
+import '../../services/food_scan_service.dart';
 import '../../services/food_service.dart';
 import '../../services/meal_plan_generator.dart';
 import '../../services/simulated_ai_service.dart';
+import '../../widgets/ai_disclaimer_banner.dart';
+import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
 import '../../widgets/food_icon.dart';
@@ -25,6 +31,7 @@ class AlimentacionScreen extends StatefulWidget {
 
 class _AlimentacionScreenState extends State<AlimentacionScreen> {
   bool _isLoading = true;
+  bool _isPaid = false; // Plus/Premium: habilita el escáner de comida.
   int _selectedDayIndex = DateTime.now().weekday - 1;
   int _waterCount = 0;
 
@@ -55,6 +62,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   List<String> _dislikedFoods = [];
   String? _cookingTime;
   String? _userId;
+  String _countryCode = CountryUtils.defaultCountry;
 
   static const _days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _mealOrder = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -80,6 +88,12 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     super.initState();
     AnalyticsService.instance.nutritionScreenViewed();
     _load();
+    _loadTier();
+  }
+
+  Future<void> _loadTier() async {
+    final status = await SubscriptionService.instance.currentStatus();
+    if (mounted) setState(() => _isPaid = status.isPaid);
   }
 
   @override
@@ -129,6 +143,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final rawAllergies = (onboarding?['allergies'] as List?)?.cast<String>() ?? [];
       final rawDisliked = (onboarding?['disliked_foods'] as List?)?.cast<String>() ?? [];
       final cookingTime = onboarding?['cooking_time_preference'] as String?;
+      final countryCode = CountryUtils.normalize(
+        profile?['country_code'] as String? ??
+            onboarding?['country_code'] as String?,
+        fallback: CountryUtils.detectDeviceCountry(),
+      );
       final userId = SupabaseService.instance.currentUserId;
 
       if (!mounted) return;
@@ -146,6 +165,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _dislikedFoods = rawDisliked;
         _cookingTime = cookingTime;
         _userId = userId;
+        _countryCode = countryCode;
         _waterCount = water;
         // _isLoading se mantiene true hasta que el plan esté listo
       });
@@ -190,6 +210,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       weekIndex: weekIndex,
       dayIndex: _selectedDayIndex,
       slotVariations: _slotVariations,
+      countryCode: _countryCode,
     );
 
     final plan = await MealPlanGeneratorProvider.current.generate(input);
@@ -200,7 +221,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
           : (_userId ?? 'null');
       debugPrint(
         '[Dieta] userId=$uidShort week=$weekIndex day=$_selectedDayIndex '
-        'mode=${plan['food_mode']} cookingTime=$_cookingTime '
+        'mode=${plan['food_mode']} country=$_countryCode cookingTime=$_cookingTime '
         'items=${(plan['items'] as List).length}',
       );
       return true;
@@ -408,6 +429,104 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     return 'dinner';
   }
 
+  /// Flujo del escáner de comida (Plus/Premium): elegir foto → IA estima
+  /// alimentos → el usuario edita porciones y confirma el registro.
+  Future<void> _scanFood() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(PhosphorIconsFill.camera,
+                  color: Color(0xFF00BFFF)),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(PhosphorIconsFill.image,
+                  color: Color(0xFF00BFFF)),
+              title: const Text('Elegir de la galería'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    // Loading mientras la IA analiza.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Color(0xFF00BFFF)),
+                SizedBox(height: 16),
+                Text('Analizando tu comida…'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    ScanResult? result;
+    String? error;
+    try {
+      result = await FoodScanService.instance.scan(File(picked.path));
+    } catch (e) {
+      error = e.toString().replaceFirst('Exception: ', '');
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context); // cierra el loading
+
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    if (result == null || result.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No detectamos comida en la foto.')),
+      );
+      return;
+    }
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _ScanResultsSheet(
+        result: result!,
+        mealType: _suggestedMealType(),
+        date: _dateForDayIndex(_selectedDayIndex),
+      ),
+    );
+    if (saved == true) _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -421,23 +540,44 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => FoodSearchScreen(initialMealType: _suggestedMealType()),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_isPaid) ...[
+            FloatingActionButton.small(
+              heroTag: 'scanFood',
+              onPressed: _scanFood,
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF00BFFF),
+              elevation: 2,
+              child: const Icon(PhosphorIconsFill.camera),
             ),
-          );
-          if (result == true) _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
-        },
-        backgroundColor: const Color(0xFF00BFFF),
-        foregroundColor: Colors.white,
-        icon: const Icon(PhosphorIconsFill.plusCircle),
-        label: const Text(
-          'Agregar alimento',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+            const SizedBox(height: 12),
+          ],
+          FloatingActionButton.extended(
+            heroTag: 'addFood',
+            onPressed: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      FoodSearchScreen(initialMealType: _suggestedMealType()),
+                ),
+              );
+              if (result == true) {
+                _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
+              }
+            },
+            backgroundColor: const Color(0xFF00BFFF),
+            foregroundColor: Colors.white,
+            icon: const Icon(PhosphorIconsFill.plusCircle),
+            label: const Text(
+              'Agregar alimento',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -455,6 +595,8 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             ),
             centerTitle: true,
           ),
+
+          const SliverToBoxAdapter(child: AIDisclaimerBanner()),
 
           // Selector de día
           SliverToBoxAdapter(child: _buildDaySelector()),
@@ -663,20 +805,24 @@ class _CalorieCard extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            height: 130,
+            height: 150,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 CustomPaint(
-                  size: const Size(180, 130),
+                  size: const Size(180, 150),
                   painter: _CalorieArcPainter(progress: progress, over: over),
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 16),
-                    Text(
-                      '$consumed',
+                // Texto anclado arriba para que la separación con el arco
+                // sea determinista en cualquier dispositivo (no se solapa).
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 62),
+                      Text(
+                        '$consumed',
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -700,10 +846,11 @@ class _CalorieCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               _MacroBar(
@@ -1328,13 +1475,17 @@ class _WaterSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Center(
-            child: GestureDetector(
-              onTap: onReset,
+            child: TextButton(
+              onPressed: onReset,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(88, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                foregroundColor: Colors.black38,
+              ),
               child: const Text(
-                'Reiniciar',
+                'Reiniciar contador',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.black38,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -1412,11 +1563,11 @@ class _NutritionSummaryCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _MacroChipPlan(
-                  label: 'Proteína', grams: protein, color: Colors.blue.shade700),
+                  label: 'Proteína', grams: protein, color: const Color(0xFF5B8DEF)),
               _MacroChipPlan(
-                  label: 'Carbos', grams: carbs, color: Colors.orange.shade700),
+                  label: 'Carbos', grams: carbs, color: const Color(0xFFF5A623)),
               _MacroChipPlan(
-                  label: 'Grasas', grams: fats, color: Colors.green.shade700),
+                  label: 'Grasas', grams: fats, color: const Color(0xFF7ED321)),
             ],
           ),
         ],
@@ -1724,6 +1875,250 @@ class _MealSection extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Hoja de resultados del escáner de comida ────────────────────────────────
+
+class _ScanResultsSheet extends StatefulWidget {
+  final ScanResult result;
+  final String mealType;
+  final DateTime date;
+
+  const _ScanResultsSheet({
+    required this.result,
+    required this.mealType,
+    required this.date,
+  });
+
+  @override
+  State<_ScanResultsSheet> createState() => _ScanResultsSheetState();
+}
+
+class _ScanResultsSheetState extends State<_ScanResultsSheet> {
+  late List<ScannedFood> _items;
+  late List<double> _grams;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.of(widget.result.items);
+    _grams = _items.map((e) => e.grams).toList();
+  }
+
+  double get _totalKcal {
+    var t = 0.0;
+    for (var i = 0; i < _items.length; i++) {
+      final f = _items[i].grams > 0 ? _grams[i] / _items[i].grams : 1.0;
+      t += _items[i].kcal * f;
+    }
+    return t;
+  }
+
+  Future<void> _confirm() async {
+    if (_items.isEmpty || _saving) return;
+    setState(() => _saving = true);
+    try {
+      for (var i = 0; i < _items.length; i++) {
+        await FoodService.instance.logPlanComponent(
+          _items[i].toLogComponent(_grams[i]),
+          widget.mealType,
+          date: widget.date,
+        );
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo registrar. Intenta de nuevo.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final warnings = widget.result.allergyWarnings;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Row(
+                children: [
+                  Icon(PhosphorIconsFill.sparkle, color: Color(0xFF00BFFF)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Alimentos detectados',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Valores estimados por IA. Ajusta la porción antes de guardar.',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+            ),
+            if (warnings.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(PhosphorIconsFill.warning,
+                        color: Color(0xFFE67E22), size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Ojo: ${warnings.join(", ")} podría chocar con tus alergias.',
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFFB35900)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: ListView.separated(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                itemCount: _items.length,
+                separatorBuilder: (_, __) => const Divider(height: 16),
+                itemBuilder: (context, i) => _itemTile(i),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Total: ${_totalKcal.round()} kcal',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: _items.isEmpty || _saving ? null : _confirm,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00BFFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text('Registrar (${_items.length})'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _itemTile(int i) {
+    final item = _items[i];
+    final f = item.grams > 0 ? _grams[i] / item.grams : 1.0;
+    final kcal = (item.kcal * f).round();
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.name,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$kcal kcal',
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 72,
+          child: TextFormField(
+            initialValue: _grams[i].round().toString(),
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              isDense: true,
+              suffixText: 'g',
+              contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (v) {
+              final g = double.tryParse(v) ?? 0;
+              setState(() => _grams[i] = g > 0 ? g : 0);
+            },
+          ),
+        ),
+        IconButton(
+          icon: const Icon(PhosphorIconsRegular.x, size: 18),
+          color: Colors.black38,
+          onPressed: () => setState(() {
+            _items.removeAt(i);
+            _grams.removeAt(i);
+          }),
+        ),
+      ],
     );
   }
 }

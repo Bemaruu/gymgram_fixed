@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../core/country_utils.dart';
 import 'ai_meal_template_service.dart';
 import 'food_catalog_service.dart';
 import 'nutrition_calculator.dart';
@@ -23,6 +24,7 @@ class MealPlanInput {
   final String? userId;
   final int weekIndex;
   final int dayIndex;
+  final String countryCode;
   // Variación por comida (slotIndex → nº de "cambios" pedidos por el usuario).
   // Permite intercambiar una comida por otra alternativa de forma estable.
   final Map<int, int> slotVariations;
@@ -44,6 +46,7 @@ class MealPlanInput {
     this.userId,
     this.weekIndex = 0,
     this.dayIndex = 0,
+    this.countryCode = CountryUtils.defaultCountry,
     this.slotVariations = const {},
   });
 }
@@ -78,6 +81,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     var templates = await AiMealTemplateService.instance.getTemplatesForGoal(
       input.goal,
       dificultades: dificultades,
+      countryCode: input.countryCode,
       limit: 45,
     );
     if (templates.length < slots.length) {
@@ -85,17 +89,32 @@ class DbMealPlanGenerator implements MealPlanGenerator {
           ? const ['Muy fácil', 'Normal', 'Gourmet']
           : const ['Muy fácil', 'Normal'];
       templates = await AiMealTemplateService.instance
-          .getTemplatesForGoal(input.goal, dificultades: broad, limit: 45);
+          .getTemplatesForGoal(
+        input.goal,
+        dificultades: broad,
+        countryCode: input.countryCode,
+        limit: 45,
+      );
     }
 
-    final catalog = await FoodCatalogService.instance.getCatalog();
+    final catalog =
+        await FoodCatalogService.instance.getCatalog(input.countryCode);
+    // Índice de TODOS los alimentos (sin filtro de país) para derivar los
+    // macros de las recetas a partir de sus ingredientes estructurados.
+    final ingredientIndex =
+        await FoodCatalogService.instance.getIngredientIndex();
     // Solo cae al simulado si NO hay datos (Supabase caído). Con catálogo,
     // aunque no haya recetas (ej. vegano/keto), se arma con alimentos sueltos.
     if (catalog.isEmpty && templates.isEmpty) {
       return const SimulatedMealPlanGenerator().generate(input);
     }
 
-    return buildPlan(input: input, templates: templates, catalog: catalog);
+    return buildPlan(
+      input: input,
+      templates: templates,
+      catalog: catalog,
+      ingredientIndex: ingredientIndex,
+    );
   }
 
   /// Arma el plan a partir de datos ya cargados (recetas + catálogo). Es PURO
@@ -106,6 +125,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     required MealPlanInput input,
     required List<AiMealTemplate> templates,
     required List<CatalogFood> catalog,
+    Map<String, CatalogFood> ingredientIndex = const {},
   }) {
     final effectiveTarget =
         input.targetWeightKg > 0 ? input.targetWeightKg : input.weightKg;
@@ -128,9 +148,14 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     final slots = _slotsFor(input.mealsPerDay);
     final allowGourmet = input.cookingTime == 'enjoy_cooking';
     final dificultades = _difficultiesFor(input.cookingTime);
+    final countryCode = CountryUtils.normalize(input.countryCode);
 
     var t = templates
         .where((x) => _matchesGoal(x, input.goal))
+        .where((x) {
+          final origin = x.paisOrigen.toUpperCase();
+          return origin == countryCode || origin == 'GLOBAL';
+        })
         .where((x) => dificultades.contains(x.categoriaDificultad))
         .toList();
     if (!allowGourmet) {
@@ -194,6 +219,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
         dayIndex: input.dayIndex,
         slotIndex: i,
         usedRecipes: usedRecipes,
+        ingredientIndex: ingredientIndex,
       ));
     }
 
@@ -206,8 +232,10 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     );
 
     return {
-      'title': 'Plan ${_goalLabel(input.goal)} — Chile',
-      'food_mode': 'chile',
+      'title':
+          'Plan ${_goalLabel(input.goal)} - ${CountryUtils.labelFor(countryCode)}',
+      'food_mode': countryCode.toLowerCase(),
+      'country_code': countryCode,
       'total_calories': nutrition.recommendedCalories,
       'maintenance_calories': nutrition.maintenanceCalories,
       'bmr': nutrition.bmr,
@@ -298,6 +326,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     required int dayIndex,
     required int slotIndex,
     required Set<String> usedRecipes,
+    Map<String, CatalogFood> ingredientIndex = const {},
   }) {
     // Alterna determinísticamente: ~mitad recetas, ~mitad alimentos sueltos.
     final asRecipe = ((seed ~/ 13 + dayIndex + slotIndex) % 2 == 0);
@@ -320,7 +349,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     }
 
     Map<String, dynamic>? tryRecipe() => _recipeAlone(templates, slot, target,
-        seed, dayIndex, slotIndex, usedRecipes, family);
+        seed, dayIndex, slotIndex, usedRecipes, family, ingredientIndex);
     Map<String, dynamic>? tryFoods() => _buildFromFoods(slot, target, pools,
         dietPref, proteinCalFrac, seed, dayIndex, slotIndex, family);
 
@@ -366,11 +395,70 @@ class DbMealPlanGenerator implements MealPlanGenerator {
     int slotIndex,
     Set<String> usedRecipes, [
     String? proteinFamily,
+    Map<String, CatalogFood> ingredientIndex = const {},
   ]) {
     final t = _pickRecipe(
         templates, slot, seed, dayIndex, slotIndex, usedRecipes, proteinFamily);
     if (t == null) return null;
+    // Nivel MyFitnessPal: si la receta trae ingredientes estructurados y todos
+    // resuelven en el catálogo, deriva macros sumando cada ingrediente y
+    // escala sus gramos al objetivo. Si no, cae al método agregado (legacy).
+    final byIngredients =
+        _recipeFromIngredients(t, slot, target, ingredientIndex);
+    if (byIngredients != null) return byIngredients;
     return _toItem(t, slot, _recipeMult(target, t.kcal, 2.5));
+  }
+
+  /// Arma una receta desde sus ingredientes estructurados: resuelve cada uno en
+  /// el catálogo, calcula los macros base sumando su aporte, escala los gramos
+  /// para acercarse a [target] kcal y emite un item con desglose por ingrediente
+  /// (components). Devuelve null si la receta no tiene ingredientes o si alguno
+  /// no existe en el catálogo (el caller cae al método agregado).
+  Map<String, dynamic>? _recipeFromIngredients(
+    AiMealTemplate t,
+    String slot,
+    double target,
+    Map<String, CatalogFood> index,
+  ) {
+    final ings = t.ingredientesEstructurados;
+    if (ings.isEmpty || index.isEmpty) return null;
+
+    final resolved = <(CatalogFood, double)>[];
+    double baseKcal = 0;
+    for (final ing in ings) {
+      final food = index[ing.food];
+      if (food == null) return null; // falta un ingrediente → fallback
+      resolved.add((food, ing.grams));
+      baseKcal += food.kcalFor(ing.grams);
+    }
+    if (baseKcal <= 0) return null;
+
+    final mult =
+        double.parse((target / baseKcal).clamp(0.4, 2.5).toStringAsFixed(2));
+
+    final components = resolved
+        .map((pair) => _recipeComponent(pair.$1, pair.$2 * mult))
+        .toList();
+
+    return _composeItem(slot, t.nombre, components,
+        recipeBaseId: t.externalId, mult: mult);
+  }
+
+  // Componente de receta con gramos exactos (no redondea a porciones-unidad,
+  // a diferencia de _foodComponent): "150g arroz", no "1 porción".
+  Map<String, dynamic> _recipeComponent(CatalogFood f, double grams) {
+    final g = double.parse(grams.toStringAsFixed(0));
+    return {
+      'kind': 'food',
+      'name': f.name,
+      'grams': g,
+      'units': 1,
+      'serving_g': f.servingGrams,
+      'calories': double.parse(f.kcalFor(g).toStringAsFixed(1)),
+      'protein': double.parse(f.proteinFor(g).toStringAsFixed(1)),
+      'carbs': double.parse(f.carbsFor(g).toStringAsFixed(1)),
+      'fats': double.parse(f.fatFor(g).toStringAsFixed(1)),
+    };
   }
 
   AiMealTemplate? _pickRecipe(

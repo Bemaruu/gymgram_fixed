@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/country_utils.dart';
 import 'badge_service.dart';
 import 'image_compressor.dart';
 
@@ -36,6 +37,7 @@ class ProfileService {
     String? fitnessGoal,
     String? trainingLocation,
     String? foodMode,
+    String? countryCode,
   }) async {
     await _client.from('profiles').upsert({
       'id': userId,
@@ -49,6 +51,7 @@ class ProfileService {
       if (fitnessGoal != null) 'fitness_goal': fitnessGoal,
       if (trainingLocation != null) 'training_location': trainingLocation,
       if (foodMode != null) 'food_mode': foodMode,
+      'country_code': CountryUtils.normalize(countryCode),
       'bio': '',
     });
     await BadgeService.instance.checkAndAwardBadges(userId, 'profile_completed');
@@ -97,7 +100,7 @@ class ProfileService {
     await _client.storage.from('avatars').upload(
       '$uid/$path',
       compressed,
-      fileOptions: const FileOptions(upsert: true),
+      fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg'),
     );
     return _client.storage.from('avatars').getPublicUrl('$uid/$path');
   }

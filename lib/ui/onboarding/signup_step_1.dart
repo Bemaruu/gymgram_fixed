@@ -94,7 +94,7 @@ class _SignupStep1State extends State<SignupStep1> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -144,7 +144,7 @@ class _SignupStep1State extends State<SignupStep1> {
                         controller: _passwordController,
                         obscureText: !_showPassword,
                         decoration: InputDecoration(
-                          hintText: 'Contraseña (8+ con letras y números)',
+                          hintText: 'Contraseña (8+, may/min, número y símbolo)',
                           suffixIcon: IconButton(
                             icon: Icon(
                               _showPassword

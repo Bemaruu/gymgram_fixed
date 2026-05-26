@@ -8,6 +8,7 @@ import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
 import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/ai_disclaimer_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
 import '../ranked/set_logger_sheet.dart';
@@ -1332,6 +1333,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
             ),
       body: Column(
         children: [
+          const AIDisclaimerBanner(),
           _buildDaySelector(),
 
           if (_availableDays.where((d) => d).length >= 6)

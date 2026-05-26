@@ -10,7 +10,7 @@ proyecto via RAG sobre `exercise_catalog` y `custom_foods`.
 | `generate-routine`            | gpt-4o-mini      | On-demand (Flutter)   | Free        |
 | `generate-nutrition-plan`     | gpt-4o-mini      | On-demand (Flutter)   | Free        |
 | `ai-trainer-chat`             | gpt-4o-mini      | On-demand (Flutter)   | Premium     |
-| `post-workout-ai-response`    | gpt-4o           | On-demand tras feedback | Premium   |
+| `post-workout-ai-response`    | gpt-4o-mini      | On-demand tras feedback | Premium   |
 | `weekly-checkin-response`     | gpt-4o-mini      | On-demand tras checkin  | Plus      |
 | `generate-monthly-report`     | mini / gpt-4o    | pg_cron (dia 1, 03:00 UTC) + on-demand | Plus |
 
@@ -110,9 +110,18 @@ Con RAG corto, los outputs son pocos cientos de tokens. A precios actuales OpenA
 - Free user: ~1 generate-routine + 1 generate-nutrition-plan al onboarding =
   ~$0.001 USD/usuario.
 - Plus: + 4 weekly-checkins/mes + 1 monthly_report = ~$0.005/usuario/mes.
-- Premium: + ~20 post-workout (gpt-4o) + chat libre (mini) + monthly report gpt-4o
-  = ~$0.05-0.08/usuario/mes.
+- Premium: + ~20 post-workout (mini) + chat libre (mini) + monthly report gpt-4o
+  = ~$0.02-0.04/usuario/mes.
 
-Tope hard: agregar conteo de invocaciones por usuario/mes y rechazar a partir de
-X. No implementado en esta fase porque la cuota de mensajes diaria (10) y la de
-cambios anuales (4/8/12) ya acotan el blast radius.
+gpt-4o se usa en UN solo lugar: el informe mensual Premium (1x/mes, datos reales
+de entrenamiento + nutricion + conversaciones post-entreno + check-ins). Todo lo
+frecuente (post-entreno, chat, check-in) corre en gpt-4o-mini.
+
+Tope hard: IMPLEMENTADO (2026-05-24). `_shared/usage.ts` registra cada
+invocación en `ai_usage_events` y aplica un cap mensual global por usuario
+(`GLOBAL_MONTHLY_CAP = 800`) en las 5 funciones on-demand (generate-routine,
+generate-nutrition-plan, ai-trainer-chat, post-workout-ai-response,
+weekly-checkin-response). Si se supera → 429 sin pegarle a OpenAI. Es una red de
+seguridad contra abuso/scripts; las cuotas finas (10 msg/día, cambios anuales
+4/8/12) siguen vigentes. **DESPLEGADO a producción el 2026-05-24** (las 5
+funciones ACTIVE, tabla `ai_usage_events` migrada). Sin errores en logs.

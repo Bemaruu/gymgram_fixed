@@ -16,14 +16,14 @@ class ExerciseCard extends StatelessWidget {
   final int? restSeconds;
 
   const ExerciseCard({
-    Key? key,
+    super.key,
     required this.name,
     this.reps,
     this.durationSeconds,
     required this.gifUrl,
     this.sets,
     this.restSeconds,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -53,9 +53,14 @@ class InputSanitizers {
   static String? validatePassword(String? v) {
     final s = v ?? '';
     if (s.length < 8) return 'Mínimo 8 caracteres';
-    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(s);
+    final hasLower = RegExp(r'[a-z]').hasMatch(s);
+    final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
     final hasDigit = RegExp(r'\d').hasMatch(s);
-    if (!hasLetter || !hasDigit) return 'Debe tener letras y números';
+    final hasSymbol =
+        RegExp(r'''[!@#$%^&*()_+\-=\[\]{};:'"|<>?,./`~]''').hasMatch(s);
+    if (!hasLower || !hasUpper || !hasDigit || !hasSymbol) {
+      return 'Debe incluir mayúscula, minúscula, número y símbolo';
+    }
     return null;
   }
 

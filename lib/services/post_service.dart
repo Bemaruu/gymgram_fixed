@@ -1,8 +1,30 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/post.dart';
 import 'badge_service.dart';
 import 'image_compressor.dart';
+import 'video_compressor.dart';
+
+String _contentTypeFor(String ext) {
+  switch (ext.toLowerCase()) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+      return 'image/heic';
+    case 'mp4':
+      return 'video/mp4';
+    case 'mov':
+      return 'video/quicktime';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 class PostService {
   // Lista local para compatibilidad con pantallas que aún la usan
@@ -65,10 +87,16 @@ class PostService {
     }
     final fileToUpload = mediaType == 'image'
         ? await ImageCompressor.compress(file)
-        : file;
-    final uploadExt = mediaType == 'image' ? 'jpg' : ext;
+        : await VideoCompressor.compress(file);
+    // El ext se deriva del archivo real: jpg tras comprimir imagen, mp4 tras
+    // comprimir video, o el original si la compresión hizo fallback.
+    final uploadExt = fileToUpload.path.split('.').last.toLowerCase();
     final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$uploadExt';
-    await _client.storage.from('posts').upload(path, fileToUpload);
+    await _client.storage.from('posts').upload(
+      path,
+      fileToUpload,
+      fileOptions: FileOptions(contentType: _contentTypeFor(uploadExt)),
+    );
     return _client.storage.from('posts').getPublicUrl(path);
   }
 
@@ -126,7 +154,9 @@ class PostService {
       await BadgeService.instance.checkAndAwardBadges(uid, 'like_given');
       try {
         await _client.rpc('notify_like', params: {'p_post_id': postId});
-      } catch (_) {}
+      } catch (e) {
+        if (kDebugMode) debugPrint('[PostService.toggleLike] notify_like error: $e');
+      }
     } else {
       await _client.from('likes').delete().eq('id', existing['id']);
     }
@@ -165,7 +195,9 @@ class PostService {
     });
     try {
       await _client.rpc('notify_comment', params: {'p_post_id': postId});
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[PostService.addComment] notify_comment error: $e');
+    }
   }
 
   // Trae los comentarios de un post
@@ -238,6 +270,8 @@ class PostService {
         'user_id': uid,
         'view_ms': viewMs,
       });
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[PostService.logPostView] error: $e');
+    }
   }
 }

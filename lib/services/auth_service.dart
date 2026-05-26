@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'badge_service.dart';
 
 // Extension para compatibilidad con código que usa .uid (Firebase style)
 extension UserCompatExt on User {
@@ -42,10 +41,6 @@ class AuthService {
         }
       }
 
-      final uid = response.user?.id;
-      if (uid != null) {
-        await BadgeService.instance.checkAndAwardBadges(uid, 'account_created');
-      }
       return response;
     } on AuthException catch (e) {
       throw Exception(_mapAuthError(e.message));
@@ -101,7 +96,10 @@ class AuthService {
       return 'Ese correo ya está en uso.';
     }
     if (lower.contains('invalid email')) return 'El correo no es válido.';
-    if (lower.contains('password')) return 'La contraseña es demasiado débil.';
+    if (lower.contains('should be at least') || lower.contains('weak password') ||
+        lower.contains('password is too') || lower.contains('too short')) {
+      return 'La contraseña es demasiado débil.';
+    }
     if (lower.contains('invalid login') || lower.contains('invalid credentials') ||
         lower.contains('email not confirmed')) {
       return 'Correo o contraseña incorrectos.';

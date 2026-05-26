@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../core/input_sanitizers.dart';
+import '../../core/onboarding_flow.dart';
 import '../shared/custom_button.dart';
 
 /// Captura de la rutina semanal del usuario para importarla a su perfil
@@ -117,7 +118,10 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
     userData['availableDays'] =
         _routine.keys.map((d) => d.toString()).toList();
 
-    Navigator.pushNamed(context, '/signup_step_5', arguments: userData);
+    final next = OnboardingFlow.nextRoute('/signup_import_routine', userData);
+    if (next != null) {
+      Navigator.pushNamed(context, next, arguments: userData);
+    }
   }
 
   @override

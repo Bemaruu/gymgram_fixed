@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/error_messages.dart';
 import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../shared/custom_button.dart';
@@ -60,11 +61,15 @@ class _LoginScreenState extends State<LoginScreen> {
           backgroundColor: Colors.green,
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      final msg = raw.isNotEmpty
+          ? raw
+          : 'No se pudo enviar el correo. Intenta de nuevo.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo enviar el correo. Intenta de nuevo.'),
+        SnackBar(
+          content: Text(msg),
           backgroundColor: Colors.red,
         ),
       );
@@ -104,10 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg.isNotEmpty ? msg : 'No se pudo iniciar sesión.'),
+          content: Text(humanizeError(e)),
           backgroundColor: Colors.red,
         ),
       );
@@ -164,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 6),
                         ),
@@ -195,8 +199,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _onLogin,
                               ),
                         const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
                           children: [
                             const Text(
                               '¿Olvidaste tu contraseña? ',

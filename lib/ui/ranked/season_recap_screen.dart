@@ -126,13 +126,32 @@ class _SeasonRecapScreenState extends State<SeasonRecapScreen> {
                   )
                 : Stack(
                     children: [
+                      // Lienzo de captura: oculto detrás de la historia pero
+                      // pintado, para poder exportarlo como PNG al compartir.
                       Positioned.fill(
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: RepaintBoundary(
-                            key: _captureKey,
-                            child: _recapCanvas(r, tier, color),
+                        child: IgnorePointer(
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: RepaintBoundary(
+                              key: _captureKey,
+                              child: _recapCanvas(r, tier, color),
+                            ),
                           ),
+                        ),
+                      ),
+                      // Historia por slides (estilo Wrapped) sobre el lienzo.
+                      Positioned.fill(
+                        child: _WrappedStory(
+                          recap: r,
+                          color: color,
+                          tierLabel: _tierLabel(tier),
+                          tierIcon: _iconForTier(tier),
+                          percentile: r.percentile,
+                          username: _username,
+                          archetype: _identityArchetype(r),
+                          archetypeDescription: _archetypeDescription(
+                              r, _identityArchetype(r)),
+                          onShare: _onShare,
                         ),
                       ),
                       Positioned(
@@ -142,32 +161,6 @@ class _SeasonRecapScreenState extends State<SeasonRecapScreen> {
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(PhosphorIconsBold.x,
                               color: Colors.white70),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 24,
-                        child: Center(
-                          child: ElevatedButton.icon(
-                            onPressed: _onShare,
-                            icon: const Icon(PhosphorIconsFill.shareNetwork,
-                                size: 18),
-                            label: const Text('Compartir'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentOrange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 28, vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              textStyle: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
                         ),
                       ),
                     ],
@@ -538,6 +531,14 @@ class _SeasonRecapScreenState extends State<SeasonRecapScreen> {
     return map[archetype] ?? 'Tu temporada, tu legado.';
   }
 
+  /// Arquetipo final: usa el del servidor si existe, si no lo calcula localmente.
+  static String _identityArchetype(SeasonRecap r) {
+    final fromServer = r.identityArchetype;
+    return (fromServer != null && fromServer.trim().isNotEmpty)
+        ? fromServer
+        : _archetypeFor(r);
+  }
+
   Widget _buildEmblem(RankedTier tier, double size, Color color) {
     return Container(
       width: size,
@@ -790,6 +791,418 @@ class _AnimatedCounter extends StatelessWidget {
       duration: Duration(milliseconds: 1200 + delayMs),
       curve: Curves.easeOutCubic,
       builder: (_, v, __) => Text('$v$suffix', style: style),
+    );
+  }
+}
+
+/// Experiencia "Wrapped" por slides: tarjetas a pantalla completa que el usuario
+/// avanza tocando (derecha = siguiente, izquierda = atrás). Cada slide revela un
+/// dato con animación; la última ofrece compartir (captura el lienzo PNG detrás).
+class _WrappedStory extends StatefulWidget {
+  final SeasonRecap recap;
+  final Color color;
+  final String tierLabel;
+  final IconData tierIcon;
+  final double percentile;
+  final String? username;
+  final String archetype;
+  final String archetypeDescription;
+  final VoidCallback onShare;
+
+  const _WrappedStory({
+    required this.recap,
+    required this.color,
+    required this.tierLabel,
+    required this.tierIcon,
+    required this.percentile,
+    required this.username,
+    required this.archetype,
+    required this.archetypeDescription,
+    required this.onShare,
+  });
+
+  @override
+  State<_WrappedStory> createState() => _WrappedStoryState();
+}
+
+class _WrappedStoryState extends State<_WrappedStory> {
+  static const int _count = 8;
+  int _i = 0;
+
+  void _next() {
+    if (_i < _count - 1) setState(() => _i++);
+  }
+
+  void _prev() {
+    if (_i > 0) setState(() => _i--);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (d) {
+        final w = MediaQuery.of(context).size.width;
+        if (d.localPosition.dx > w * 0.30) {
+          _next();
+        } else {
+          _prev();
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.darkSurface,
+              color.withValues(alpha: 0.45),
+              color.withValues(alpha: 0.12),
+              AppColors.darkSurface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Barra segmentada estilo stories.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
+                child: Row(
+                  children: [
+                    for (int s = 0; s < _count; s++)
+                      Expanded(
+                        child: Container(
+                          height: 3,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: s <= _i
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 420),
+                  switchInCurve: Curves.easeOutCubic,
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.06),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Center(child: _slide(_i)),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 52,
+                child: Center(
+                  child: _i < _count - 1
+                      ? Text(
+                          'Toca para continuar  →',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 13,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _slide(int i) {
+    final r = widget.recap;
+    switch (i) {
+      case 0:
+        return _introSlide();
+      case 1:
+        return _statSlide(PhosphorIconsFill.calendarCheck, r.daysTrainedTotal,
+            '', 'días entrenados', 'Apareciste. Una y otra vez.');
+      case 2:
+        return _statSlide(PhosphorIconsFill.barbell, r.totalVolumeKg.round(),
+            ' kg', 'movidos en total', 'Toneladas de esfuerzo acumulado.');
+      case 3:
+        return _statSlide(PhosphorIconsFill.trophy, r.prsAchieved, '',
+            'PRs rotos', 'Cada uno, un límite superado.');
+      case 4:
+        return _statSlide(PhosphorIconsFill.flame, r.longestStreak, '',
+            'días de racha máxima', 'La constancia es tu superpoder.');
+      case 5:
+        return _communitySlide(r.usersInspired);
+      case 6:
+        return _tierSlide();
+      default:
+        return _archetypeSlide();
+    }
+  }
+
+  Widget _introSlide() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          widget.recap.seasonName.toUpperCase(),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white60,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            letterSpacing: 4,
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Tu temporada\nen GymGram',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 44,
+            height: 1.1,
+          ),
+        ),
+        const SizedBox(height: 28),
+        Icon(PhosphorIconsFill.barbell, color: widget.color, size: 56),
+        const SizedBox(height: 28),
+        const Text(
+          'Un resumen de tu esfuerzo, slide a slide.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white60, fontSize: 16),
+        ),
+      ],
+    );
+  }
+
+  Widget _statSlide(
+      IconData icon, int value, String suffix, String label, String phrase) {
+    final color = widget.color;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 64),
+        const SizedBox(height: 24),
+        _AnimatedCounter(
+          value: value,
+          suffix: suffix,
+          delayMs: 0,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 88,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          phrase,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _communitySlide(int inspired) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(PhosphorIconsFill.usersThree,
+            color: AppColors.accentOrange, size: 64),
+        const SizedBox(height: 24),
+        _AnimatedCounter(
+          value: inspired,
+          suffix: '',
+          delayMs: 0,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 88,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'personas inspiradas\ncon tus rutinas',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Tu entrenamiento mueve a la comunidad.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.accentOrange,
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tierSlide() {
+    final color = widget.color;
+    final topPct = ((1 - widget.percentile) * 100).toStringAsFixed(0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'TERMINASTE EN',
+          style: TextStyle(
+            color: Colors.white60,
+            letterSpacing: 5,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 28),
+        Container(
+          width: 160,
+          height: 160,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                color.withValues(alpha: 0.45),
+                color.withValues(alpha: 0.12),
+                Colors.transparent,
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.55),
+                blurRadius: 36,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          child: Center(child: Icon(widget.tierIcon, color: color, size: 92)),
+        ),
+        const SizedBox(height: 28),
+        Text(
+          widget.tierLabel.toUpperCase(),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 52,
+            letterSpacing: 3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Top $topPct% mundial',
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 22,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _archetypeSlide() {
+    final color = widget.color;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'TU ARQUETIPO',
+          style: TextStyle(
+            color: Colors.white70,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 6,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          widget.archetype,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 40,
+            fontStyle: FontStyle.italic,
+            shadows: [Shadow(color: color, blurRadius: 28)],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          widget.archetypeDescription,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 36),
+        ElevatedButton.icon(
+          onPressed: widget.onShare,
+          icon: const Icon(PhosphorIconsFill.shareNetwork, size: 18),
+          label: const Text('Compartir mi temporada'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accentOrange,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        if (widget.username != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            '@${widget.username}',
+            style: const TextStyle(color: Colors.white38, fontSize: 14),
+          ),
+        ],
+      ],
     );
   }
 }

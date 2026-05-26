@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/onboarding_flow.dart';
 import '../shared/custom_button.dart';
+import 'shared/onboarding_scaffold.dart';
 
 class SignupStep5 extends StatefulWidget {
   const SignupStep5({super.key});
@@ -54,11 +56,10 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
       userData['goal'] = selectedGoal;
       userData['fitnessGoal'] = selectedGoal;
 
-      Navigator.pushNamed(
-        context,
-        '/signup_routine_preferences',
-        arguments: userData,
-      );
+      final next = OnboardingFlow.nextRoute('/signup_step_5', userData);
+      if (next != null) {
+        Navigator.pushNamed(context, next, arguments: userData);
+      }
     }
   }
 
@@ -75,7 +76,7 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
@@ -122,6 +123,10 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Builder(builder: (_) {
+                        final p = OnboardingFlow.progressFor('/signup_step_5', userData);
+                        return OnboardingProgress(step: p.step, total: p.total);
+                      }),
                       const Text(
                         '¡Vamos por tu mejor versión!',
                         textAlign: TextAlign.center,
@@ -154,6 +159,8 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
                         child: CustomButton(
                           key: ValueKey(selectedGoal),
                           text: 'Siguiente',
+                          color: AppColors.accentOrange,
+                          textColor: Colors.white,
                           onPressed: selectedGoal != null ? _onNext : null,
                         ),
                       ),

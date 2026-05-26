@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/input_sanitizers.dart';
 import '../../core/onboarding_constants.dart';
+import '../../core/onboarding_flow.dart';
 import '../shared/custom_button.dart';
 import 'shared/onboarding_scaffold.dart';
+
+const _route = '/signup_disliked_foods';
 
 class SignupDislikedFoods extends StatefulWidget {
   const SignupDislikedFoods({super.key});
@@ -13,7 +17,7 @@ class SignupDislikedFoods extends StatefulWidget {
 }
 
 class _SignupDislikedFoodsState extends State<SignupDislikedFoods> {
-  final Set<String> _selected = {};
+  final Set<String> _disliked = {};
   final _otherCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
   String _query = '';
@@ -33,25 +37,7 @@ class _SignupDislikedFoodsState extends State<SignupDislikedFoods> {
     super.dispose();
   }
 
-  void _toggle(String v) {
-    setState(() {
-      if (_selected.contains(v)) {
-        _selected.remove(v);
-      } else {
-        _selected.add(v);
-      }
-    });
-  }
-
-  void _onNext() {
-    final list = _selected.toList();
-    final other = InputSanitizers.cleanOptional(_otherCtrl.text, maxLen: 200);
-    if (other != null) list.add('custom:$other');
-    userData['dislikedFoods'] = list;
-    Navigator.pushNamed(context, '/signup_step_11', arguments: userData);
-  }
-
-  List<ChipOption> get _filteredOptions {
+  List<ChipOption> get _filtered {
     if (_query.isEmpty) return OnboardingCatalogs.dislikedFoodsCommon;
     final q = _query.toLowerCase().trim();
     return OnboardingCatalogs.dislikedFoodsCommon
@@ -61,72 +47,62 @@ class _SignupDislikedFoodsState extends State<SignupDislikedFoods> {
         .toList();
   }
 
+  void _onNext() {
+    final list = _disliked.toList();
+    final other = InputSanitizers.cleanOptional(_otherCtrl.text, maxLen: 200);
+    if (other != null) list.add('custom:$other');
+    userData['dislikedFoods'] = list;
+    final next = OnboardingFlow.nextRoute(_route, userData);
+    if (next != null) {
+      Navigator.pushNamed(context, next, arguments: userData);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredOptions;
+    final progress = OnboardingFlow.progressFor(_route, userData);
     return OnboardingScaffold(
+      step: progress.step,
+      total: progress.total,
       backgroundAsset: 'assets/images/dieta.png',
-      eyebrow: 'Personaliza tus recomendaciones',
-      title: '¿Hay alimentos que prefieres evitar?',
+      eyebrow: 'Tu alimentación',
+      title: 'Alimentos que prefieres evitar',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Buscador
           TextField(
             controller: _searchCtrl,
-            style: const TextStyle(color: Colors.black),
             onChanged: (v) => setState(() => _query = v),
+            style: const TextStyle(color: Colors.black),
             decoration: InputDecoration(
               hintText: 'Buscar alimento...',
               hintStyle: const TextStyle(color: Colors.black54),
               prefixIcon: const Icon(Icons.search, color: Colors.black54),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.black54),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() => _query = '');
-                      },
-                    )
-                  : null,
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.9),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          // Contador de selección
-          if (_selected.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${_selected.length} seleccionado(s)',
-                style:
-                    const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ),
-          // Grid de chips compactos
+          const SizedBox(height: 8),
           Container(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.42,
+              maxHeight: MediaQuery.of(context).size.height * 0.30,
             ),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
             ),
             padding: const EdgeInsets.all(8),
-            child: filtered.isEmpty
+            child: _filtered.isEmpty
                 ? const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(16),
+                      padding: EdgeInsets.all(12),
                       child: Text(
-                        'Sin resultados. Agrégalo abajo como "Otros".',
+                        'Sin resultados. Agrégalo abajo.',
                         style: TextStyle(color: Colors.white70, fontSize: 13),
-                        textAlign: TextAlign.center,
                       ),
                     ),
                   )
@@ -134,48 +110,53 @@ class _SignupDislikedFoodsState extends State<SignupDislikedFoods> {
                     child: Wrap(
                       spacing: 6,
                       runSpacing: 6,
-                      children: filtered
+                      children: _filtered
                           .map((o) => _compactChip(
-                                label: o.label,
-                                selected: _selected.contains(o.value),
-                                onTap: () => _toggle(o.value),
+                                o.label,
+                                _disliked.contains(o.value),
+                                () => setState(() {
+                                  if (_disliked.contains(o.value)) {
+                                    _disliked.remove(o.value);
+                                  } else {
+                                    _disliked.add(o.value);
+                                  }
+                                }),
                               ))
                           .toList(),
                     ),
                   ),
           ),
-          const SizedBox(height: 12),
-          // Campo "otros" libre
+          const SizedBox(height: 8),
           TextField(
             controller: _otherCtrl,
             maxLength: 200,
-            maxLines: 2,
             style: const TextStyle(color: Colors.black),
             decoration: InputDecoration(
-              hintText: '¿Algo más? Sepáralos por coma (sin enlaces)',
+              hintText: '¿Algo más? Sepáralos por coma',
               hintStyle: const TextStyle(color: Colors.black54),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.9),
-              counterStyle: const TextStyle(color: Colors.white70),
+              counterText: '',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
           CustomButton(text: 'Siguiente', onPressed: _onNext),
+          OnboardingSkipLink(
+            userData: userData,
+            defaults: const {'dislikedFoods': <String>[]},
+            nextRoute: OnboardingFlow.nextRoute(_route, userData) ?? '/',
+          ),
           const OnboardingBackLink(),
         ],
       ),
     );
   }
 
-  Widget _compactChip({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
+  Widget _compactChip(String label, bool selected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -184,13 +165,6 @@ class _SignupDislikedFoodsState extends State<SignupDislikedFoods> {
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

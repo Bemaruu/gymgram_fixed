@@ -9,6 +9,8 @@ class FoodItem {
   final double? fatPer100g;
   final double? fiberPer100g;
   final bool isCustom;
+  final List<String> countriesTags;
+  final List<String> countryRelevance;
   // Porción de referencia (solo alimentos curados de custom_foods).
   final double? servingGrams;
   final String? servingDescription;
@@ -26,6 +28,8 @@ class FoodItem {
     this.fatPer100g,
     this.fiberPer100g,
     this.isCustom = false,
+    this.countriesTags = const [],
+    this.countryRelevance = const [],
     this.servingGrams,
     this.servingDescription,
   });
@@ -53,6 +57,10 @@ class FoodItem {
 
     final kcal = parseN('energy-kcal_100g');
     if (kcal == null) return null;
+    final countriesTags = (json['countries_tags'] as List?)
+            ?.map((e) => e.toString().toLowerCase())
+            .toList() ??
+        const <String>[];
 
     return FoodItem(
       name: name,
@@ -64,6 +72,7 @@ class FoodItem {
       carbsPer100g: parseN('carbohydrates_100g'),
       fatPer100g: parseN('fat_100g'),
       fiberPer100g: parseN('fiber_100g'),
+      countriesTags: countriesTags,
     );
   }
 
@@ -74,6 +83,10 @@ class FoodItem {
       return double.tryParse(v.toString());
     }
     final serving = d(row['serving_grams']);
+    final countryRelevance = (row['country_relevance'] as List?)
+            ?.map((e) => e.toString().toUpperCase())
+            .toList() ??
+        const <String>[];
     return FoodItem(
       name: row['name'] as String,
       brand: null,
@@ -85,6 +98,7 @@ class FoodItem {
       fatPer100g: d(row['fat_per_100g']),
       fiberPer100g: d(row['fiber_per_100g']),
       isCustom: true,
+      countryRelevance: countryRelevance,
       servingGrams: (serving != null && serving > 0) ? serving : null,
       servingDescription: row['serving_description'] as String?,
     );

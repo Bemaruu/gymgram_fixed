@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../core/onboarding_constants.dart';
+import '../../core/onboarding_flow.dart';
 import '../shared/custom_button.dart';
 import 'shared/onboarding_scaffold.dart';
+
+const _route = '/signup_experience_level';
 
 class SignupExperienceLevel extends StatefulWidget {
   const SignupExperienceLevel({super.key});
@@ -23,20 +26,23 @@ class _SignupExperienceLevelState extends State<SignupExperienceLevel> {
   void _onNext() {
     if (_value == null) return;
     userData['trainingLevel'] = _value;
-
-    // Si es principiante, salta directo al siguiente paso normal (sin path).
-    // Si tiene experiencia, mostramos la bifurcación.
+    // Si es principiante, fijamos el path por defecto y la pantalla siguiente
+    // se salta automáticamente vía OnboardingFlow.
     if (_value == 'beginner') {
       userData['experiencePath'] = 'create_ai_routine';
-      Navigator.pushNamed(context, '/signup_step_5', arguments: userData);
-    } else {
-      Navigator.pushNamed(context, '/signup_experience_path', arguments: userData);
+    }
+    final next = OnboardingFlow.nextRoute(_route, userData);
+    if (next != null) {
+      Navigator.pushNamed(context, next, arguments: userData);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final progress = OnboardingFlow.progressFor(_route, userData);
     return OnboardingScaffold(
+      step: progress.step,
+      total: progress.total,
       backgroundAsset: 'assets/images/ocupacion.png',
       eyebrow: 'Adaptamos todo a ti',
       title: '¿Cuánto tiempo llevas entrenando?',

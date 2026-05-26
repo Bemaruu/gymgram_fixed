@@ -55,6 +55,7 @@ class MealService {
         'meal_type': e.value['meal_type'],
         'name': e.value['name'],
         'ingredients': e.value['ingredients'] ?? [],
+        'components': e.value['components'] ?? [],
         'calories': e.value['calories'] ?? 0,
         'protein': e.value['protein'],
         'carbs': e.value['carbs'],

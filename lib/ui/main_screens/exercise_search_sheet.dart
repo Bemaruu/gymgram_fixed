@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/exercise_service.dart';
@@ -21,6 +22,7 @@ class ExerciseSearchSheet extends StatefulWidget {
 class _ExerciseSearchSheetState extends State<ExerciseSearchSheet> {
   late String _selectedMuscle;
   final _searchController = TextEditingController();
+  Timer? _debounce;
   List<Map<String, dynamic>> _exercises = [];
   bool _isLoading = true;
   int? _expandedIndex;
@@ -30,11 +32,17 @@ class _ExerciseSearchSheetState extends State<ExerciseSearchSheet> {
     super.initState();
     _selectedMuscle = widget.preselectedMuscle ?? 'Todos';
     _load();
-    _searchController.addListener(() => _load());
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _load);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }

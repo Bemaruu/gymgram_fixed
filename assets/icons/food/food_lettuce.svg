@@ -1,0 +1,18 @@
+<svg id="emoji" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g id="color">
+    <ellipse fill="#3D9970" cx="36" cy="40" rx="28" ry="20"/>
+    <path fill="#3D9970" d="M8,40 C8,30 14,22 24,18 C18,24 14,32 14,40Z"/>
+    <path fill="#3D9970" d="M64,40 C64,30 58,22 48,18 C54,24 58,32 58,40Z"/>
+    <ellipse fill="#5DBB63" cx="36" cy="40" rx="22" ry="15"/>
+    <path fill="#5DBB63" d="M14,40 C14,30 22,24 36,22 C28,24 18,32 18,40Z"/>
+    <path fill="#5DBB63" d="M58,40 C58,30 50,24 36,22 C44,24 54,32 54,40Z"/>
+    <ellipse fill="#B5D96A" cx="36" cy="41" rx="14" ry="9"/>
+    <ellipse fill="#d4ea8a" cx="36" cy="42" rx="7" ry="4"/>
+  </g>
+  <g id="line">
+    <ellipse fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" cx="36" cy="40" rx="28" ry="20"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8,40 C8,28 20,20 36,18 C52,20 64,28 64,40"/>
+    <ellipse fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" cx="36" cy="40" rx="22" ry="15"/>
+    <ellipse fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" cx="36" cy="41" rx="14" ry="9"/>
+  </g>
+</svg>

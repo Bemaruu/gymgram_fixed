@@ -20,6 +20,8 @@ class ExerciseService {
     'Core',
     'Lumbar',
     'Cadena posterior',
+    'Cardio',
+    'Deportes',
   ];
 
   Future<Map<String, String?>> mediaUrlsByName(List<String> names) async {

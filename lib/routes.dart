@@ -5,24 +5,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ui/onboarding/welcome_screen.dart';
 import 'ui/onboarding/login_screen.dart';
 import 'ui/onboarding/signup_step_1.dart';
-import 'ui/onboarding/signup_step_2.dart';
-import 'ui/onboarding/signup_step_3.dart';
-import 'ui/onboarding/signup_step_4.dart';
 import 'ui/onboarding/signup_step_5.dart';
-import 'ui/onboarding/signup_step_7.dart';
-import 'ui/onboarding/signup_step_8.dart';
-import 'ui/onboarding/signup_step_9.dart';
-import 'ui/onboarding/signup_step_10.dart';
-import 'ui/onboarding/signup_step_11.dart';
-import 'ui/onboarding/signup_step_12.dart';
 import 'ui/onboarding/signup_step_13.dart';
 import 'ui/onboarding/signup_consent.dart';
+import 'ui/onboarding/signup_gender_birthdate.dart';
+import 'ui/onboarding/signup_body_metrics.dart';
+import 'ui/onboarding/signup_place.dart';
 import 'ui/onboarding/signup_equipment.dart';
 import 'ui/onboarding/signup_experience_level.dart';
 import 'ui/onboarding/signup_experience_path.dart';
 import 'ui/onboarding/signup_import_routine.dart';
-import 'ui/onboarding/signup_session_duration.dart';
-import 'ui/onboarding/signup_routine_preferences.dart';
+import 'ui/onboarding/signup_split.dart';
+import 'ui/onboarding/signup_days_duration.dart';
+import 'ui/onboarding/signup_injuries.dart';
+import 'ui/onboarding/signup_diet_meals.dart';
+import 'ui/onboarding/signup_allergies.dart';
 import 'ui/onboarding/signup_cooking_time.dart';
 import 'ui/onboarding/signup_disliked_foods.dart';
 
@@ -54,26 +51,23 @@ final Map<String, WidgetBuilder> appRoutes = {
   },
   '/login': (_) => const LoginScreen(),
   '/signup_step_1': (_) => const SignupStep1(),
-  '/signup_step_2': (_) => const SignupStep2(),
-  '/signup_step_3': (_) => const SignupStep3(),
-  '/signup_step_4': (_) => const SignupStep4(),
   '/signup_step_5': (_) => const SignupStep5(),
-  '/signup_step_7': (_) => const SignupStep7(),
-  '/signup_step_8': (_) => const SignupStep8(),
-  '/signup_step_9': (_) => const SignupStep9(),
-  '/signup_step_10': (_) => const SignupStep10(),
-  '/signup_step_11': (_) => const SignupStep11(),
-  '/signup_step_12': (_) => const SignupStep12(),
   '/signup_step_13': (_) => const SignupStep13(),
-
-  // Pantallas nuevas del onboarding extendido
   '/signup_consent': (_) => const SignupConsent(),
+
+  // Flujo de onboarding dividido (una pregunta por pantalla)
+  '/signup_gender_birthdate': (_) => const SignupGenderBirthdate(),
+  '/signup_body_metrics': (_) => const SignupBodyMetrics(),
+  '/signup_place': (_) => const SignupPlace(),
   '/signup_equipment': (_) => const SignupEquipment(),
   '/signup_experience_level': (_) => const SignupExperienceLevel(),
   '/signup_experience_path': (_) => const SignupExperiencePath(),
   '/signup_import_routine': (_) => const SignupImportRoutine(),
-  '/signup_session_duration': (_) => const SignupSessionDuration(),
-  '/signup_routine_preferences': (_) => const SignupRoutinePreferences(),
+  '/signup_split': (_) => const SignupSplit(),
+  '/signup_days_duration': (_) => const SignupDaysDuration(),
+  '/signup_injuries': (_) => const SignupInjuries(),
+  '/signup_diet_meals': (_) => const SignupDietMeals(),
+  '/signup_allergies': (_) => const SignupAllergies(),
   '/signup_cooking_time': (_) => const SignupCookingTime(),
   '/signup_disliked_foods': (_) => const SignupDislikedFoods(),
 

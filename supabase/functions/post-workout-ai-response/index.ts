@@ -5,7 +5,8 @@
 //       body: { feedback_id: uuid }
 //   (b) Webhook supabase: row inserted en workout_feedback con ai_response NULL
 //
-// Modelo: GPT-4o (primera respuesta tras workout - mas razonamiento).
+// Modelo: GPT-4o-mini (conversacion frecuente tras cada entreno; barata).
+// GPT-4o se reserva exclusivamente para el informe mensual Premium.
 //
 // Acciones:
 //   1. Lee workout_feedback.id, ai_trainer_config, ultimos feedbacks recientes
@@ -20,6 +21,7 @@ import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chat, OpenAIError } from '../_shared/openai.ts';
 import { profileContext, trainerPersona, UserProfile } from '../_shared/prompts.ts';
 import { pushToUser } from '../_shared/fcm.ts';
+import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
 
 serve(async (req) => {
   const pre = handlePreflight(req);
@@ -34,6 +36,14 @@ serve(async (req) => {
   if (!body.feedback_id) return errorResponse('feedback_id required', 400);
 
   const supabase = serviceClient();
+
+  // Tope duro de costo IA (safety net mensual)
+  try {
+    await enforceMonthlyCap(supabase, user.id, 'post-workout-ai-response');
+  } catch (e) {
+    if (e instanceof UsageCapError) return errorResponse('Monthly AI limit reached', 429);
+    throw e;
+  }
 
   // 1) Cargar el feedback (debe ser del usuario y sin respuesta aun)
   const { data: feedback } = await supabase
@@ -104,7 +114,7 @@ serve(async (req) => {
   let aiText: string;
   try {
     aiText = await chat({
-      model: 'gpt-4o', // primera respuesta post-workout: modelo mas capaz
+      model: 'gpt-4o-mini', // conversacion post-entreno: frecuente y barata
       temperature: 0.65,
       maxTokens: 250,
       messages: [

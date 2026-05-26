@@ -4,6 +4,8 @@
 **Última actualización:** 2026-05-07  
 **País base de operación:** Chile
 
+> **AVISO BETA:** Esta es una versión Beta cerrada por invitación. La aplicación puede contener errores, funciones incompletas o interrupciones. Los datos ingresados durante la Beta pueden eliminarse o reiniciarse antes del lanzamiento oficial. Al usar GymGram aceptas estas condiciones.
+
 > **AVISO LEGAL:** Este documento ha sido preparado como base legal para la etapa Beta de GymGram. Debe ser revisado por un abogado antes de su publicación definitiva, especialmente antes del lanzamiento público, monetización, publicidad, sponsors o expansión internacional.
 
 ---
@@ -242,7 +244,12 @@ Estos proveedores tratan datos únicamente en la medida necesaria para prestar s
 
 ## 14. TRANSFERENCIAS INTERNACIONALES
 
-Los datos de los usuarios son almacenados y procesados en servidores ubicados en **Estados Unidos**, a través de Supabase y Mixpanel.
+Los datos de los usuarios son almacenados y procesados en servidores ubicados en **Estados Unidos**, a través de los siguientes proveedores:
+
+- **Supabase Inc. (EE.UU.):** almacenamiento de base de datos y archivos (fotos, videos).
+- **Mixpanel Inc. (EE.UU.):** analítica de comportamiento dentro de la app.
+- **Google LLC — Firebase / Cloud Messaging (EE.UU.):** notificaciones push y servicios de aplicación.
+- **Google LLC — Gemini API (EE.UU.):** estimación de macronutrientes a partir de fotos de comida (función escáner IA). Las fotos se envían al servicio, se procesan y se descartan sin almacenarse.
 
 Al utilizar GymGram, el usuario entiende y acepta que sus datos pueden ser tratados fuera de Chile, en las condiciones descritas en esta Política.
 

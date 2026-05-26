@@ -15,6 +15,7 @@ import { corsHeaders, errorResponse, handlePreflight, jsonResponse } from '../_s
 import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chatJson, OpenAIError } from '../_shared/openai.ts';
 import { profileContext, UserProfile } from '../_shared/prompts.ts';
+import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
 
 type ExerciseRow = {
   slug: string;
@@ -74,6 +75,14 @@ serve(async (req) => {
 
   const supabase = serviceClient();
 
+  // Tope duro de costo IA (safety net mensual)
+  try {
+    await enforceMonthlyCap(supabase, user.id, 'generate-routine');
+  } catch (e) {
+    if (e instanceof UsageCapError) return errorResponse('Monthly AI limit reached', 429);
+    throw e;
+  }
+
   // 1) Cargar perfil + onboarding
   const { data: profile } = await supabase
     .from('profiles')
@@ -94,6 +103,16 @@ serve(async (req) => {
     .order('created_at', { ascending: false })
     .limit(1);
   const onboarding = onboardingRows?.[0];
+
+  // Lesiones declaradas → restricción de seguridad para el prompt.
+  const injuries = Array.isArray(onboarding?.injuries)
+    ? (onboarding!.injuries as unknown[])
+        .map((x) => `${x}`.trim())
+        .filter((s) => s.length > 0 && s.toLowerCase() !== 'ninguna')
+    : [];
+  const injuriesClause = injuries.length > 0
+    ? `\n\nIMPORTANTE (seguridad): el usuario reporta molestias o lesiones en: ${injuries.join(', ')}. EVITA ejercicios que carguen o estresen esas zonas; elige alternativas seguras de la lista y, si un grupo muscular no tiene alternativa segura, redúcelo o cámbialo.`
+    : '';
 
   const inferredDays =
     Array.isArray(onboarding?.available_days)
@@ -143,7 +162,7 @@ serve(async (req) => {
 
   const systemPrompt = `Eres un planificador de rutinas para GymGram. NUNCA inventes ejercicios. Solo usas los slugs de la lista que te entregan. Devuelves JSON estricto sin texto adicional.
 
-${profileContext(userProfile)}
+${profileContext(userProfile)}${injuriesClause}
 
 Ejercicios disponibles (slug | nombre | musculo primario | tipo | dificultad):
 ${exerciseListText}

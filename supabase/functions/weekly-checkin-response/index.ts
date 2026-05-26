@@ -11,6 +11,7 @@ import { errorResponse, handlePreflight, jsonResponse } from '../_shared/cors.ts
 import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chat, OpenAIError } from '../_shared/openai.ts';
 import { trainerPersona } from '../_shared/prompts.ts';
+import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
 
 serve(async (req) => {
   const pre = handlePreflight(req);
@@ -25,6 +26,14 @@ serve(async (req) => {
   if (!body.checkin_id) return errorResponse('checkin_id required', 400);
 
   const supabase = serviceClient();
+
+  // Tope duro de costo IA (safety net mensual)
+  try {
+    await enforceMonthlyCap(supabase, user.id, 'weekly-checkin-response');
+  } catch (e) {
+    if (e instanceof UsageCapError) return errorResponse('Monthly AI limit reached', 429);
+    throw e;
+  }
 
   const { data: checkin } = await supabase
     .from('ai_weekly_checkins')

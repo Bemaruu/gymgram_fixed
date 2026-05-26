@@ -1,147 +1,66 @@
 -- ============================================================
--- GymGram Beta — Schema SQL definitivo
--- Proyecto: gymgram-beta (sa-east-1 / São Paulo)
--- Ejecutado via migración: initial_schema
+-- GymGram — Referencia de schema (Supabase, proyecto gymgram-beta)
+-- sa-east-1 / São Paulo · ref: qnrpyaoyzecjbryejccm
 -- ============================================================
-
--- TABLAS
-
-CREATE TABLE IF NOT EXISTS profiles (
-  id                uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  username          text UNIQUE NOT NULL,
-  full_name         text,
-  avatar_url        text,
-  bio               text,
-  fitness_goal      text,
-  training_location text,
-  food_mode         text,
-  birth_date        date,
-  age               int,
-  gender            text,
-  weight            numeric,
-  height            numeric,
-  target_weight     numeric,
-  created_at        timestamp DEFAULT now(),
-  updated_at        timestamp DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS user_onboarding_data (
-  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id              uuid REFERENCES auth.users(id) ON DELETE CASCADE,
-  available_days       text[],
-  meals_per_day        int,
-  allergies            text[],
-  food_preferences     text[],
-  exercise_preferences text[],
-  time_availability    text,
-  experience_level     text,
-  created_at           timestamp DEFAULT now()
-);
-
--- posts.user_id referencia profiles para joins directos via PostgREST
-CREATE TABLE IF NOT EXISTS posts (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id        uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  media_url      text NOT NULL,
-  media_type     text NOT NULL CHECK (media_type IN ('image','video')),
-  caption        text,
-  likes_count    int DEFAULT 0,
-  comments_count int DEFAULT 0,
-  created_at     timestamp DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS likes (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  post_id    uuid REFERENCES posts(id) ON DELETE CASCADE,
-  created_at timestamp DEFAULT now(),
-  UNIQUE(user_id, post_id)
-);
-
-CREATE TABLE IF NOT EXISTS comments (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  post_id    uuid REFERENCES posts(id) ON DELETE CASCADE,
-  content    text NOT NULL,
-  created_at timestamp DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS routines (
-  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id           uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  title             text NOT NULL,
-  goal              text,
-  training_location text,
-  day_of_week       int,
-  disclaimer        text DEFAULT 'Recomendación general para beta, no reemplaza asesoría profesional.',
-  created_at        timestamp DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS routine_exercises (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  routine_id   uuid REFERENCES routines(id) ON DELETE CASCADE,
-  name         text NOT NULL,
-  sets         int,
-  reps         text,
-  rest_seconds int,
-  media_url    text,
-  muscle_group text,
-  order_index  int DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS meal_plans (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id        uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  title          text NOT NULL,
-  food_mode      text,
-  target_date    date,
-  total_calories int,
-  disclaimer     text DEFAULT 'Recomendación general para beta, no reemplaza asesoría profesional.',
-  created_at     timestamp DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS meal_items (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  meal_plan_id uuid REFERENCES meal_plans(id) ON DELETE CASCADE,
-  meal_type    text NOT NULL,
-  name         text NOT NULL,
-  ingredients  text[],
-  calories     int,
-  protein      numeric,
-  carbs        numeric,
-  fats         numeric,
-  completed    boolean DEFAULT false,
-  order_index  int DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS water_logs (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  target_date   date NOT NULL,
-  glasses_count int DEFAULT 0,
-  created_at    timestamp DEFAULT now(),
-  UNIQUE(user_id, target_date)
-);
-
-CREATE TABLE IF NOT EXISTS user_badges (
-  id             uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id        uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  badge_id       text NOT NULL,
-  earned_at      timestamptz DEFAULT now() NOT NULL,
-  progress       float8 DEFAULT 0 NOT NULL,
-  is_featured    boolean DEFAULT false NOT NULL,
-  featured_order integer,
-  UNIQUE(user_id, badge_id)
-);
-
-ALTER TABLE public.user_badges ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "select_all"  ON public.user_badges FOR SELECT USING (true);
-CREATE POLICY "insert_own"  ON public.user_badges FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "update_own"  ON public.user_badges FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "delete_own"  ON public.user_badges FOR DELETE USING (auth.uid() = user_id);
-
--- STORAGE BUCKETS
--- avatars: público (URLs para el feed)
--- posts:   privado con RLS
--- exercises: privado, solo lectura desde Flutter
+--
+-- ⚠️  FUENTE DE VERDAD: este archivo NO es el schema completo.
+--     El DDL autoritativo vive en supabase/migrations/ (64+ archivos, en orden
+--     cronológico). Este archivo es solo un INVENTARIO de referencia rápido,
+--     regenerado el 2026-05-24. Para el detalle de columnas/políticas/funciones
+--     de cualquier tabla, busca su migración correspondiente.
+--
+-- RLS: las 50 tablas de `public` tienen Row Level Security HABILITADO.
+--      Verificado con get_advisors (0 hallazgos rls_disabled). Las políticas
+--      usan auth.uid() (owner-scoped) y los escritos sensibles van por RPCs
+--      SECURITY DEFINER con guard interno o por service_role (edge functions).
+--
+-- ============================================================
+-- INVENTARIO DE TABLAS (public) — 50 tablas, todas con RLS
+-- ============================================================
+--
+-- Social / feed
+--   profiles                  Perfil de usuario (incl. referral_code, referred_by,
+--                             subscription_tier/variant). Vista: public_profiles.
+--   posts, likes, comments, saved_posts, post_views
+--   follows, notifications
+--
+-- Mensajería
+--   chats, chat_participants, messages, blocked_users, reports, device_tokens
+--
+-- Entrenamiento
+--   routines, routine_exercises, routine_copies, routine_impact_stats
+--   exercise_catalog (175 ejercicios), workout_logs, set_logs
+--   user_strength_records
+--
+-- Nutrición
+--   meal_plans, meal_items, food_logs, water_logs, weight_logs
+--   custom_foods (189), ai_meal_templates (200 recetas con ingredientes)
+--   nutrition_goals, user_dietary_restrictions
+--   user_recipes, user_recipe_ingredients, saved_recipes
+--
+-- Onboarding / perfil
+--   user_onboarding_data, profile_change_logs
+--
+-- Gamificación
+--   user_badges, medal_submissions
+--
+-- Modo Ranked (competitivo)
+--   ranked_seasons, user_ranked_profile, rp_transactions
+--   weekly_missions, user_mission_progress, season_rewards
+--   (vista materializada: ranked_leaderboard_view)
+--
+-- IA (RAG sobre exercise_catalog + custom_foods/ai_meal_templates)
+--   ai_weekly_checkins, workout_feedback, ai_monthly_summaries
+--   ai_trainer_config, ai_trainer_messages
+--   ai_usage_events  (tope duro de costo IA por usuario/mes)
+--
+-- ============================================================
+-- Migraciones de hardening recientes (2026-05-24):
+--   20260524000002_security_hardening_advisors  (security_invoker, search_path,
+--                                                 política huérfana, matview→anon)
+--   20260524000003_storage_no_listing           (buckets públicos sin listing)
+--   20260524000004_revoke_anon_execute          (EXECUTE de RPCs/triggers)
+--   20260524000005_fk_covering_indexes          (22 índices FK para escala)
+--   20260524000006_ai_usage_cap                 (tabla ai_usage_events)
+--   20260524000007_referrals                    (referral_code, redeem_referral)
+-- ============================================================

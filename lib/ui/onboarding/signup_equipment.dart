@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../core/onboarding_constants.dart';
+import '../../core/onboarding_flow.dart';
 import '../shared/custom_button.dart';
 import 'shared/onboarding_scaffold.dart';
+
+const _route = '/signup_equipment';
 
 class SignupEquipment extends StatefulWidget {
   const SignupEquipment({super.key});
@@ -11,64 +15,74 @@ class SignupEquipment extends StatefulWidget {
 }
 
 class _SignupEquipmentState extends State<SignupEquipment> {
-  final Set<String> _selected = {};
+  final Set<String> _equipment = {};
   late Map<String, dynamic> userData;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    userData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    // Si entrena en gimnasio, marcamos full_gym por defecto como sugerencia.
-    final loc = userData['trainingLocation']?.toString();
-    if (_selected.isEmpty && loc == 'GYM') _selected.add('full_gym');
+    userData = Map<String, dynamic>.from(
+        ModalRoute.of(context)!.settings.arguments as Map);
   }
 
   void _toggle(String v) {
     setState(() {
-      if (_selected.contains(v)) {
-        _selected.remove(v);
+      if (_equipment.contains(v)) {
+        _equipment.remove(v);
       } else {
-        _selected.add(v);
+        _equipment.add(v);
       }
     });
   }
 
   void _onNext() {
-    if (_selected.isEmpty) return;
-    userData['equipmentAvailable'] = _selected.toList();
-    Navigator.pushNamed(context, '/signup_experience_level', arguments: userData);
+    if (_equipment.isEmpty) return;
+    userData['equipmentAvailable'] = _equipment.toList();
+    final next = OnboardingFlow.nextRoute(_route, userData);
+    if (next != null) {
+      Navigator.pushNamed(context, next, arguments: userData);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final progress = OnboardingFlow.progressFor(_route, userData);
     return OnboardingScaffold(
+      step: progress.step,
+      total: progress.total,
       backgroundAsset: 'assets/images/lugar.png',
-      eyebrow: 'Tu equipamiento importa 🏋️',
+      eyebrow: 'Tu entrenamiento',
       title: '¿Con qué equipamiento cuentas?',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-            child: Text(
-              'Marca todo lo que tengas disponible.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.white70),
-            ),
+          const Text(
+            'Marca todo lo que tengas disponible.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.white70),
           ),
+          const SizedBox(height: 12),
           Wrap(
             alignment: WrapAlignment.center,
             children: OnboardingCatalogs.equipment
                 .map((o) => OnboardingChip(
                       label: o.label,
-                      selected: _selected.contains(o.value),
+                      selected: _equipment.contains(o.value),
                       onTap: () => _toggle(o.value),
                     ))
                 .toList(),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           CustomButton(
             text: 'Siguiente',
-            onPressed: _selected.isNotEmpty ? _onNext : null,
+            onPressed: _equipment.isNotEmpty ? _onNext : null,
+          ),
+          OnboardingSkipLink(
+            userData: userData,
+            defaults: const {
+              'equipmentAvailable': ['bodyweight'],
+            },
+            nextRoute: OnboardingFlow.nextRoute(_route, userData) ?? '/',
           ),
           const OnboardingBackLink(),
         ],

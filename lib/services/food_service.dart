@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/country_utils.dart';
 import '../models/food_item.dart';
 import '../models/food_log.dart';
 import 'badge_service.dart';
@@ -14,53 +15,109 @@ class FoodService {
   String? get _uid => _client.auth.currentUser?.id;
 
   static const _offSearchUrl = 'https://world.openfoodfacts.org/cgi/search.pl';
+  static const _offUserAgent = 'GymGramBeta/1.0 (support@gymgram.app)';
+  final Map<String, List<FoodItem>> _offSearchCache = {};
+  String? _countryCodeCache;
 
   Future<List<FoodItem>> searchFoods(String query) async {
     final q = query.trim();
     if (q.length < 2) return [];
+    final countryCode = await _userCountryCode();
 
     final results = await Future.wait([
-      _searchCustomFoods(q),
-      _searchOpenFoodFacts(q),
+      _searchCustomFoods(q, countryCode),
+      q.length >= 3
+          ? _searchOpenFoodFacts(q, countryCode)
+          : Future.value(<FoodItem>[]),
     ]);
 
     final custom = results[0];
     final off = results[1];
 
     final customNames = custom.map((f) => f.name.toLowerCase()).toSet();
-    final uniqueOff = off.where((f) => !customNames.contains(f.name.toLowerCase())).toList();
+    final uniqueOff =
+        off.where((f) => !customNames.contains(f.name.toLowerCase())).toList();
 
     return [...custom, ...uniqueOff];
   }
 
-  Future<List<FoodItem>> _searchCustomFoods(String query) async {
+  Future<String> _userCountryCode() async {
+    if (_countryCodeCache != null) return _countryCodeCache!;
+    final uid = _uid;
+    if (uid == null) {
+      _countryCodeCache = CountryUtils.detectDeviceCountry();
+      return _countryCodeCache!;
+    }
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('country_code')
+          .eq('id', uid)
+          .maybeSingle();
+      _countryCodeCache = CountryUtils.normalize(
+        row?['country_code'] as String?,
+        fallback: CountryUtils.detectDeviceCountry(),
+      );
+    } catch (_) {
+      _countryCodeCache = CountryUtils.detectDeviceCountry();
+    }
+    return _countryCodeCache!;
+  }
+
+  Future<List<FoodItem>> _searchCustomFoods(
+    String query,
+    String countryCode,
+  ) async {
     final q = query.toLowerCase().trim();
+    final country = CountryUtils.normalize(countryCode);
     try {
       final rows = await _client
           .from('custom_foods')
-          .select('name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, serving_grams, serving_description')
+          .select(
+            'name, kcal_per_100g, protein_per_100g, carbs_per_100g, '
+            'fat_per_100g, fiber_per_100g, serving_grams, '
+            'serving_description, country_relevance',
+          )
           .or('name_normalized.ilike.%$q%,name.ilike.%$q%')
           .order('name')
-          .limit(20);
-      return rows.map((r) => FoodItem.fromCustomFood(r)).toList();
+          .limit(50);
+      final foods = rows.map((r) => FoodItem.fromCustomFood(r)).toList();
+      final local = foods.where((f) {
+        if (f.countryRelevance.isEmpty) return true;
+        return f.countryRelevance.contains(country);
+      }).toList();
+      if (local.isNotEmpty || country != CountryUtils.defaultCountry) {
+        return local.take(20).toList();
+      }
+      return foods.take(20).toList();
     } catch (e) {
       debugPrint('FoodService._searchCustomFoods error: $e');
       return [];
     }
   }
 
-  Future<List<FoodItem>> _searchOpenFoodFacts(String query) async {
+  Future<List<FoodItem>> _searchOpenFoodFacts(
+    String query,
+    String countryCode,
+  ) async {
+    final country = CountryUtils.normalize(countryCode);
+    final cacheKey = '${country.toLowerCase()}:${query.toLowerCase()}';
+    if (_offSearchCache.containsKey(cacheKey)) return _offSearchCache[cacheKey]!;
     final uri = Uri.parse(_offSearchUrl).replace(queryParameters: {
       'search_terms': query,
       'search_simple': '1',
       'action': 'process',
       'json': '1',
       'page_size': '25',
-      'lc': 'es',
-      'fields': 'id,code,product_name,brands,nutriments,image_small_url',
+      'lc': CountryUtils.languageFor(country),
+      'cc': country.toLowerCase(),
+      'fields':
+          'id,code,product_name,brands,nutriments,image_small_url,countries_tags',
     });
     try {
-      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      final res = await http
+          .get(uri, headers: {'User-Agent': _offUserAgent})
+          .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) return [];
       final body = json.decode(res.body) as Map<String, dynamic>;
       final products = (body['products'] as List?) ?? [];
@@ -70,7 +127,12 @@ class FoodService {
         final item = FoodItem.fromOpenFoodFacts(raw);
         if (item != null) results.add(item);
       }
-      return results;
+      final local = results.where((f) => _matchesCountry(f, country)).toList();
+      final sorted = local.isEmpty
+          ? results
+          : [...local, ...results.where((f) => !_matchesCountry(f, country))];
+      _offSearchCache[cacheKey] = sorted;
+      return sorted;
     } catch (e) {
       debugPrint('FoodService._searchOpenFoodFacts error: $e');
       return [];
@@ -78,11 +140,14 @@ class FoodService {
   }
 
   Future<FoodItem?> lookupBarcode(String barcode) async {
+    final country = await _userCountryCode();
     final uri = Uri.parse(
-      'https://world.openfoodfacts.org/api/v2/product/$barcode.json?fields=product_name,brands,nutriments,image_small_url',
+      'https://world.openfoodfacts.org/api/v2/product/$barcode.json?cc=${country.toLowerCase()}&lc=${CountryUtils.languageFor(country)}&fields=id,code,product_name,brands,nutriments,image_small_url,countries_tags',
     );
     try {
-      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      final res = await http
+          .get(uri, headers: {'User-Agent': _offUserAgent})
+          .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) return null;
       final body = json.decode(res.body) as Map<String, dynamic>;
       if (body['status'] != 1) return null;
@@ -93,6 +158,15 @@ class FoodService {
       debugPrint('FoodService.lookupBarcode error: $e');
       rethrow;
     }
+  }
+
+  bool _matchesCountry(FoodItem food, String countryCode) {
+    if (food.countriesTags.isEmpty) return false;
+    final countryName = CountryUtils.openFoodFactsCountryTag(countryCode);
+    if (countryName.isEmpty) return false;
+    return food.countriesTags.any(
+      (tag) => tag.endsWith(':$countryName'),
+    );
   }
 
   Future<FoodLog> logFood(

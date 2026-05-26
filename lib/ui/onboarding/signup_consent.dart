@@ -1,7 +1,11 @@
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/onboarding_flow.dart';
+import '../../services/analytics_service.dart';
 import '../shared/custom_button.dart';
+import 'shared/onboarding_scaffold.dart';
 
 class SignupConsent extends StatefulWidget {
   const SignupConsent({super.key});
@@ -21,15 +25,41 @@ class _SignupConsentState extends State<SignupConsent> {
     userData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
   }
 
-  void _onNext() {
+  Future<void> _onNext() async {
     if (!_privacy || !_terms) return;
     final now = DateTime.now().toIso8601String();
     userData['privacyConsentAt'] = now;
     userData['termsConsentAt'] = now;
-    Navigator.pushNamed(context, '/signup_step_2', arguments: userData);
+    // El consentimiento de la Política de Privacidad incluye el uso de
+    // Mixpanel para analítica de comportamiento (sección 16 privacy.md).
+    await AnalyticsService.instance.enableAnalytics();
+    if (!mounted) return;
+    final next = OnboardingFlow.nextRoute('/signup_consent', userData);
+    if (next != null) {
+      Navigator.pushNamed(context, next, arguments: userData);
+    }
   }
 
-  Widget _row({required bool value, required String text, required void Function(bool) onChanged}) {
+  TextSpan _legalLink(String label, String route) {
+    return TextSpan(
+      text: label,
+      style: const TextStyle(
+        color: AppColors.primary,
+        decoration: TextDecoration.underline,
+        fontWeight: FontWeight.w600,
+      ),
+      recognizer: TapGestureRecognizer()
+        ..onTap = () => Navigator.pushNamed(context, route),
+    );
+  }
+
+  Widget _consentRow({
+    required bool value,
+    required void Function(bool) onChanged,
+    required String prefix,
+    required String linkLabel,
+    required String linkRoute,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -43,7 +73,16 @@ class _SignupConsentState extends State<SignupConsent> {
         Expanded(
           child: GestureDetector(
             onTap: () => onChanged(!value),
-            child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.white)),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 13, color: Colors.white),
+                children: [
+                  TextSpan(text: prefix),
+                  _legalLink(linkLabel, linkRoute),
+                  const TextSpan(text: ' de GymGram'),
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -69,6 +108,10 @@ class _SignupConsentState extends State<SignupConsent> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Builder(builder: (_) {
+                      final p = OnboardingFlow.progressFor('/signup_consent', userData);
+                      return OnboardingProgress(step: p.step, total: p.total);
+                    }),
                     const Text(
                       'Antes de empezar',
                       textAlign: TextAlign.center,
@@ -92,15 +135,25 @@ class _SignupConsentState extends State<SignupConsent> {
                       style: TextStyle(fontSize: 13, color: Colors.white70),
                     ),
                     const SizedBox(height: 28),
-                    _row(
+                    _consentRow(
                       value: _privacy,
-                      text: 'Acepto la Política de Privacidad de GymGram',
                       onChanged: (v) => setState(() => _privacy = v),
+                      prefix: 'Acepto la ',
+                      linkLabel: 'Política de Privacidad',
+                      linkRoute: '/legal/privacy',
                     ),
-                    _row(
+                    _consentRow(
                       value: _terms,
-                      text: 'Acepto los Términos de Uso de GymGram',
                       onChanged: (v) => setState(() => _terms = v),
+                      prefix: 'Acepto los ',
+                      linkLabel: 'Términos de Uso',
+                      linkRoute: '/legal/terms',
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Beta cerrada: la app está en pruebas, puede contener errores y los datos podrían perderse.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: Colors.white60),
                     ),
                     const SizedBox(height: 24),
                     CustomButton(

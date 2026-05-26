@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/country_utils.dart';
 import '../models/ai_meal_template.dart';
 
 /// Acceso al catálogo de recetas curadas (tabla ai_meal_templates).
@@ -44,6 +45,7 @@ class AiMealTemplateService {
     String? momento,
     String? dificultad,
     List<String>? dificultades,
+    String? countryCode,
     int limit = 20,
   }) async {
     final objetivoDb = _goalMap[goal.toUpperCase()] ?? 'mantener';
@@ -52,6 +54,7 @@ class AiMealTemplateService {
       momento: momento,
       dificultad: dificultad,
       dificultades: dificultades,
+      countryCode: countryCode,
       limit: limit,
     );
   }
@@ -66,6 +69,7 @@ class AiMealTemplateService {
     String? momento,
     String? dificultad,
     List<String>? dificultades,
+    String? countryCode,
     int limit = 30,
   }) =>
       _fetchTemplates(
@@ -73,6 +77,7 @@ class AiMealTemplateService {
         momento: momento,
         dificultad: dificultad,
         dificultades: dificultades,
+        countryCode: countryCode,
         limit: limit,
       );
 
@@ -88,7 +93,7 @@ class AiMealTemplateService {
             'momento_dia, porcion_g, kcal, proteina_g, carbohidratos_g, '
             'grasas_g, fibra_g, sodio_mg, ingredientes_base, tags, '
             'objetivo_recomendado, costo_estimado_clp, nota_para_ia, '
-            'source_url, confiabilidad, pais_origen',
+            'source_url, confiabilidad, pais_origen, ingredientes_estructurados',
           )
           .ilike('nombre', '%$q%')
           .eq('activo', true)
@@ -106,9 +111,11 @@ class AiMealTemplateService {
     String? momento,
     String? dificultad,
     List<String>? dificultades,
+    String? countryCode,
     required int limit,
   }) async {
     try {
+      final country = CountryUtils.normalize(countryCode);
       var query = _client
           .from('ai_meal_templates')
           .select(
@@ -116,9 +123,10 @@ class AiMealTemplateService {
             'momento_dia, porcion_g, kcal, proteina_g, carbohidratos_g, '
             'grasas_g, fibra_g, sodio_mg, ingredientes_base, tags, '
             'objetivo_recomendado, costo_estimado_clp, nota_para_ia, '
-            'source_url, confiabilidad, pais_origen',
+            'source_url, confiabilidad, pais_origen, ingredientes_estructurados',
           )
-          .eq('activo', true);
+          .eq('activo', true)
+          .inFilter('pais_origen', [country, 'GLOBAL']);
 
       // Filtro por objetivo: contiene el valor en el array.
       if (objetivo != null) {

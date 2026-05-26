@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/country_utils.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -24,6 +25,7 @@ class SupabaseService {
     required String trainingLocation,
     required String timeAvailability,
     String? birthDate,
+    String? countryCode,
   }) async {
     final row = <String, dynamic>{
       'id': userId,
@@ -36,6 +38,7 @@ class SupabaseService {
       'target_weight': targetWeight,
       'fitness_goal': fitnessGoal,
       'training_location': trainingLocation,
+      'country_code': CountryUtils.normalize(countryCode),
       'bio': '',
     };
     if (birthDate != null && birthDate.isNotEmpty) {
@@ -50,18 +53,13 @@ class SupabaseService {
     if (uid == null) return null;
     return await client
         .from('profiles')
-        .select('id, username, full_name, bio, avatar_url, weight, height, target_weight, fitness_goal, training_location, gender, age')
+        .select(
+          'id, username, full_name, bio, avatar_url, weight, height, '
+          'target_weight, fitness_goal, training_location, gender, age, '
+          'country_code',
+        )
         .eq('id', uid)
         .maybeSingle();
-  }
-
-  // Posts del feed con username del autor (join directo vía FK profiles)
-  Future<List<Map<String, dynamic>>> getRawPosts() async {
-    final result = await client
-        .from('posts')
-        .select('id, user_id, media_url, media_type, caption, likes_count, comments_count, created_at, profiles(username, avatar_url)')
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(result);
   }
 
   Future<Map<String, dynamic>?> getOnboardingData() async {
@@ -99,6 +97,7 @@ class SupabaseService {
     bool? notificationsEnabled,
     DateTime? privacyConsentAt,
     DateTime? termsConsentAt,
+    String? countryCode,
   }) async {
     final row = <String, dynamic>{
       'user_id': userId,
@@ -108,6 +107,7 @@ class SupabaseService {
       'exercise_preferences': exercisePreferences,
       'time_availability': timeAvailability,
       'experience_level': experienceLevel,
+      'country_code': CountryUtils.normalize(countryCode),
       'equipment_available': equipmentAvailable,
       'injuries': injuries,
       'disliked_foods': dislikedFoods,
@@ -204,6 +204,18 @@ class SupabaseService {
         .ilike('username', '%${query.trim()}%');
     if (uid != null) q = q.neq('id', uid);
     final result = await q.limit(25);
+    return List<Map<String, dynamic>>.from(result);
+  }
+
+  /// Perfiles sugeridos para descubrir/seguir (cold-start). Excluye al usuario
+  /// actual. El estado de "siguiendo" se resuelve por tarjeta en la UI.
+  Future<List<Map<String, dynamic>>> getSuggestedProfiles({int limit = 20}) async {
+    final uid = currentUserId;
+    var q = client
+        .from('public_profiles')
+        .select('id, username, full_name, avatar_url, bio, fitness_goal');
+    if (uid != null) q = q.neq('id', uid);
+    final result = await q.limit(limit);
     return List<Map<String, dynamic>>.from(result);
   }
 

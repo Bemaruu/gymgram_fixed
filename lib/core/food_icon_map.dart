@@ -13,6 +13,10 @@ enum FoodCategory {
   legume,
   nuts,
   avocado,
+  tomato,
+  lettuce,
+  banana,
+  apple,
   sweet,
   drink,
   water,
@@ -39,6 +43,10 @@ class FoodIconMap {
     FoodCategory.legume: 'assets/icons/food/food_legume.svg',
     FoodCategory.nuts: 'assets/icons/food/food_nuts.svg',
     FoodCategory.avocado: 'assets/icons/food/food_avocado.svg',
+    FoodCategory.tomato: 'assets/icons/food/food_tomato.svg',
+    FoodCategory.lettuce: 'assets/icons/food/food_lettuce.svg',
+    FoodCategory.banana: 'assets/icons/food/food_banana.svg',
+    FoodCategory.apple: 'assets/icons/food/food_apple.svg',
     FoodCategory.sweet: 'assets/icons/food/food_sweet.svg',
     FoodCategory.drink: 'assets/icons/food/food_drink.svg',
     FoodCategory.water: 'assets/icons/food/food_water.svg',
@@ -129,11 +137,9 @@ class FoodIconMap {
     ])) {
       return FoodCategory.nuts;
     }
+    if (any(['manzana'])) return FoodCategory.apple;
+    if (any(['plátano', 'platano', 'banana'])) return FoodCategory.banana;
     if (any([
-      'manzana',
-      'plátano',
-      'platano',
-      'banana',
       'fresa',
       'piña',
       'pina',
@@ -148,12 +154,14 @@ class FoodIconMap {
     ])) {
       return FoodCategory.fruit;
     }
+    if (any(['tomate', 'jitomate', 'salsa de tomate', 'ketchup'])) {
+      return FoodCategory.tomato;
+    }
+    if (any(['lechuga'])) return FoodCategory.lettuce;
     if (any([
       'brócoli',
       'brocoli',
       'espinaca',
-      'lechuga',
-      'tomate',
       'zanahoria',
       'pepino',
       'verdura',

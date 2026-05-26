@@ -10,6 +10,8 @@ class OnboardingScaffold extends StatelessWidget {
   final String? eyebrow;
   final String title;
   final Widget child;
+  final int? step;
+  final int? total;
 
   const OnboardingScaffold({
     super.key,
@@ -17,6 +19,8 @@ class OnboardingScaffold extends StatelessWidget {
     required this.title,
     this.eyebrow,
     required this.child,
+    this.step,
+    this.total,
   });
 
   @override
@@ -36,6 +40,9 @@ class OnboardingScaffold extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (step != null && total != null) ...[
+                    OnboardingProgress(step: step!, total: total!),
+                  ],
                   if (eyebrow != null) ...[
                     Text(
                       eyebrow!,
@@ -83,8 +90,61 @@ class OnboardingScaffold extends StatelessWidget {
   }
 }
 
+/// Barra de progreso del onboarding. Se coloca arriba del contenido en cada
+/// pantalla del flujo para que el usuario vea cuánto le falta.
+class OnboardingProgress extends StatelessWidget {
+  final int step;
+  final int total;
+  const OnboardingProgress({super.key, required this.step, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final f = (step / total).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: Stack(
+            children: [
+              Container(
+                height: 6,
+                color: Colors.white.withValues(alpha: 0.24),
+              ),
+              AnimatedFractionallySizedBox(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                widthFactor: f,
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.auroraGradient,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Paso $step de $total',
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.white70,
+            shadows: [
+              Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(0, 1)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
 /// Chip con valor interno y label visible. Replica el estilo de los chips
-/// usados en signup_step_7/9/10/11/12.
+/// usados en signup_step_7/9/10/11.
 class OnboardingChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -155,6 +215,50 @@ class OnboardingBackLink extends StatelessWidget {
             fontSize: 14,
             color: Colors.white,
             fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Omitir por ahora" — aplica los defaults indicados sobre userData y avanza
+/// a `nextRoute`. Se usa en pantallas no críticas (alimentos a evitar,
+/// comidas/día, duración de sesión, etc.).
+class OnboardingSkipLink extends StatelessWidget {
+  final Map<String, dynamic> userData;
+  final Map<String, dynamic> defaults;
+  final String nextRoute;
+
+  const OnboardingSkipLink({
+    super.key,
+    required this.userData,
+    required this.defaults,
+    required this.nextRoute,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: TextButton(
+        onPressed: () {
+          defaults.forEach((k, v) {
+            userData[k] = v;
+          });
+          Navigator.pushNamed(context, nextRoute, arguments: userData);
+        },
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white70,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        ),
+        child: const Text(
+          'Omitir por ahora',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.white70,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.underline,
           ),
         ),
       ),

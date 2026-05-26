@@ -360,6 +360,18 @@ class BadgeService {
       difficulty: 9,
       imagePath: 'assets/medals/obsidiana_mental.png',
     ),
+
+    // ── ESPECIAL ──────────────────────────────────────────────────────────────
+    BadgeModel(
+      id: 'embajador',
+      title: 'Embajador',
+      medalName: 'Embajador',
+      description: 'Traes a la comunidad contigo. GymGram crece gracias a ti.',
+      condition: 'Invita a 3 amigos con tu código de referido.',
+      rank: BadgeRank.especial,
+      difficulty: 5,
+      imagePath: 'assets/medals/embajador.png',
+    ),
   ];
 
   // ── Helpers del catálogo ──────────────────────────────────────────────────
@@ -542,27 +554,67 @@ class BadgeService {
     await _checkFollowerCount(uid);
     await _checkTopPostLikes(uid);
     await _checkStrengthBadges(uid);
+    await _checkReferralCount(uid);
+  }
+
+  /// Medalla "Embajador": invitar a 3 amigos con tu código de referido.
+  /// Usa la RPC my_referral_count (cuenta perfiles con referred_by = auth.uid()).
+  Future<void> _checkReferralCount(String userId) async {
+    if ((await _earnedAmong(userId, ['embajador'])).isNotEmpty) return;
+    try {
+      final res = await _client.rpc('my_referral_count');
+      final count = res is int ? res : int.tryParse('$res') ?? 0;
+      await _awardOrProgress(userId, 'embajador', count, 3);
+    } catch (e) {
+      if (kDebugMode) debugPrint('_checkReferralCount error: $e');
+    }
+  }
+
+  /// Devuelve el subconjunto de [badgeIds] que el usuario ya tiene ganadas.
+  /// Una sola query indexada (user_id, badge_id) para evitar recalcular medallas
+  /// ya obtenidas en eventos de alta frecuencia.
+  Future<Set<String>> _earnedAmong(String userId, List<String> badgeIds) async {
+    try {
+      final rows = await _client
+          .from('user_badges')
+          .select('badge_id')
+          .eq('user_id', userId)
+          .inFilter('badge_id', badgeIds);
+      return (rows as List).map((r) => r['badge_id'] as String).toSet();
+    } catch (_) {
+      return <String>{};
+    }
   }
 
   /// Medallas de fuerza basadas en set_logs / user_strength_records:
   ///  - rompe_limites: tener al menos 1 PR de fuerza registrado.
   ///  - mas_fuerte: subir el peso de un mismo ejercicio 3 veces (sesion a sesion).
+  ///
+  /// Se dispara en `set_logged` (cada serie). Para no bajar ~1000 filas de
+  /// set_logs en cada serie, primero verificamos cuales medallas faltan y solo
+  /// recalculamos esas. Una vez ganadas ambas, el evento cuesta 1 lookup barato.
   Future<void> _checkStrengthBadges(String userId) async {
+    final earned = await _earnedAmong(userId, ['rompe_limites', 'mas_fuerte']);
+    if (earned.length == 2) return; // ambas ya ganadas: nada que recalcular
+
     // Rompe Limites: cualquier PR registrado.
-    try {
-      final prs = await _client
-          .from('user_strength_records')
-          .select('id')
-          .eq('user_id', userId)
-          .limit(1);
-      if ((prs as List).isNotEmpty) {
-        await awardBadge(userId, 'rompe_limites');
+    if (!earned.contains('rompe_limites')) {
+      try {
+        final prs = await _client
+            .from('user_strength_records')
+            .select('id')
+            .eq('user_id', userId)
+            .limit(1);
+        if ((prs as List).isNotEmpty) {
+          await awardBadge(userId, 'rompe_limites');
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('_checkStrengthBadges PR error: $e');
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('_checkStrengthBadges PR error: $e');
     }
 
     // Mas Fuerte: 3 incrementos de peso en un mismo ejercicio.
+    if (earned.contains('mas_fuerte')) return; // ya ganada: evita el fetch pesado
     try {
       final rows = await _client
           .from('set_logs')

@@ -36,11 +36,11 @@ class MealCard extends StatelessWidget {
   final Function(int index)? onToggle;
 
   const MealCard({
-    Key? key,
+    super.key,
     required this.title,
     required this.foods,
     this.onToggle,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
