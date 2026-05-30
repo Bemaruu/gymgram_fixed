@@ -76,10 +76,22 @@ serve(async (req) => {
   // 1) profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, fitness_goal, weight, age, gender')
+    .select('id, fitness_goal, weight, age, gender, eating_disorder_risk')
     .eq('id', user.id)
     .maybeSingle();
   if (!profile) return errorResponse('Profile not found', 404);
+
+  // Safety override: si hay riesgo declarado en screening, forzar mantenimiento
+  // cuando el objetivo sea perder peso o cutting. NUNCA se le dice al usuario
+  // "tienes TCA"; el override es transparente para la generacion.
+  let eatingDisorderSafeMode = false;
+  if (
+    profile.eating_disorder_risk === true &&
+    ['lose_weight', 'cutting'].includes(`${profile.fitness_goal ?? ''}`.toLowerCase())
+  ) {
+    profile.fitness_goal = 'maintain';
+    eatingDisorderSafeMode = true;
+  }
 
   // 2) nutrition_goals
   const { data: goals } = await supabase
@@ -224,9 +236,13 @@ Reglas:
     ),
   }));
 
-  return jsonResponse({
+  const response: Record<string, unknown> = {
     ok: true,
     plan: { meals: cleanMeals, totals: plan.totals },
     catalog_size: filtered.length,
-  });
+  };
+  if (eatingDisorderSafeMode) {
+    response.eating_disorder_safe_mode = true;
+  }
+  return jsonResponse(response);
 });

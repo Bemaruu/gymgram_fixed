@@ -25,6 +25,7 @@ type ExerciseRow = {
   location: 'gym' | 'home' | 'both';
   exercise_type: string;
   difficulty: 'principiante' | 'intermedio' | 'avanzado';
+  contraindications?: string[] | null;
 };
 
 type PlanResponse = {
@@ -43,6 +44,53 @@ type PlanResponse = {
 
 function mapLocation(loc?: string | null): 'gym' | 'home' {
   return (loc?.toUpperCase() === 'HOME') ? 'home' : 'gym';
+}
+
+// Mapea lesiones declaradas en onboarding al vocabulario controlado de
+// `exercise_catalog.contraindications` (lumbar, rodilla, hombro, cervical,
+// muneca, embarazo, hipertension, cardiaco). Sin tilde en "muneca".
+function mapInjuriesToContraindications(injuries: string[]): string[] {
+  const map: Record<string, string> = {
+    'lumbar': 'lumbar',
+    'espalda': 'lumbar',
+    'espalda baja': 'lumbar',
+    'rodilla': 'rodilla',
+    'rodillas': 'rodilla',
+    'hombro': 'hombro',
+    'hombros': 'hombro',
+    'cuello': 'cervical',
+    'cervical': 'cervical',
+    'muneca': 'muneca',
+    'muñeca': 'muneca',
+    'munecas': 'muneca',
+    'muñecas': 'muneca',
+  };
+  return injuries
+    .map((i) => map[i.toLowerCase().trim()])
+    .filter((v): v is string => Boolean(v));
+}
+
+// Mapea las 5 preguntas del PAR-Q+ (signup_parq.dart) a contraindicaciones
+// del catalogo. heart_or_pressure / meds_heart_pressure / chest_pain -> cardiacas
+// + hipertension. dizziness_fainting es senal de alerta cardiovascular tambien.
+function parqToContraindications(parq: Record<string, unknown> | null | undefined): string[] {
+  if (!parq || typeof parq !== 'object') return [];
+  const out = new Set<string>();
+  if (parq['heart_or_pressure'] === true) {
+    out.add('cardiaco');
+    out.add('hipertension');
+  }
+  if (parq['meds_heart_pressure'] === true) {
+    out.add('cardiaco');
+    out.add('hipertension');
+  }
+  if (parq['chest_pain'] === true) {
+    out.add('cardiaco');
+  }
+  if (parq['dizziness_fainting'] === true) {
+    out.add('cardiaco');
+  }
+  return [...out];
 }
 
 function difficultyFor(level?: string | null): string[] {
@@ -87,7 +135,7 @@ serve(async (req) => {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'id, fitness_goal, training_location, weight, target_weight, age, gender',
+      'id, fitness_goal, training_location, weight, target_weight, age, gender, requires_medical_clearance, parq_answers',
     )
     .eq('id', user.id)
     .maybeSingle();
@@ -136,18 +184,53 @@ serve(async (req) => {
 
   // 2) Filtrar exercise_catalog por location y nivel
   const loc = mapLocation(userProfile.training_location);
-  const allowedDiffs = difficultyFor(userProfile.experience_level);
+  let allowedDiffs = difficultyFor(userProfile.experience_level);
 
-  const { data: exercisesRaw } = await supabase
+  // Contraindicaciones: lesiones declaradas + PAR-Q+ (si hay flags clinicos)
+  const requiresClearance = profile.requires_medical_clearance === true;
+  const blockedCats = new Set<string>([
+    ...mapInjuriesToContraindications(injuries),
+    ...parqToContraindications(profile.parq_answers as Record<string, unknown> | null),
+  ]);
+  if (requiresClearance) {
+    blockedCats.add('cardiaco');
+    blockedCats.add('hipertension');
+    // Solo principiante/intermedio si requiere clearance medica.
+    allowedDiffs = allowedDiffs.filter((d) => d !== 'avanzado');
+    if (allowedDiffs.length === 0) allowedDiffs = ['principiante'];
+  }
+  const blockedArr = [...blockedCats];
+
+  let query = supabase
     .from('exercise_catalog')
     .select(
-      'slug, name_es, muscle_group_primary, muscle_group_secondary, location, exercise_type, difficulty',
+      'slug, name_es, muscle_group_primary, muscle_group_secondary, location, exercise_type, difficulty, contraindications',
     )
     .eq('is_active', true)
     .in('location', [loc, 'both'])
     .in('difficulty', allowedDiffs);
 
-  const exercises = (exercisesRaw ?? []) as ExerciseRow[];
+  // Si requiere clearance, tambien excluir ejercicios explosivos.
+  if (requiresClearance) {
+    query = query.neq('exercise_type', 'explosivo');
+  }
+
+  const { data: exercisesRaw } = await query;
+
+  // Filtrado de contraindicaciones en codigo (mas portable que .ov/.cd
+  // entre versiones de supabase-js / PostgREST).
+  let exercises = (exercisesRaw ?? []) as ExerciseRow[];
+  if (blockedArr.length > 0) {
+    exercises = exercises.filter((e) => {
+      const cs = (e as unknown as { contraindications?: string[] | null })
+        .contraindications;
+      if (!Array.isArray(cs) || cs.length === 0) return true;
+      for (const c of cs) {
+        if (blockedArr.includes(`${c}`)) return false;
+      }
+      return true;
+    });
+  }
   if (exercises.length === 0) {
     return errorResponse('No exercises matched user constraints', 422);
   }
@@ -170,7 +253,7 @@ ${exerciseListText}
 Reglas:
 - Distribuye los ${userProfile.training_days_per_week} dias cubriendo los grupos musculares principales.
 - Cada dia: 4 a 7 ejercicios. Prioriza compuestos al inicio.
-- Series: 3-4. Reps: rangos segun objetivo (fuerza 4-6, hipertrofia 8-12, resistencia 12-15).
+- Series: ${requiresClearance ? '2-3 (reduce volumen por seguridad)' : '3-4'}. Reps: rangos segun objetivo (fuerza 4-6, hipertrofia 8-12, resistencia 12-15).
 - Rest: 60-180 seg segun tipo de ejercicio.
 - Solo retorna ejercicios cuyo slug este en la lista.
 - Formato JSON exacto:
@@ -196,18 +279,31 @@ Reglas:
     return errorResponse(`AI error: ${err.message}`, err.status ?? 500);
   }
 
-  // 4) Validar que todos los slugs existan
+  // 4) Validar que todos los slugs existan y, si requiere clearance, recortar
+  // -1 serie por ejercicio para reducir volumen.
   const validSlugs = new Set(exercises.map((e) => e.slug));
   const cleanDays = (plan.days ?? []).map((d) => ({
     ...d,
-    exercises: (d.exercises ?? []).filter((ex) => validSlugs.has(ex.slug)),
+    exercises: (d.exercises ?? [])
+      .filter((ex) => validSlugs.has(ex.slug))
+      .map((ex) =>
+        requiresClearance
+          ? { ...ex, sets: Math.max(1, (ex.sets ?? 3) - 1) }
+          : ex,
+      ),
   }));
 
-  return jsonResponse({
+  const response: Record<string, unknown> = {
     ok: true,
     plan: { days: cleanDays },
     catalog_size: exercises.length,
-  });
+  };
+  if (requiresClearance) {
+    response.medical_clearance_warning = true;
+    response.medical_clearance_message =
+      'Detectamos posibles condiciones de salud. Consulta a un medico antes de empezar y avisanos si algun ejercicio te incomoda.';
+  }
+  return jsonResponse(response);
 });
 
 // Silencia "unused" para corsHeaders re-export-style si quisieras.

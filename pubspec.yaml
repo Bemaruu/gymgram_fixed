@@ -17,6 +17,7 @@ dependencies:
   video_player: ^2.10.0
 
   supabase_flutter: ^2.8.4
+  app_links: ^6.4.1
   purchases_flutter: ^8.0.0
   mixpanel_flutter: ^2.3.0
   http: ^1.2.2
