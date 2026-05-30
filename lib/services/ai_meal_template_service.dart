@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/country_utils.dart';
+import '../core/input_sanitizers.dart';
 import '../models/ai_meal_template.dart';
 
 /// Acceso al catálogo de recetas curadas (tabla ai_meal_templates).
@@ -83,7 +84,7 @@ class AiMealTemplateService {
 
   /// Busca recetas por nombre (búsqueda parcial, case-insensitive).
   Future<List<AiMealTemplate>> searchByName(String query, {int limit = 20}) async {
-    final q = query.trim();
+    final q = InputSanitizers.safePostgrestLike(query);
     if (q.length < 2) return [];
     try {
       final rows = await _client

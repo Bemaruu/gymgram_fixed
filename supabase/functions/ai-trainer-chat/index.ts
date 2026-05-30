@@ -115,6 +115,7 @@ serve(async (req) => {
     .limit(1);
   const onb = onbRows?.[0];
 
+  // PII enviado al LLM: solo datos fitness no sensibles (objetivo, lugar, nivel, peso, edad, género). No incluye lesiones, condiciones médicas ni screening clínico.
   const userProfile: UserProfile = {
     id: profile.id,
     fitness_goal: profile.fitness_goal,

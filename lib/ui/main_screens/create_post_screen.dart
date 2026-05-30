@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:io';
 
+import '../../core/error_messages.dart';
 import '../../services/analytics_service.dart';
 import '../../services/post_service.dart';
 
@@ -101,7 +102,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al publicar: ${e.toString().replaceFirst('Exception: ', '')}'),
+          content: Text(humanizeError(e)),
           backgroundColor: Colors.red,
         ),
       );
@@ -199,6 +200,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 ),
               ),
               maxLines: 3,
+              maxLength: 2200,
             ),
           ],
         ),

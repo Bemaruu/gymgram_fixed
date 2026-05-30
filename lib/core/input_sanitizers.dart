@@ -98,4 +98,14 @@ class InputSanitizers {
     }
     return null;
   }
+
+  /// Sanitiza un texto que se interpolará en un filtro PostgREST (`ilike`,
+  /// `or`, etc). Elimina caracteres que rompen la sintaxis del filtro
+  /// (`, ( ) \ * % _`) y recorta a [maxLen] para evitar abusos.
+  static String safePostgrestLike(String raw, {int maxLen = 50}) {
+    var v = raw.trim();
+    v = v.replaceAll(RegExp(r'[,()\\*%_]'), '');
+    if (v.length > maxLen) v = v.substring(0, maxLen);
+    return v;
+  }
 }

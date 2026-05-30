@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/input_sanitizers.dart';
 
 class ExerciseService {
   static final ExerciseService instance = ExerciseService._();
@@ -52,10 +53,18 @@ class ExerciseService {
       q = q.eq('muscle_group_primary', muscleGroup);
     }
     if (location != null) {
-      q = q.or('location.eq.$location,location.eq.both');
+      // Allowlist: location es un enum controlado en la DB; descartamos
+      // cualquier valor inesperado para evitar inyección en el filtro.
+      const allowedLocations = {'gym', 'home', 'both'};
+      if (allowedLocations.contains(location)) {
+        q = q.or('location.eq.$location,location.eq.both');
+      }
     }
     if (query != null && query.isNotEmpty) {
-      q = q.ilike('name_es', '%$query%');
+      final safeQuery = InputSanitizers.safePostgrestLike(query);
+      if (safeQuery.isNotEmpty) {
+        q = q.ilike('name_es', '%$safeQuery%');
+      }
     }
 
     final result = await q.order('name_es');

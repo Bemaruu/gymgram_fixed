@@ -421,6 +421,7 @@ class _AITrainerChatScreenState extends State<AITrainerChatScreen> {
                     style: const TextStyle(color: Colors.white),
                     minLines: 1,
                     maxLines: 4,
+                    maxLength: 500,
                     decoration: InputDecoration(
                       hintText: blocked
                           ? 'Limite diario alcanzado'

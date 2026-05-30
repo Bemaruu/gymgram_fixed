@@ -108,6 +108,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
                 controller: _captionController,
                 maxLines: 5,
                 minLines: 2,
+                maxLength: 2200,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
                 cursorColor: const Color(0xFF00BFFF),
                 decoration: InputDecoration(

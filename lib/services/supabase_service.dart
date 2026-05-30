@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/country_utils.dart';
+import '../core/input_sanitizers.dart';
+import 'image_compressor.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._();
@@ -56,7 +58,7 @@ class SupabaseService {
         .select(
           'id, username, full_name, bio, avatar_url, weight, height, '
           'target_weight, fitness_goal, training_location, gender, age, '
-          'country_code',
+          'country_code, requires_medical_clearance, eating_disorder_risk',
         )
         .eq('id', uid)
         .maybeSingle();
@@ -197,11 +199,12 @@ class SupabaseService {
 
   Future<List<Map<String, dynamic>>> searchProfiles(String query) async {
     final uid = currentUserId;
-    if (query.trim().isEmpty) return [];
+    final safeQuery = InputSanitizers.safePostgrestLike(query);
+    if (safeQuery.isEmpty) return [];
     var q = client
         .from('public_profiles')
         .select('id, username, full_name, avatar_url, bio, fitness_goal')
-        .ilike('username', '%${query.trim()}%');
+        .ilike('username', '%$safeQuery%');
     if (uid != null) q = q.neq('id', uid);
     final result = await q.limit(25);
     return List<Map<String, dynamic>>.from(result);
@@ -340,10 +343,25 @@ class SupabaseService {
       }
     } catch (_) {}
 
-    // Nombre único por timestamp → URL siempre diferente → sin conflicto ni cache
+    // Allowlist de formato y tope de tamaño antes de subir.
+    const maxBytes = 5 * 1024 * 1024;
+    const allowed = ['jpg', 'jpeg', 'png', 'heic', 'webp'];
     final ext = file.path.split('.').last.toLowerCase();
-    final uploadPath = '$uid/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await client.storage.from('posts').upload(uploadPath, file);
+    if (!allowed.contains(ext)) {
+      throw Exception('Formato de imagen no permitido.');
+    }
+    final size = await file.length();
+    if (size > maxBytes) {
+      throw Exception('La imagen supera el límite de 5 MB.');
+    }
+    final compressed = await ImageCompressor.compress(file, maxDimension: 400);
+    // Nombre único por timestamp → URL siempre diferente → sin conflicto ni cache
+    final uploadPath = '$uid/avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await client.storage.from('posts').upload(
+      uploadPath,
+      compressed,
+      fileOptions: const FileOptions(contentType: 'image/jpeg'),
+    );
     final url = client.storage.from('posts').getPublicUrl(uploadPath);
     await updateProfile(avatarUrl: url);
     return url;

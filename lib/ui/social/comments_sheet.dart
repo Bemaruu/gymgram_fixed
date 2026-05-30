@@ -225,6 +225,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     style: const TextStyle(color: Colors.white),
                     maxLines: 3,
                     minLines: 1,
+                    maxLength: 500,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       hintText: 'Escribe un comentario...',

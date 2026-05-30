@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:app_links/app_links.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -21,9 +22,29 @@ const _mixpanelToken   = String.fromEnvironment('MIXPANEL_TOKEN');
 Future<void> main() async {
   await runZonedGuarded(_boot, (error, stack) {
     if (kDebugMode) debugPrint('GymGram fatal: $error\n$stack');
-    runApp(const MaterialApp(
+    runApp(MaterialApp(
       home: Scaffold(
-        body: Center(child: Text('Error al iniciar la app. Por favor reiníciala.')),
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Algo salió mal al iniciar la app.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => main(),
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     ));
   });
@@ -42,12 +63,13 @@ Future<void> _boot() async {
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    // Beta/sideload: usamos debug provider para evitar que Play Integrity
-    // bloquee el registro del token FCM en APKs no instaladas desde Play Store.
-    // Cambiar a playIntegrity / deviceCheck cuando se publique en las tiendas.
+    // En release usamos providers reales (Play Integrity / DeviceCheck) y en
+    // debug seguimos con providers debug para no bloquear sideload/dev.
     await FirebaseAppCheck.instance.activate(
-      androidProvider: AndroidProvider.debug,
-      appleProvider: AppleProvider.debug,
+      androidProvider:
+          kReleaseMode ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+      appleProvider:
+          kReleaseMode ? AppleProvider.deviceCheck : AppleProvider.debug,
     );
   } catch (e) {
     if (kDebugMode) debugPrint('Firebase init error (notificaciones no disponibles): $e');
@@ -58,17 +80,45 @@ Future<void> _boot() async {
     anonKey: _supabaseAnonKey,
   );
 
-  // Listener de sesión: redirige a /welcome al cerrar sesión,
-  // y registra el token FCM al hacer login (cubre usuarios nuevos y login fresco).
-  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    if (data.event == AuthChangeEvent.signedOut) {
-      NotificationService.navigatorKey.currentState
-          ?.pushNamedAndRemoveUntil('/welcome', (route) => false);
-    }
-    if (data.event == AuthChangeEvent.signedIn) {
-      unawaited(NotificationService.instance.initialize().catchError((_) {}));
-    }
-  });
+  // Listener de sesión: redirige según eventos de auth.
+  Supabase.instance.client.auth.onAuthStateChange.listen(
+    (data) {
+      void navigate(String route) {
+        final state = NotificationService.navigatorKey.currentState;
+        if (state != null) {
+          state.pushNamedAndRemoveUntil(route, (r) => false);
+        } else {
+          // Cold start: el navigator aún no está listo; diferir al próximo frame.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            NotificationService.navigatorKey.currentState
+                ?.pushNamedAndRemoveUntil(route, (r) => false);
+          });
+        }
+      }
+
+      if (data.event == AuthChangeEvent.signedOut) {
+        navigate('/');
+      }
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        navigate('/reset-password');
+      }
+      if (data.event == AuthChangeEvent.signedIn) {
+        unawaited(NotificationService.instance.initialize().catchError((_) {}));
+      }
+    },
+    onError: (error, stackTrace) {
+      // Errores del stream de auth (ej: fallo de intercambio PKCE al abrir
+      // la app desde un deep link) no deben crashear la app. Redirigir a inicio.
+      if (kDebugMode) debugPrint('Auth stream error: $error');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        NotificationService.navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/', (r) => false);
+      });
+    },
+  );
+
+  // Deep links con token_hash (email template con link directo a la app).
+  unawaited(_listenForAuthDeepLinks());
 
   // Analytics no bloquea el arranque — se inicializa en segundo plano
   unawaited(Future(() async {
@@ -105,6 +155,85 @@ Future<void> _boot() async {
   }));
 
   runApp(const GymGramApp());
+}
+
+// Escucha deep links con ?token_hash=...&type=recovery generados por el
+// email template personalizado. supabase_flutter ignora estos URIs porque no
+// contienen ?code= (PKCE), así que los procesamos manualmente.
+Future<void> _listenForAuthDeepLinks() async {
+  try {
+    final links = AppLinks();
+    final initial = await links.getInitialLink();
+    if (initial != null) unawaited(_handleTokenHashUri(initial));
+    links.uriLinkStream.listen(
+      (uri) => unawaited(_handleTokenHashUri(uri)),
+      onError: (_) {},
+    );
+  } catch (e) {
+    if (kDebugMode) debugPrint('Deep link setup error: $e');
+  }
+}
+
+Future<void> _handleTokenHashUri(Uri uri) async {
+  // PKCE flow (Supabase default): Supabase verifies server-side and redirects to
+  // com.gymgram.app://password-reset?code=CODE. Exchange the code for a session.
+  final code = uri.queryParameters['code'];
+  if (code != null) {
+    try {
+      await Supabase.instance.client.auth.exchangeCodeForSession(code);
+      // Navegar explícitamente: exchangeCodeForSession puede disparar signedIn
+      // en vez de passwordRecovery, así que no confiamos en el listener.
+      void go() {
+        NotificationService.navigatorKey.currentState
+            ?.pushNamedAndRemoveUntil('/reset-password', (r) => false);
+      }
+      if (NotificationService.navigatorKey.currentState != null) {
+        go();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => go());
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('exchangeCodeForSession error: $e');
+    }
+    return;
+  }
+
+  // Legacy OTP fallback: token_hash in query params.
+  final tokenHash = uri.queryParameters['token_hash'];
+  final type = uri.queryParameters['type'];
+  if (tokenHash != null && type == 'recovery') {
+    try {
+      await Supabase.instance.client.auth.verifyOTP(
+        tokenHash: tokenHash,
+        type: OtpType.recovery,
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('OTP verify error: $e');
+    }
+    return;
+  }
+
+  // access_token in fragment (implicit flow fallback).
+  final fragment = uri.fragment;
+  if (fragment.isEmpty) return;
+  final fragParams = Uri.splitQueryString(fragment);
+  final accessToken = fragParams['access_token'];
+  final refreshToken = fragParams['refresh_token'];
+  if (accessToken == null || refreshToken == null) return;
+  try {
+    await Supabase.instance.client.auth.setSession(refreshToken, accessToken: accessToken);
+    void go() {
+      NotificationService.navigatorKey.currentState
+          ?.pushNamedAndRemoveUntil('/reset-password', (r) => false);
+    }
+    if (NotificationService.navigatorKey.currentState != null) {
+      go();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => go());
+    }
+  } catch (e) {
+    if (kDebugMode) debugPrint('setSession error: $e');
+  }
 }
 
 class GymGramApp extends StatelessWidget {

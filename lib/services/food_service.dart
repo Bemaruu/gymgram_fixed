@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/country_utils.dart';
+import '../core/input_sanitizers.dart';
 import '../models/food_item.dart';
 import '../models/food_log.dart';
 import 'badge_service.dart';
@@ -68,7 +69,8 @@ class FoodService {
     String query,
     String countryCode,
   ) async {
-    final q = query.toLowerCase().trim();
+    final q = InputSanitizers.safePostgrestLike(query.toLowerCase());
+    if (q.isEmpty) return [];
     final country = CountryUtils.normalize(countryCode);
     try {
       final rows = await _client
