@@ -10,6 +10,7 @@ import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/badge_service.dart';
 import '../../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/custom_button.dart';
 import 'shared/onboarding_scaffold.dart';
 
@@ -222,6 +223,76 @@ String _mapTrainingLocation(String value) {
         );
       } catch (e) {
         debugPrint('saveOnboardingData warning: $e');
+      }
+
+      // 4.5) Guardar campos de health screening en el perfil
+      // Si el usuario entró por camino detallado (salud o restricción alimentaria),
+      // los flags son OBLIGATORIOS: reintentamos y bloqueamos el avance si falla.
+      final healthUpdate = <String, dynamic>{};
+      final parq = userData['parqAnswers'];
+      if (userData['requiresMedicalClearance'] != null) {
+        healthUpdate['requires_medical_clearance'] =
+            userData['requiresMedicalClearance'] == true;
+      }
+      if (userData['eatingDisorderRisk'] != null) {
+        healthUpdate['eating_disorder_risk'] =
+            userData['eatingDisorderRisk'] == true;
+      }
+      if (parq is Map) {
+        healthUpdate['parq_answers'] = parq;
+      }
+      if (userData['scoffScore'] is int) {
+        healthUpdate['scoff_score'] = userData['scoffScore'];
+      }
+
+      final hasHealthIssue = userData['hasHealthIssue'] == true;
+      final hasFoodRestriction = userData['hasFoodRestriction'] == true;
+      final isMandatory = hasHealthIssue || hasFoodRestriction;
+
+      if (healthUpdate.isNotEmpty) {
+        if (isMandatory) {
+          // UPDATE obligatorio: hasta 2 reintentos con delay de 500ms.
+          Object? lastError;
+          bool saved = false;
+          for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+              await Supabase.instance.client
+                  .from('profiles')
+                  .update(healthUpdate)
+                  .eq('id', userId);
+              saved = true;
+              break;
+            } catch (e) {
+              lastError = e;
+              if (attempt < 2) {
+                await Future.delayed(const Duration(milliseconds: 500));
+              }
+            }
+          }
+          if (!saved) {
+            debugPrint('health screening save FAILED (mandatory): $lastError');
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No pudimos guardar tus datos de salud. Verifica tu conexión e intenta de nuevo.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return; // NO navegar. _isLoading se resetea en finally.
+          }
+        } else {
+          // Sin datos clínicos críticos: try/catch silencioso.
+          try {
+            await Supabase.instance.client
+                .from('profiles')
+                .update(healthUpdate)
+                .eq('id', userId);
+          } catch (e) {
+            debugPrint('health screening save warning: $e');
+          }
+        }
       }
 
       // 5) Importar rutina existente si el usuario eligió ese path

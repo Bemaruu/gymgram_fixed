@@ -811,7 +811,8 @@ class BadgeService {
       final rows = await _client
           .from('food_logs')
           .select('log_date')
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .limit(200);
       final distinctDays = (rows as List)
           .map((r) => r['log_date'] as String)
           .toSet()
@@ -845,11 +846,12 @@ class BadgeService {
 
   Future<void> _checkFollowerCount(String userId) async {
     try {
-      final rows = await _client
+      final res = await _client
           .from('follows')
-          .select('id')
-          .eq('following_id', userId);
-      final count = (rows as List).length;
+          .select()
+          .eq('following_id', userId)
+          .count(CountOption.exact);
+      final count = res.count;
       if (count >= 20) {
         await awardBadge(userId, 'referente');
       } else {

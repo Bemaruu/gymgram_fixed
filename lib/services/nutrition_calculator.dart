@@ -79,10 +79,22 @@ class NutritionCalculator {
     // Preferencia de dieta normalizada: 'vegana'|'vegetariana'|'lowcarb'|
     // 'proteica'|'normal'. Ajusta el reparto de macros (keto/low-carb, etc.).
     String dietPref = 'normal',
+    // Si el screening declarado en onboarding marca riesgo, forzamos modo
+    // mantenimiento cuando el objetivo seria perder/cutting. Nunca se etiqueta
+    // al usuario; solo se evita prescribir deficit.
+    bool eatingDisorderRisk = false,
   }) {
     final isFemale = gender.toUpperCase() == 'FEMALE';
     final isSenior = age >= 60;
     final weightDiff = targetWeightKg - weightKg; // negativo = quiere bajar de peso
+
+    // Safety override silencioso para evitar prescribir deficit en perfiles
+    // con riesgo declarado en onboarding.
+    final normalizedGoal = fitnessGoal.toUpperCase();
+    final goalForCalc = (eatingDisorderRisk &&
+            (normalizedGoal == 'LOSE_WEIGHT' || normalizedGoal == 'CUTTING'))
+        ? 'MAINTAIN'
+        : normalizedGoal;
 
     // 1. Metabolismo basal (Mifflin-St Jeor)
     final bmr = _bmr(
@@ -103,7 +115,7 @@ class NutritionCalculator {
 
     // 4. Interpretación del objetivo + ajuste calórico
     final goal = _interpretGoal(
-      fitnessGoal: fitnessGoal.toUpperCase(),
+      fitnessGoal: goalForCalc,
       weightDiff: weightDiff,
       isSenior: isSenior,
       trainingDaysPerWeek: trainingDaysPerWeek,
@@ -120,7 +132,7 @@ class NutritionCalculator {
     // 6. Macronutrientes estimados
     final macros = _macros(
       calories: recommended,
-      fitnessGoal: fitnessGoal.toUpperCase(),
+      fitnessGoal: goalForCalc,
       goalInterpretation: goal.interpretation,
       weightKg: weightKg,
       dietPref: dietPref,

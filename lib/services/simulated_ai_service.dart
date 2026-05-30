@@ -1,10 +1,13 @@
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'nutrition_calculator.dart';
 
 /// IA simulada para GymGram Beta.
 /// Genera rutinas y planes de comida personalizados según el perfil del usuario.
 class SimulatedAIService {
   static const String disclaimer =
-      'Recomendación general para beta, no reemplaza asesoría profesional.';
+      'Recomendación generada por IA sobre catálogo validado. No reemplaza consulta profesional.';
 
   static double calculateBMI(double kg, double cm) {
     if (cm <= 0 || kg <= 0) return 22.0;
@@ -74,6 +77,170 @@ class SimulatedAIService {
         'rest_seconds': e['rest_seconds'] ?? rest,
       }),
     ];
+  }
+
+  // ── Seguridad clinica del fallback ──────────────────────────────────────────
+
+  /// Mapa local de lesiones declaradas al vocabulario de contraindicaciones
+  /// del catalogo (lumbar, rodilla, hombro, cervical, muneca, embarazo,
+  /// hipertension, cardiaco). Sin tilde en "muneca".
+  static const Map<String, String> _injuryToContraindication = {
+    'lumbar': 'lumbar',
+    'espalda': 'lumbar',
+    'espalda baja': 'lumbar',
+    'rodilla': 'rodilla',
+    'rodillas': 'rodilla',
+    'hombro': 'hombro',
+    'hombros': 'hombro',
+    'cuello': 'cervical',
+    'cervical': 'cervical',
+    'muneca': 'muneca',
+    'muñeca': 'muneca',
+    'munecas': 'muneca',
+    'muñecas': 'muneca',
+  };
+
+  static List<String> _mapInjuriesToContraindications(List<String> injuries) {
+    final out = <String>{};
+    for (final raw in injuries) {
+      final key = raw.toLowerCase().trim();
+      final mapped = _injuryToContraindication[key];
+      if (mapped != null) out.add(mapped);
+    }
+    return out.toList();
+  }
+
+  /// Lista curada de ejercicios siempre seguros (offline fallback) cuando no
+  /// se puede consultar el catalogo y el usuario tiene flags clinicos.
+  /// NO depende de equipamiento ni nivel.
+  static List<Map<String, dynamic>> _curatedSafeExercises() {
+    return const [
+      {
+        'name': 'Calentamiento dinámico (movilidad articular suave)',
+        'muscle_group': 'Calentamiento',
+        'sets': 1,
+        'reps': '5-8 min',
+        'rest_seconds': 0,
+      },
+      {
+        'name': 'Caminata moderada',
+        'muscle_group': 'Cardio suave',
+        'sets': 1,
+        'reps': '15-20 min',
+        'rest_seconds': 60,
+      },
+      {
+        'name': 'Bird dog',
+        'muscle_group': 'Core / estabilidad',
+        'sets': 3,
+        'reps': '8 por lado',
+        'rest_seconds': 45,
+      },
+      {
+        'name': 'Dead bug',
+        'muscle_group': 'Core / estabilidad',
+        'sets': 3,
+        'reps': '8 por lado',
+        'rest_seconds': 45,
+      },
+      {
+        'name': 'Curl con banda elástica',
+        'muscle_group': 'Bíceps',
+        'sets': 2,
+        'reps': '12-15',
+        'rest_seconds': 45,
+      },
+      {
+        'name': 'Sentadilla a silla',
+        'muscle_group': 'Piernas',
+        'sets': 3,
+        'reps': '10-12',
+        'rest_seconds': 60,
+      },
+    ];
+  }
+
+  /// Versión segura del generador: aplica el filtro de [generateRoutine] y
+  /// además excluye ejercicios cuyo `slug` esté contraindicado para las
+  /// lesiones / clearance médico del usuario.
+  ///
+  /// - Si la consulta a Supabase falla (offline o sin sesion), devuelve la
+  ///   lista curada [_curatedSafeExercises] cuando haya flags clinicos.
+  /// - Si no hay flags clinicos, delega al sync `generateRoutine` sin tocar.
+  static Future<List<Map<String, dynamic>>> generateRoutineSafe({
+    required String goal,
+    required String trainingLocation,
+    required String gender,
+    required double bmi,
+    int age = 30,
+    int trainingDayIndex = 0,
+    int totalTrainingDays = 3,
+    List<String> injuries = const [],
+    bool requiresMedicalClearance = false,
+  }) async {
+    final raw = generateRoutine(
+      goal: goal,
+      trainingLocation: trainingLocation,
+      gender: gender,
+      bmi: bmi,
+      age: age,
+      trainingDayIndex: trainingDayIndex,
+      totalTrainingDays: totalTrainingDays,
+    );
+
+    final blocked = <String>{
+      ..._mapInjuriesToContraindications(injuries),
+    };
+    if (requiresMedicalClearance) {
+      blocked.add('cardiaco');
+      blocked.add('hipertension');
+    }
+    if (blocked.isEmpty) return raw;
+
+    // Intentar filtrar contra exercise_catalog (vocabulario controlado).
+    // Si la query falla, caer a lista curada.
+    try {
+      final names = raw
+          .map((e) => (e['name'] as String?)?.trim() ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList();
+      if (names.isEmpty) {
+        return requiresMedicalClearance ? _curatedSafeExercises() : raw;
+      }
+      final rows = await Supabase.instance.client
+          .from('exercise_catalog')
+          .select('name_es, contraindications')
+          .inFilter('name_es', names);
+
+      final unsafe = <String>{};
+      for (final r in (rows as List)) {
+        final map = r as Map<String, dynamic>;
+        final cs = (map['contraindications'] as List?)?.cast<String>() ?? const [];
+        if (cs.isEmpty) continue;
+        for (final c in cs) {
+          if (blocked.contains(c)) {
+            unsafe.add((map['name_es'] as String?) ?? '');
+            break;
+          }
+        }
+      }
+
+      final filtered = raw.where((e) {
+        final name = (e['name'] as String?)?.trim() ?? '';
+        return !unsafe.contains(name);
+      }).toList();
+
+      // Si despues del filtro queda casi vacio y hay clearance, mejor curado.
+      if (requiresMedicalClearance && filtered.length < 2) {
+        return _curatedSafeExercises();
+      }
+      return filtered;
+    } catch (e) {
+      debugPrint('generateRoutineSafe catalog filter failed: $e');
+      // Sin red: en perfiles con flags clinicos preferimos curado a prescribir
+      // ciegamente.
+      return _curatedSafeExercises();
+    }
   }
 
   static String _dayFocus({
@@ -591,9 +758,18 @@ class SimulatedAIService {
     String? userId,
     int weekIndex = 0,
     int dayIndex = 0,
+    bool eatingDisorderRisk = false,
   }) {
-    final isLose = goal.toUpperCase() == 'LOSE_WEIGHT';
-    final isGain = goal.toUpperCase() == 'GAIN_MUSCLE';
+    // Safety override silencioso: si hay riesgo declarado en onboarding y el
+    // objetivo seria perder peso, forzamos modo mantenimiento para no
+    // prescribir deficit. No se etiqueta al usuario.
+    final upperGoal = goal.toUpperCase();
+    final effectiveGoal =
+        (eatingDisorderRisk && (upperGoal == 'LOSE_WEIGHT' || upperGoal == 'CUTTING'))
+            ? 'MAINTAIN'
+            : upperGoal;
+    final isLose = effectiveGoal == 'LOSE_WEIGHT';
+    final isGain = effectiveGoal == 'GAIN_MUSCLE';
     final isFemale = gender.toUpperCase() == 'FEMALE';
 
     final effectiveTarget = targetWeightKg > 0 ? targetWeightKg : weightKg;
@@ -606,10 +782,11 @@ class SimulatedAIService {
       weightKg: weightKg,
       heightCm: heightCm,
       targetWeightKg: effectiveTarget,
-      fitnessGoal: goal,
+      fitnessGoal: effectiveGoal,
       trainingDaysPerWeek: trainingDaysPerWeek,
       dailyActivityLevel: dailyActivityLevel,
       dietPref: pref,
+      eatingDisorderRisk: eatingDisorderRisk,
     );
 
     final seed = _userSeed(userId, weekIndex);

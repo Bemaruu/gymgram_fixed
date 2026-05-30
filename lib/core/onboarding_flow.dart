@@ -22,8 +22,12 @@ class OnboardingFlow {
     '/signup_step_5',
     '/signup_split',
     '/signup_days_duration',
+    '/signup_health_gate',
+    '/signup_parq',
     '/signup_injuries',
     '/signup_diet_meals',
+    '/signup_food_gate',
+    '/signup_scoff',
     '/signup_allergies',
     '/signup_cooking_time',
     '/signup_disliked_foods',
@@ -34,12 +38,19 @@ class OnboardingFlow {
     final place = userData['trainingPlace'] as String?;
     final level = userData['trainingLevel'] as String?;
     final path = userData['experiencePath'] as String?;
+    final hasHealthIssue = userData['hasHealthIssue'] as bool? ?? false;
+    final hasFoodRestriction =
+        userData['hasFoodRestriction'] as bool? ?? false;
     return _routes.where((r) {
       if (r == '/signup_equipment' && place == 'GYM') return false;
       if (r == '/signup_experience_path' && level == 'beginner') return false;
       if (r == '/signup_import_routine' && path != 'analyze_existing_routine') {
         return false;
       }
+      if (r == '/signup_parq' && !hasHealthIssue) return false;
+      if (r == '/signup_injuries' && !hasHealthIssue) return false;
+      if (r == '/signup_scoff' && !hasFoodRestriction) return false;
+      if (r == '/signup_allergies' && !hasFoodRestriction) return false;
       return true;
     }).toList();
   }

@@ -8,10 +8,10 @@ import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
 import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
-import '../../widgets/ai_disclaimer_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
 import '../ranked/set_logger_sheet.dart';
+import '../shared/first_use_disclaimer_modal.dart';
 import 'exercise_search_sheet.dart';
 
 class RoutineScreen extends StatefulWidget {
@@ -62,6 +62,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
   String _gender = 'MALE';
   double _bmi = 22.0;
   int _age = 30;
+  List<String> _injuries = const [];
+  bool _requiresMedicalClearance = false;
 
   List<_Exercise> _exercises = [];
 
@@ -133,6 +135,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
       final gender =
           (profile?['gender'] as String? ?? 'MALE').toUpperCase();
       final age = (profile?['age'] as num?)?.toInt() ?? 30;
+      final injuries = (onboarding?['injuries'] as List?)
+              ?.map((e) => e.toString())
+              .where((s) => s.isNotEmpty && s.toLowerCase() != 'ninguna')
+              .toList() ??
+          const <String>[];
+      final requiresClearance =
+          profile?['requires_medical_clearance'] == true;
 
       if (!mounted) return;
       setState(() {
@@ -142,12 +151,15 @@ class _RoutineScreenState extends State<RoutineScreen> {
         _gender = gender;
         _bmi = bmi;
         _age = age;
+        _injuries = injuries;
+        _requiresMedicalClearance = requiresClearance;
         _savedRoutines = savedRoutines;
         _isLoading = false;
       });
 
       _generateExercises();
       _checkTodayCompleted();
+      _maybeShowFirstUseDisclaimer();
     } catch (e) {
       debugPrint('RoutineScreen load error: $e');
       if (!mounted) return;
@@ -160,7 +172,14 @@ class _RoutineScreenState extends State<RoutineScreen> {
     }
   }
 
-  void _generateExercises() {
+  void _maybeShowFirstUseDisclaimer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FirstUseDisclaimerModal.ensureAcceptedFor(context);
+    });
+  }
+
+  Future<void> _generateExercises() async {
     // Si el día seleccionado NO está marcado como día de entrenamiento en el
     // onboarding, es día de descanso: limpiar la pantalla y NO mostrar ninguna
     // rutina previamente guardada. Esto evita que una rutina auto-guardada en
@@ -218,7 +237,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       return;
     }
 
-    final raw = SimulatedAIService.generateRoutine(
+    final raw = await SimulatedAIService.generateRoutineSafe(
       goal: _goal,
       trainingLocation: _location,
       gender: _gender,
@@ -226,8 +245,11 @@ class _RoutineScreenState extends State<RoutineScreen> {
       age: _age,
       trainingDayIndex: positionInCycle,
       totalTrainingDays: totalDays > 0 ? totalDays : 3,
+      injuries: _injuries,
+      requiresMedicalClearance: _requiresMedicalClearance,
     );
 
+    if (!mounted) return;
     setState(() {
       _exercises = raw
           .map((e) => _Exercise(
@@ -990,9 +1012,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
   Widget _buildNormalList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      itemCount: _exercises.length + 1,
+      itemCount: _exercises.length + 2,
       itemBuilder: (context, i) {
         if (i == _exercises.length) return _buildCustomRoutineCta();
+        if (i == _exercises.length + 1) return _buildDisclaimerFooter();
         final e = _exercises[i];
         final match = _rankableMatches[i];
         return GestureDetector(
@@ -1016,7 +1039,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
   Widget _buildEditList() {
     return ReorderableListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      itemCount: _exercises.length + 1,
+      itemCount: _exercises.length + 2,
       onReorder: (oldIndex, newIndex) {
         if (oldIndex >= _exercises.length || newIndex > _exercises.length) {
           return;
@@ -1028,6 +1051,12 @@ class _RoutineScreenState extends State<RoutineScreen> {
         });
       },
       itemBuilder: (context, i) {
+        if (i == _exercises.length + 1) {
+          return KeyedSubtree(
+            key: const ValueKey('disclaimer_footer'),
+            child: _buildDisclaimerFooter(),
+          );
+        }
         if (i == _exercises.length) {
           return Container(
             key: const ValueKey('add_button'),
@@ -1333,8 +1362,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
             ),
       body: Column(
         children: [
-          const AIDisclaimerBanner(),
           _buildDaySelector(),
+
+          if (_requiresMedicalClearance) _buildMedicalInfoBanner(),
 
           if (_availableDays.where((d) => d).length >= 6)
             Padding(
@@ -1445,15 +1475,58 @@ class _RoutineScreenState extends State<RoutineScreen> {
               ),
             ),
 
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              SimulatedAIService.disclaimer,
-              style: const TextStyle(color: Colors.black38, fontSize: 11),
-              textAlign: TextAlign.center,
-            ),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMedicalInfoBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.shade100),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 18,
+              color: Colors.blue.shade700,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tu plan está adaptado a las condiciones que reportaste. '
+                'Consulta a un profesional antes de empezar.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Text(
+        SimulatedAIService.disclaimer,
+        style: const TextStyle(
+          color: Colors.black45,
+          fontSize: 12,
+          height: 1.35,
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }

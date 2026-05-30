@@ -28,6 +28,9 @@ class MealPlanInput {
   // Variación por comida (slotIndex → nº de "cambios" pedidos por el usuario).
   // Permite intercambiar una comida por otra alternativa de forma estable.
   final Map<int, int> slotVariations;
+  // Flag de seguridad: si está declarado en onboarding, NutritionCalculator
+  // fuerza modo mantenimiento aunque el goal sea LOSE_WEIGHT/CUTTING.
+  final bool eatingDisorderRisk;
 
   const MealPlanInput({
     required this.goal,
@@ -48,6 +51,7 @@ class MealPlanInput {
     this.dayIndex = 0,
     this.countryCode = CountryUtils.defaultCountry,
     this.slotVariations = const {},
+    this.eatingDisorderRisk = false,
   });
 }
 
@@ -143,6 +147,7 @@ class DbMealPlanGenerator implements MealPlanGenerator {
       trainingDaysPerWeek: input.trainingDaysPerWeek,
       dailyActivityLevel: input.dailyActivityLevel,
       dietPref: dietPref,
+      eatingDisorderRisk: input.eatingDisorderRisk,
     );
 
     final slots = _slotsFor(input.mealsPerDay);
@@ -978,6 +983,7 @@ class SimulatedMealPlanGenerator implements MealPlanGenerator {
       userId: input.userId,
       weekIndex: input.weekIndex,
       dayIndex: input.dayIndex,
+      eatingDisorderRisk: input.eatingDisorderRisk,
     );
   }
 }

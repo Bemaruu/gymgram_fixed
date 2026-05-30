@@ -15,6 +15,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _passwordResetRedirectTo = 'com.gymgram.app://password-reset';
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -53,7 +55,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = emailCtrl.text.trim();
     if (email.isEmpty) return;
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: _passwordResetRedirectTo,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -95,6 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await AuthService().loginWithEmail(email: email, password: password);
 
+      await AnalyticsService.instance.enableAnalytics();
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid != null) AnalyticsService.instance.identify(uid);
       AnalyticsService.instance.loginSuccess();

@@ -200,8 +200,20 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         });
         return;
       }
-      // TODO(username-unique): integrar SupabaseService.checkUsernameAvailable
-      // cuando exista; por ahora confiamos en la unique constraint del schema.
+      final uid = SupabaseService.instance.client.auth.currentUser?.id ?? '';
+      final taken = await SupabaseService.instance.client
+          .from('profiles')
+          .select('id')
+          .eq('username', newUsername)
+          .neq('id', uid)
+          .limit(1);
+      if ((taken as List).isNotEmpty) {
+        setState(() {
+          _usernameError = true;
+          _usernameErrorMsg = 'Ese nombre de usuario ya está en uso.';
+        });
+        return;
+      }
     }
 
     setState(() {

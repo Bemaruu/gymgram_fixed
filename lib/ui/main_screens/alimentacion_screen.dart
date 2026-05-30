@@ -13,12 +13,12 @@ import '../../services/food_scan_service.dart';
 import '../../services/food_service.dart';
 import '../../services/meal_plan_generator.dart';
 import '../../services/simulated_ai_service.dart';
-import '../../widgets/ai_disclaimer_banner.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
 import '../../widgets/food_icon.dart';
 import '../../widgets/skeletons/meal_skeleton.dart';
+import '../shared/first_use_disclaimer_modal.dart';
 import 'food_search_screen.dart';
 
 class AlimentacionScreen extends StatefulWidget {
@@ -60,6 +60,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   List<String> _foodPrefs = [];
   List<String> _allergies = [];
   List<String> _dislikedFoods = [];
+  bool _eatingDisorderRisk = false;
   String? _cookingTime;
   String? _userId;
   String _countryCode = CountryUtils.defaultCountry;
@@ -143,6 +144,8 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final rawAllergies = (onboarding?['allergies'] as List?)?.cast<String>() ?? [];
       final rawDisliked = (onboarding?['disliked_foods'] as List?)?.cast<String>() ?? [];
       final cookingTime = onboarding?['cooking_time_preference'] as String?;
+      final eatingDisorderRisk =
+          profile?['eating_disorder_risk'] == true;
       final countryCode = CountryUtils.normalize(
         profile?['country_code'] as String? ??
             onboarding?['country_code'] as String?,
@@ -164,6 +167,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _allergies = rawAllergies;
         _dislikedFoods = rawDisliked;
         _cookingTime = cookingTime;
+        _eatingDisorderRisk = eatingDisorderRisk;
         _userId = userId;
         _countryCode = countryCode;
         _waterCount = water;
@@ -174,6 +178,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       if (mounted) setState(() => _isLoading = false);
       await _loadDailyLogs(DateTime.now());
       _reconcilePlanChecks();
+      _maybeShowFirstUseDisclaimer();
     } catch (e) {
       debugPrint('AlimentacionScreen load error: $e');
       if (!mounted) return;
@@ -185,6 +190,13 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     await _generatePlan();
     await _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
     _reconcilePlanChecks();
+  }
+
+  void _maybeShowFirstUseDisclaimer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FirstUseDisclaimerModal.ensureAcceptedFor(context);
+    });
   }
 
   Future<void> _generatePlan() async {
@@ -211,6 +223,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       dayIndex: _selectedDayIndex,
       slotVariations: _slotVariations,
       countryCode: _countryCode,
+      eatingDisorderRisk: _eatingDisorderRisk,
     );
 
     final plan = await MealPlanGeneratorProvider.current.generate(input);
@@ -596,10 +609,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             centerTitle: true,
           ),
 
-          const SliverToBoxAdapter(child: AIDisclaimerBanner()),
-
           // Selector de día
           SliverToBoxAdapter(child: _buildDaySelector()),
+
+          if (_eatingDisorderRisk)
+            SliverToBoxAdapter(child: _buildSafetyInfoBanner()),
 
           // Tarjeta de calorías + macros
           SliverToBoxAdapter(
@@ -682,10 +696,14 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
           // Disclaimer
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
               child: Text(
                 SimulatedAIService.disclaimer,
-                style: const TextStyle(color: Colors.black38, fontSize: 11),
+                style: const TextStyle(
+                  color: Colors.black45,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -693,6 +711,42 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSafetyInfoBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.shade100),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 18,
+              color: Colors.blue.shade700,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tu plan está en modo mantenimiento por seguridad. Puedes '
+                'ajustarlo desde tu perfil si lo conversaste con un profesional.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
