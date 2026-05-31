@@ -123,7 +123,21 @@ Future<void> _boot() async {
   // Analytics no bloquea el arranque — se inicializa en segundo plano
   unawaited(Future(() async {
     try {
+      // [DEBUG MIXPANEL] verificación de token vía dart-define.
+      debugPrint(
+        '[MIXPANEL] token presente=${_mixpanelToken.isNotEmpty} '
+        'len=${_mixpanelToken.length}',
+      );
+      if (_mixpanelToken.isEmpty) {
+        debugPrint(
+          '[MIXPANEL] TOKEN VACÍO — el APK se buildeó sin '
+          '--dart-define-from-file=dart_defines.json',
+        );
+      }
       await AnalyticsService.instance.initIfConsented(_mixpanelToken);
+      debugPrint(
+        '[MIXPANEL] initIfConsented hecho. isInitialized=${AnalyticsService.instance.isInitialized}',
+      );
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null && AnalyticsService.instance.isInitialized) {
         AnalyticsService.instance.identify(user.id);

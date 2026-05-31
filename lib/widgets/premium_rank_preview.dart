@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/ranked_profile_model.dart';
@@ -264,33 +266,72 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
     final tierColor = _tierColor(p.tier);
 
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       onTap: _isOwnProfile ? _openRankedScreen : null,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
         decoration: BoxDecoration(
-          color: _darkSurfaceCard,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _darkSurfaceCard,
+              Color.lerp(_darkSurfaceCard, tierColor, 0.10) ?? _darkSurfaceCard,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: tierColor.withValues(alpha: 0.28), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: tierColor.withValues(alpha: 0.18),
+              blurRadius: 22,
+              spreadRadius: -4,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: tierColor.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
+                // Emblema SVG con aura del tier
+                SizedBox(
+                  width: 68,
+                  height: 68,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 68,
+                        height: 68,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              tierColor.withValues(alpha: 0.35),
+                              tierColor.withValues(alpha: 0.05),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.6, 1.0],
+                          ),
+                        ),
+                      ),
+                      SvgPicture.asset(
+                        'assets/ranks/${_assetName(p.tier)}.svg',
+                        width: 58,
+                        height: 58,
+                      ),
+                    ],
                   ),
-                  child: Icon(
-                    PhosphorIconsFill.shield,
-                    color: tierColor,
-                    size: 30,
-                  ),
-                ),
+                )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(
+                      duration: const Duration(milliseconds: 2400),
+                      begin: const Offset(1.0, 1.0),
+                      end: const Offset(1.04, 1.04),
+                      curve: Curves.easeInOut,
+                    ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -299,42 +340,77 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
                       Text(
                         isInmortal ? tierLabel : '$tierLabel $divLabel',
                         style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
+                          letterSpacing: 0.4,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${p.currentRp} RP',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: tierColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: tierColor.withValues(alpha: 0.4),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          '${p.currentRp} RP',
+                          style: TextStyle(
+                            color: tierColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+                if (_isOwnProfile)
+                  Icon(
+                    PhosphorIconsRegular.caretRight,
+                    color: Colors.white.withValues(alpha: 0.35),
+                    size: 18,
+                  ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 8,
-                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                backgroundColor: Colors.white.withValues(alpha: 0.06),
                 valueColor: AlwaysStoppedAnimation<Color>(tierColor),
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              isInmortal ? 'Élite Inmortal' : '$lo - $hi RP al siguiente tier',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 11,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isInmortal ? 'Élite Inmortal' : '$lo - $hi RP',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (!isInmortal)
+                  Text(
+                    '${(progress * 100).toInt()}%',
+                    style: TextStyle(
+                      color: tierColor.withValues(alpha: 0.85),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -343,12 +419,32 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
                 color: Colors.white.withValues(alpha: 0.5),
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _assetName(RankedTier t) {
+    switch (t) {
+      case RankedTier.hierro:
+        return 'hierro';
+      case RankedTier.bronce:
+        return 'bronce';
+      case RankedTier.plata:
+        return 'plata';
+      case RankedTier.oro:
+        return 'oro';
+      case RankedTier.platino:
+        return 'platino';
+      case RankedTier.diamante:
+        return 'diamante';
+      case RankedTier.inmortal:
+        return 'inmortal';
+    }
   }
 
   Color _tierColor(RankedTier t) {

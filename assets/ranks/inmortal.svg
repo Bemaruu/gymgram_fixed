@@ -1,0 +1,90 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="im_disc" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#F0DBFF"/>
+      <stop offset="40%" stop-color="#B14CFF"/>
+      <stop offset="100%" stop-color="#2A0B4A"/>
+    </radialGradient>
+    <linearGradient id="im_rim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E9CDFF"/>
+      <stop offset="50%" stop-color="#7A2BC4"/>
+      <stop offset="100%" stop-color="#1A0530"/>
+    </linearGradient>
+    <linearGradient id="im_shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="im_crown" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF6B8"/>
+      <stop offset="50%" stop-color="#F0C040"/>
+      <stop offset="100%" stop-color="#8A5A14"/>
+    </linearGradient>
+    <linearGradient id="im_wing" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F8E8FF"/>
+      <stop offset="50%" stop-color="#C68CFA"/>
+      <stop offset="100%" stop-color="#5A1B96"/>
+    </linearGradient>
+    <radialGradient id="im_halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Outer rim -->
+  <circle cx="100" cy="100" r="94" fill="url(#im_rim)"/>
+  <circle cx="100" cy="100" r="94" fill="none" stroke="#0F0220" stroke-width="2"/>
+  <circle cx="100" cy="100" r="82" fill="none" stroke="#1A0530" stroke-width="1.5"/>
+
+  <!-- Inner disc -->
+  <circle cx="100" cy="100" r="78" fill="url(#im_disc)"/>
+
+  <!-- Halo behind -->
+  <circle cx="100" cy="80" r="38" fill="url(#im_halo)"/>
+
+  <!-- Wings -->
+  <g stroke="#1A0530" stroke-width="1.6" stroke-linejoin="round">
+    <!-- Left wing -->
+    <path d="M68 70
+             Q40 64 28 84
+             Q48 78 52 92
+             Q34 92 30 110
+             Q52 100 60 110
+             Q46 112 44 128
+             Q66 110 72 116 Z"
+          fill="url(#im_wing)"/>
+    <!-- Right wing -->
+    <path d="M132 70
+             Q160 64 172 84
+             Q152 78 148 92
+             Q166 92 170 110
+             Q148 100 140 110
+             Q154 112 156 128
+             Q134 110 128 116 Z"
+          fill="url(#im_wing)"/>
+
+    <!-- Crown -->
+    <path d="M72 70 L82 54 L92 68 L100 48 L108 68 L118 54 L128 70 L128 84 L72 84 Z"
+          fill="url(#im_crown)"/>
+    <circle cx="82" cy="54" r="3" fill="#E9CDFF" stroke="#1A0530" stroke-width="0.8"/>
+    <circle cx="100" cy="48" r="3.8" fill="#B14CFF" stroke="#1A0530"/>
+    <circle cx="118" cy="54" r="3" fill="#E9CDFF" stroke="#1A0530" stroke-width="0.8"/>
+    <path d="M72 84 L128 84 L128 90 L72 90 Z" fill="#A0741C"/>
+
+    <!-- Star below crown -->
+    <path d="M100 110
+             L106 124 L121 125 L109 134 L113 148
+             L100 140 L87 148 L91 134 L79 125 L94 124 Z"
+          fill="#FFF6B8" stroke="#1A0530" stroke-width="1.2"/>
+  </g>
+
+  <!-- Sparkles -->
+  <g fill="#FFFFFF">
+    <circle cx="48" cy="48" r="1.5" opacity="0.9"/>
+    <circle cx="152" cy="52" r="1.2" opacity="0.85"/>
+    <circle cx="40" cy="140" r="1" opacity="0.8"/>
+    <circle cx="160" cy="138" r="1.4" opacity="0.85"/>
+  </g>
+
+  <!-- Top disc shine -->
+  <ellipse cx="100" cy="50" rx="58" ry="20" fill="url(#im_shine)"/>
+</svg>

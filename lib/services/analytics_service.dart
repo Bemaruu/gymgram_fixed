@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,10 @@ class AnalyticsService {
   Future<void> init(String token) async {
     if (_mp != null) return;
     _mp = await Mixpanel.init(token, trackAutomaticEvents: true);
-    _mp?.setLoggingEnabled(false);
+    if (kDebugMode) {
+      _mp?.setLoggingEnabled(true);
+      _mp?.track('debug_ping', properties: {'source': 'init'});
+    }
   }
 
   /// Inicializa Mixpanel solo si el usuario ya dio consentimiento de analytics.

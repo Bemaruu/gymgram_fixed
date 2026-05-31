@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -233,7 +235,7 @@ class _RankedScreenState extends State<RankedScreen> {
                     _buildBoardToggle(),
                     const SizedBox(height: 12),
                     _buildLeaderboard(),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 40),
                     _sectionTitle('Historial de temporadas'),
                     const SizedBox(height: 12),
                     _buildHistoryGrid(),
@@ -305,33 +307,68 @@ class _RankedScreenState extends State<RankedScreen> {
     return Column(
       children: [
         if (_season != null) _SeasonHeroBanner(season: _season!),
-        _isPremium
-            ? _RotatingGradientBorder(
-                size: 168,
-                child: TierEmblem(tier: tier, size: 150, animated: true),
-              )
-            : TierEmblem(tier: tier, size: 150, animated: true),
-        const SizedBox(height: 14),
-        Text(
-          isInmortal
-              ? _tierLabel(tier).toUpperCase()
-              : '${_tierLabel(tier).toUpperCase()} ${p.romanDivision()}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2,
+        (_isPremium
+                ? _RotatingGradientBorder(
+                    size: 168,
+                    child: TierEmblem(tier: tier, size: 150, animated: true),
+                  )
+                : TierEmblem(tier: tier, size: 150, animated: true))
+            .animate()
+            .fadeIn(duration: 420.ms, curve: Curves.easeOut)
+            .scale(
+                begin: const Offset(0.86, 0.86),
+                end: const Offset(1.0, 1.0),
+                duration: 480.ms,
+                curve: Curves.easeOutCubic),
+        const SizedBox(height: 16),
+        ShaderMask(
+          shaderCallback: (rect) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white,
+              Color.lerp(color, Colors.white, 0.35)!,
+            ],
+          ).createShader(rect),
+          child: Text(
+            isInmortal
+                ? _tierLabel(tier).toUpperCase()
+                : '${_tierLabel(tier).toUpperCase()} ${p.romanDivision()}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2.4,
+              height: 1.0,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          isInmortal ? '${p.currentRp} RP' : '${p.currentRp} / $hi RP',
-          style: const TextStyle(
-            color: AppColors.accentOrange,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
+        ).animate().fadeIn(delay: 120.ms, duration: 420.ms).slideY(
+              begin: 0.25,
+              end: 0,
+              duration: 420.ms,
+              curve: Curves.easeOutCubic,
+            ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.accentOrange.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.accentOrange.withValues(alpha: 0.35),
+              width: 1,
+            ),
           ),
-        ),
+          child: Text(
+            isInmortal ? '${p.currentRp} RP' : '${p.currentRp} / $hi RP',
+            style: const TextStyle(
+              color: AppColors.accentOrange,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ).animate().fadeIn(delay: 200.ms, duration: 360.ms),
         const SizedBox(height: 14),
         if (!isInmortal)
           Padding(
@@ -385,20 +422,45 @@ class _RankedScreenState extends State<RankedScreen> {
 
   Widget _buildAllTiersButton() {
     return Center(
-      child: TextButton.icon(
-        onPressed: () {
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => AllTiersScreen(currentTier: _profile?.tier),
-          ));
-        },
-        icon: Icon(PhosphorIconsRegular.listDashes,
-            color: Colors.white70, size: 16),
-        label: const Text(
-          'Ver todos los rangos',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => AllTiersScreen(currentTier: _profile?.tier),
+            ));
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.10),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(PhosphorIconsRegular.stack,
+                    color: Colors.white70, size: 14),
+                const SizedBox(width: 8),
+                const Text(
+                  'Ver todos los rangos',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(PhosphorIconsRegular.caretRight,
+                    color: Colors.white38, size: 12),
+              ],
+            ),
           ),
         ),
       ),
@@ -838,8 +900,10 @@ class _RankedScreenState extends State<RankedScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasPodium)
+        if (hasPodium) ...[
           _LeaderboardPodium(top3: list.take(3).toList(), tierColorOf: _tierColor),
+          if (rest.isNotEmpty) const SizedBox(height: 12),
+        ],
         ...rest.map((e) => _boardRow(e, e.userId == uid)),
       ],
     );
@@ -987,13 +1051,31 @@ class _RankedScreenState extends State<RankedScreen> {
 
   // ----- Helpers visuales -----
 
-  Widget _sectionTitle(String t) => Text(
-        t,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 16,
-        ),
+  Widget _sectionTitle(String t) => Row(
+        children: [
+          Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFD700), AppColors.accentOrange],
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            t,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       );
 
   Widget _emptyBox(String msg) => Container(
@@ -1227,40 +1309,41 @@ class _LeaderboardPodium extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 180,
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            flex: 10,
-            child: _PodiumSlot(
-              entry: top3[1],
-              rank: 2,
-              platoHeight: 70,
-              color: const Color(0xFFC0C0C0),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 12),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              flex: 10,
+              child: _PodiumSlot(
+                entry: top3[1],
+                rank: 2,
+                platoHeight: 70,
+                color: const Color(0xFFC0C0C0),
+              ),
             ),
-          ),
-          Expanded(
-            flex: 12,
-            child: _PodiumSlot(
-              entry: top3[0],
-              rank: 1,
-              platoHeight: 100,
-              color: const Color(0xFFFFD700),
+            Expanded(
+              flex: 12,
+              child: _PodiumSlot(
+                entry: top3[0],
+                rank: 1,
+                platoHeight: 100,
+                color: const Color(0xFFFFD700),
+              ),
             ),
-          ),
-          Expanded(
-            flex: 10,
-            child: _PodiumSlot(
-              entry: top3[2],
-              rank: 3,
-              platoHeight: 50,
-              color: const Color(0xFFCD7F32),
+            Expanded(
+              flex: 10,
+              child: _PodiumSlot(
+                entry: top3[2],
+                rank: 3,
+                platoHeight: 50,
+                color: const Color(0xFFCD7F32),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1995,7 +2078,6 @@ class _TierEmblemState extends State<TierEmblem>
     final size = widget.size;
     final isDiamondPlus =
         widget.tier == RankedTier.diamante || widget.tier == RankedTier.inmortal;
-    final accent = _emblemAccent(widget.tier);
 
     return AnimatedBuilder(
       animation: _breath,
@@ -2011,7 +2093,7 @@ class _TierEmblemState extends State<TierEmblem>
               alignment: Alignment.center,
               clipBehavior: Clip.none,
               children: [
-                // Glow externo + radial gradient base
+                // Aura externa con glow del color del tier
                 Container(
                   width: size,
                   height: size,
@@ -2019,32 +2101,29 @@ class _TierEmblemState extends State<TierEmblem>
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        color.withValues(alpha: 0.50),
-                        color.withValues(alpha: 0.10),
+                        color.withValues(alpha: 0.32),
+                        color.withValues(alpha: 0.08),
                         Colors.transparent,
                       ],
-                      stops: const [0.0, 0.6, 1.0],
+                      stops: const [0.0, 0.65, 1.0],
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: color.withValues(
-                            alpha: isDiamondPlus ? 0.85 : 0.55),
+                            alpha: isDiamondPlus ? 0.80 : 0.50),
                         blurRadius: size * 0.22,
-                        spreadRadius: size * 0.025,
+                        spreadRadius: size * 0.02,
                       ),
                     ],
                   ),
                 ),
-                // Silueta CustomPaint del tier
+                // Emblema SVG (medallón completo)
                 SizedBox(
-                  width: size * 0.62,
-                  height: size * 0.62,
-                  child: CustomPaint(
-                    painter: TierEmblemPainter(
-                      tier: widget.tier,
-                      baseColor: color,
-                      accentColor: accent,
-                    ),
+                  width: size * 0.86,
+                  height: size * 0.86,
+                  child: SvgPicture.asset(
+                    'assets/ranks/${_assetName(widget.tier)}.svg',
+                    fit: BoxFit.contain,
                   ),
                 ),
                 // Partículas orbitando — solo diamante+inmortal
@@ -2054,7 +2133,7 @@ class _TierEmblemState extends State<TierEmblem>
                       color: widget.tier == RankedTier.inmortal
                           ? const Color(0xFFEDD7FF)
                           : Colors.white,
-                      radius: size * 0.45,
+                      radius: size * 0.46,
                       count: 8,
                       progress: curved,
                     ),
@@ -2067,333 +2146,27 @@ class _TierEmblemState extends State<TierEmblem>
     );
   }
 
-  Color _emblemAccent(RankedTier t) {
+  String _assetName(RankedTier t) {
     switch (t) {
       case RankedTier.hierro:
-        return const Color(0xFFB8B8B8);
+        return 'hierro';
       case RankedTier.bronce:
-        return const Color(0xFFE8A360);
+        return 'bronce';
       case RankedTier.plata:
-        return const Color(0xFFEDEEF1);
+        return 'plata';
       case RankedTier.oro:
-        return const Color(0xFFFFEB99);
+        return 'oro';
       case RankedTier.platino:
-        return const Color(0xFFBFF1FA);
+        return 'platino';
       case RankedTier.diamante:
-        return const Color(0xFFB3CBFF);
+        return 'diamante';
       case RankedTier.inmortal:
-        return const Color(0xFFE9CDFF);
+        return 'inmortal';
     }
   }
+
 }
 
-class TierEmblemPainter extends CustomPainter {
-  final RankedTier tier;
-  final Color baseColor;
-  final Color accentColor;
-  TierEmblemPainter({
-    required this.tier,
-    required this.baseColor,
-    required this.accentColor,
-  });
-
-  // Stroke escalado con el tamaño del emblema (se setea en paint()).
-  double _sw = 2.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    _sw = size.shortestSide * 0.028;
-    switch (tier) {
-      case RankedTier.hierro:
-        _drawGear(canvas, size);
-        break;
-      case RankedTier.bronce:
-        _drawShield(canvas, size, withRivets: true);
-        break;
-      case RankedTier.plata:
-        _drawPentagonFaceted(canvas, size);
-        break;
-      case RankedTier.oro:
-        _drawShieldWithCrown(canvas, size);
-        break;
-      case RankedTier.platino:
-        _drawCrystal(canvas, size);
-        break;
-      case RankedTier.diamante:
-        _drawDiamondPrism(canvas, size);
-        break;
-      case RankedTier.inmortal:
-        _drawWingedCrown(canvas, size);
-        break;
-    }
-  }
-
-  Paint get _strokeAccent => Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = _sw
-    ..strokeJoin = StrokeJoin.round
-    ..strokeCap = StrokeCap.round
-    ..color = accentColor.withValues(alpha: 0.92);
-
-  // Contorno oscuro inferior que se dibuja antes del accent: separa la
-  // silueta del fondo y da sensación de borde biselado.
-  Paint get _strokeUnder => Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = _sw * 1.6
-    ..strokeJoin = StrokeJoin.round
-    ..strokeCap = StrokeCap.round
-    ..color = baseColor.withValues(alpha: 0.40);
-
-  Paint _highlightPaint(Size size) => Paint()
-    ..style = PaintingStyle.fill
-    ..shader = LinearGradient(
-      begin: const Alignment(-0.3, -0.8),
-      end: Alignment.bottomCenter,
-      colors: [
-        accentColor.withValues(alpha: 0.95),
-        baseColor.withValues(alpha: 0.55),
-        baseColor.withValues(alpha: 0.22),
-      ],
-      stops: const [0.0, 0.55, 1.0],
-    ).createShader(Offset.zero & size);
-
-  // Pinta una silueta con volumen: relleno direccional + bisel (reflejo
-  // superior y sombra inferior clippeados al path) + doble contorno.
-  void _paintShape(Canvas canvas, Size size, Path path) {
-    canvas.drawPath(path, _highlightPaint(size));
-    canvas.save();
-    canvas.clipPath(path);
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.center,
-          colors: [Colors.white.withValues(alpha: 0.28), Colors.transparent],
-        ).createShader(Offset.zero & size),
-    );
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.center,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.26)],
-        ).createShader(Offset.zero & size),
-    );
-    canvas.restore();
-    canvas.drawPath(path, _strokeUnder);
-    canvas.drawPath(path, _strokeAccent);
-  }
-
-  void _pt(Path p, Offset c, double r, double a, bool first) {
-    final o = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
-    first ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
-  }
-
-  void _drawGear(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final rOuter = size.shortestSide * 0.46;
-    final rInner = size.shortestSide * 0.38; // diente menos profundo
-    const teeth = 6;
-    const halfTooth = 6 * math.pi / 180; // meseta plana ±6°
-    final step = 2 * math.pi / teeth;
-    final path = Path();
-    for (int i = 0; i < teeth; i++) {
-      final a = -math.pi / 2 + i * step;
-      _pt(path, c, rInner, a - step * 0.5, i == 0); // valle
-      _pt(path, c, rOuter, a - halfTooth, false); // meseta izq
-      _pt(path, c, rOuter, a + halfTooth, false); // meseta der
-    }
-    path.close();
-    _paintShape(canvas, size, path);
-    // anillo concéntrico interno (lectura mecánica de engranaje)
-    canvas.drawCircle(
-      c,
-      size.shortestSide * 0.26,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = _sw * 0.7
-        ..color = accentColor.withValues(alpha: 0.4),
-    );
-    // hueco central
-    final hole = Paint()
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFF1A1A2E);
-    canvas.drawCircle(c, size.shortestSide * 0.18, hole);
-    canvas.drawCircle(c, size.shortestSide * 0.18, _strokeAccent);
-  }
-
-  void _drawShield(Canvas canvas, Size size, {bool withRivets = false}) {
-    final w = size.width;
-    final h = size.height;
-    final path = Path()
-      ..moveTo(w * 0.5, h * 0.05)
-      ..lineTo(w * 0.92, h * 0.18)
-      ..lineTo(w * 0.88, h * 0.62)
-      ..quadraticBezierTo(w * 0.7, h * 0.92, w * 0.5, h * 0.97)
-      ..quadraticBezierTo(w * 0.3, h * 0.92, w * 0.12, h * 0.62)
-      ..lineTo(w * 0.08, h * 0.18)
-      ..close();
-    _paintShape(canvas, size, path);
-    if (withRivets) {
-      final rivet = Paint()
-        ..style = PaintingStyle.fill
-        ..color = accentColor;
-      final positions = [
-        Offset(w * 0.18, h * 0.22),
-        Offset(w * 0.82, h * 0.22),
-        Offset(w * 0.18, h * 0.5),
-        Offset(w * 0.82, h * 0.5),
-        Offset(w * 0.35, h * 0.82),
-        Offset(w * 0.65, h * 0.82),
-      ];
-      for (final p in positions) {
-        canvas.drawCircle(p, size.shortestSide * 0.025, rivet);
-      }
-    }
-  }
-
-  void _drawPentagonFaceted(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.shortestSide * 0.45;
-    final path = Path();
-    final vertices = <Offset>[];
-    for (int i = 0; i < 5; i++) {
-      final angle = -math.pi / 2 + (i / 5) * 2 * math.pi;
-      final p = Offset(c.dx + r * math.cos(angle), c.dy + r * math.sin(angle));
-      vertices.add(p);
-      if (i == 0) {
-        path.moveTo(p.dx, p.dy);
-      } else {
-        path.lineTo(p.dx, p.dy);
-      }
-    }
-    path.close();
-    _paintShape(canvas, size, path);
-    // facetas radiales
-    final facet = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = accentColor.withValues(alpha: 0.6);
-    for (final v in vertices) {
-      canvas.drawLine(c, v, facet);
-    }
-  }
-
-  void _drawShieldWithCrown(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final shieldRect = Rect.fromLTWH(0, h * 0.22, w, h * 0.78);
-    canvas.save();
-    canvas.translate(shieldRect.left, shieldRect.top);
-    _drawShield(canvas, Size(shieldRect.width, shieldRect.height));
-    canvas.restore();
-    // corona arriba: 3 picos triangulares con bolitas
-    final crown = Path()
-      ..moveTo(w * 0.25, h * 0.22)
-      ..lineTo(w * 0.32, h * 0.05)
-      ..lineTo(w * 0.4, h * 0.18)
-      ..lineTo(w * 0.5, h * 0.02)
-      ..lineTo(w * 0.6, h * 0.18)
-      ..lineTo(w * 0.68, h * 0.05)
-      ..lineTo(w * 0.75, h * 0.22)
-      ..close();
-    _paintShape(canvas, size, crown);
-    final ball = Paint()
-      ..style = PaintingStyle.fill
-      ..color = accentColor;
-    canvas.drawCircle(Offset(w * 0.32, h * 0.05), size.shortestSide * 0.03, ball);
-    canvas.drawCircle(Offset(w * 0.5, h * 0.02), size.shortestSide * 0.035, ball);
-    canvas.drawCircle(Offset(w * 0.68, h * 0.05), size.shortestSide * 0.03, ball);
-  }
-
-  void _drawCrystal(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final path = Path()
-      ..moveTo(w * 0.5, h * 0.03)
-      ..lineTo(w * 0.82, h * 0.35)
-      ..lineTo(w * 0.5, h * 0.97)
-      ..lineTo(w * 0.18, h * 0.35)
-      ..close();
-    _paintShape(canvas, size, path);
-    // facetas internas
-    final facet = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = accentColor.withValues(alpha: 0.6);
-    canvas.drawLine(Offset(w * 0.5, h * 0.03), Offset(w * 0.5, h * 0.97), facet);
-    canvas.drawLine(Offset(w * 0.18, h * 0.35), Offset(w * 0.82, h * 0.35), facet);
-    canvas.drawLine(Offset(w * 0.32, h * 0.19), Offset(w * 0.5, h * 0.35), facet);
-    canvas.drawLine(Offset(w * 0.68, h * 0.19), Offset(w * 0.5, h * 0.35), facet);
-  }
-
-  void _drawDiamondPrism(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    // hexagono superior + faldas
-    final path = Path()
-      ..moveTo(w * 0.2, h * 0.35)
-      ..lineTo(w * 0.35, h * 0.15)
-      ..lineTo(w * 0.65, h * 0.15)
-      ..lineTo(w * 0.8, h * 0.35)
-      ..lineTo(w * 0.5, h * 0.95)
-      ..close();
-    _paintShape(canvas, size, path);
-    final facet = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = accentColor.withValues(alpha: 0.75);
-    canvas.drawLine(Offset(w * 0.2, h * 0.35), Offset(w * 0.8, h * 0.35), facet);
-    canvas.drawLine(Offset(w * 0.35, h * 0.15), Offset(w * 0.5, h * 0.95), facet);
-    canvas.drawLine(Offset(w * 0.65, h * 0.15), Offset(w * 0.5, h * 0.95), facet);
-    canvas.drawLine(Offset(w * 0.2, h * 0.35), Offset(w * 0.5, h * 0.95), facet);
-    canvas.drawLine(Offset(w * 0.8, h * 0.35), Offset(w * 0.5, h * 0.95), facet);
-    canvas.drawLine(Offset(w * 0.5, h * 0.15), Offset(w * 0.5, h * 0.95), facet);
-  }
-
-  void _drawWingedCrown(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    // alas izquierda y derecha (curvas)
-    final leftWing = Path()
-      ..moveTo(w * 0.5, h * 0.45)
-      ..quadraticBezierTo(w * 0.15, h * 0.25, w * 0.02, h * 0.55)
-      ..quadraticBezierTo(w * 0.2, h * 0.55, w * 0.5, h * 0.7)
-      ..close();
-    final rightWing = Path()
-      ..moveTo(w * 0.5, h * 0.45)
-      ..quadraticBezierTo(w * 0.85, h * 0.25, w * 0.98, h * 0.55)
-      ..quadraticBezierTo(w * 0.8, h * 0.55, w * 0.5, h * 0.7)
-      ..close();
-    _paintShape(canvas, size, leftWing);
-    _paintShape(canvas, size, rightWing);
-    // corona central 3 picos
-    final crown = Path()
-      ..moveTo(w * 0.3, h * 0.55)
-      ..lineTo(w * 0.35, h * 0.15)
-      ..lineTo(w * 0.42, h * 0.4)
-      ..lineTo(w * 0.5, h * 0.05)
-      ..lineTo(w * 0.58, h * 0.4)
-      ..lineTo(w * 0.65, h * 0.15)
-      ..lineTo(w * 0.7, h * 0.55)
-      ..close();
-    _paintShape(canvas, size, crown);
-    final ball = Paint()
-      ..style = PaintingStyle.fill
-      ..color = accentColor;
-    canvas.drawCircle(Offset(w * 0.35, h * 0.15), size.shortestSide * 0.035, ball);
-    canvas.drawCircle(Offset(w * 0.5, h * 0.05), size.shortestSide * 0.04, ball);
-    canvas.drawCircle(Offset(w * 0.65, h * 0.15), size.shortestSide * 0.035, ball);
-  }
-
-  @override
-  bool shouldRepaint(covariant TierEmblemPainter old) =>
-      old.tier != tier ||
-      old.baseColor != baseColor ||
-      old.accentColor != accentColor;
-}
 
 class OrbitParticles extends StatefulWidget {
   final Color color;

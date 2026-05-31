@@ -1,12 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/analytics_service.dart';
 import '../../services/exercise_service.dart';
 import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
-import '../../services/simulated_ai_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
@@ -59,11 +59,16 @@ class _RoutineScreenState extends State<RoutineScreen> {
 
   String _goal = 'MAINTAIN';
   String _location = 'GYM';
-  String _gender = 'MALE';
-  double _bmi = 22.0;
-  int _age = 30;
-  List<String> _injuries = const [];
   bool _requiresMedicalClearance = false;
+  // Plan completo recibido de la edge function (cacheado en memoria).
+  // Lista de días: cada día = lista de ejercicios crudos {name, muscle_group,
+  // sets, reps, rest_seconds}. Indexado por posición en trainingDayIndices.
+  List<List<Map<String, dynamic>>>? _edgePlanByDay;
+  bool _edgeFetched = false;
+  bool _edgeLoading = false;
+
+  static const String _disclaimerText =
+      'Plan generado por IA con fines orientativos. Consulta a un profesional para casos específicos.';
 
   List<_Exercise> _exercises = [];
 
@@ -101,10 +106,6 @@ class _RoutineScreenState extends State<RoutineScreen> {
       final onboarding = results[1] as Map<String, dynamic>?;
       final savedRoutines = results[2] as List<Map<String, dynamic>>;
 
-      final weight = (profile?['weight'] as num?)?.toDouble() ?? 70.0;
-      final height = (profile?['height'] as num?)?.toDouble() ?? 170.0;
-      final bmi = SimulatedAIService.calculateBMI(weight, height);
-
       // available_days puede venir en dos formatos:
       //   - Nuevo (onboarding extendido): ['0','1','3','4']  (índices 0..6)
       //   - Legacy: ['lunes','martes',...]  (strings en español)
@@ -132,14 +133,6 @@ class _RoutineScreenState extends State<RoutineScreen> {
           (profile?['fitness_goal'] as String? ?? 'MAINTAIN').toUpperCase();
       final location =
           (profile?['training_location'] as String? ?? 'GYM').toUpperCase();
-      final gender =
-          (profile?['gender'] as String? ?? 'MALE').toUpperCase();
-      final age = (profile?['age'] as num?)?.toInt() ?? 30;
-      final injuries = (onboarding?['injuries'] as List?)
-              ?.map((e) => e.toString())
-              .where((s) => s.isNotEmpty && s.toLowerCase() != 'ninguna')
-              .toList() ??
-          const <String>[];
       final requiresClearance =
           profile?['requires_medical_clearance'] == true;
 
@@ -148,10 +141,6 @@ class _RoutineScreenState extends State<RoutineScreen> {
         _availableDays = finalDays;
         _goal = goal;
         _location = location;
-        _gender = gender;
-        _bmi = bmi;
-        _age = age;
-        _injuries = injuries;
         _requiresMedicalClearance = requiresClearance;
         _savedRoutines = savedRoutines;
         _isLoading = false;
@@ -221,7 +210,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
       return;
     }
 
-    // No hay rutina guardada → generar con IA
+    // No hay rutina guardada → generar con edge function IA (una sola vez por
+    // sesión: pide plan completo de la semana, lo persiste por día, y los
+    // siguientes accesos ya leen de _savedRoutines).
     _savedRoutineId = null;
 
     final trainingDayIndices = <int>[];
@@ -237,21 +228,19 @@ class _RoutineScreenState extends State<RoutineScreen> {
       return;
     }
 
-    final raw = await SimulatedAIService.generateRoutineSafe(
-      goal: _goal,
-      trainingLocation: _location,
-      gender: _gender,
-      bmi: _bmi,
-      age: _age,
-      trainingDayIndex: positionInCycle,
-      totalTrainingDays: totalDays > 0 ? totalDays : 3,
-      injuries: _injuries,
-      requiresMedicalClearance: _requiresMedicalClearance,
+    final dayPlan = await _ensureEdgePlanForDay(
+      positionInCycle: positionInCycle,
+      totalDays: totalDays > 0 ? totalDays : 3,
     );
 
     if (!mounted) return;
+    if (dayPlan == null) {
+      setState(() => _exercises = []);
+      return;
+    }
+
     setState(() {
-      _exercises = raw
+      _exercises = dayPlan
           .map((e) => _Exercise(
                 name: e['name'] as String? ?? '',
                 muscleGroup: e['muscle_group'] as String? ?? '',
@@ -265,12 +254,126 @@ class _RoutineScreenState extends State<RoutineScreen> {
     _resolveRankableMatches();
     _resolveMediaUrls();
 
-    // Auto-persistir la rutina IA para que aparezca en el perfil del user
-    // y otros puedan copiarla. Silencioso, sin snackbar.
     if (_exercises.isNotEmpty) {
-      _autoSavePersonal(raw);
+      _autoSavePersonal(dayPlan);
     }
     _checkArchivedForDay();
+  }
+
+  /// Garantiza que tengamos el plan de la edge en memoria. Si no se ha pedido
+  /// aun en esta sesion, invoca generate-routine UNA vez con el numero total
+  /// de dias y cachea por dia.
+  Future<List<Map<String, dynamic>>?> _ensureEdgePlanForDay({
+    required int positionInCycle,
+    required int totalDays,
+  }) async {
+    if (_edgePlanByDay != null) {
+      if (positionInCycle < _edgePlanByDay!.length) {
+        return _edgePlanByDay![positionInCycle];
+      }
+      return null;
+    }
+    if (_edgeFetched || _edgeLoading) return null;
+    _edgeLoading = true;
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'generate-routine',
+        body: {
+          'days_per_week': totalDays,
+          'session_duration_min': 60,
+        },
+      );
+
+      if (res.status == 429) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Llegaste al límite mensual de IA. Vuelve el próximo mes.',
+              ),
+            ),
+          );
+        }
+        _edgeFetched = true;
+        return null;
+      }
+      if (res.status >= 400) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No pudimos generar tu rutina, intenta más tarde.',
+              ),
+            ),
+          );
+        }
+        _edgeFetched = true;
+        return null;
+      }
+
+      final data = res.data;
+      if (data is! Map) {
+        _edgeFetched = true;
+        return null;
+      }
+
+      final plan = data['plan'];
+      final days = plan is Map ? (plan['days'] as List?) ?? const [] : const [];
+
+      final byDay = <List<Map<String, dynamic>>>[];
+      for (final d in days) {
+        if (d is! Map) continue;
+        final focus = (d['focus'] as String?) ?? '';
+        final exercises = (d['exercises'] as List?) ?? const [];
+        final list = <Map<String, dynamic>>[];
+        for (final ex in exercises) {
+          if (ex is! Map) continue;
+          list.add({
+            'name': ex['name']?.toString() ?? '',
+            'muscle_group': focus,
+            'sets': (ex['sets'] as num?)?.toInt() ?? 3,
+            'reps': ex['reps']?.toString() ?? '8-12',
+            'rest_seconds': (ex['rest_seconds'] as num?)?.toInt() ?? 60,
+          });
+        }
+        byDay.add(list);
+      }
+      _edgePlanByDay = byDay;
+      _edgeFetched = true;
+
+      if (data['medical_clearance_warning'] == true && mounted) {
+        final msg = data['medical_clearance_message']?.toString() ??
+            'Te recomendamos consultar a un profesional antes de empezar.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: const Color(0xFF1A1A2E),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+
+      if (positionInCycle < byDay.length) {
+        return byDay[positionInCycle];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('generate-routine edge error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No pudimos generar tu rutina, intenta más tarde.',
+            ),
+          ),
+        );
+      }
+      _edgeFetched = true;
+      return null;
+    } finally {
+      _edgeLoading = false;
+    }
   }
 
   /// Resuelve, en paralelo, qué ejercicios del listado actual matchean con
@@ -1520,7 +1623,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: Text(
-        SimulatedAIService.disclaimer,
+        _disclaimerText,
         style: const TextStyle(
           color: Colors.black45,
           fontSize: 12,

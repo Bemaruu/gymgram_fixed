@@ -83,7 +83,8 @@ final Map<String, WidgetBuilder> appRoutes = {
 
   // Pantalla con navegación inferior
   '/main_navigation_screen': (context) {
-    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final raw = ModalRoute.of(context)?.settings.arguments;
+    final args = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
     return MainNavigationScreen(userData: args);
   },
 

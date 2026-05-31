@@ -1,0 +1,61 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="hi_disc" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#D4D8DD"/>
+      <stop offset="45%" stop-color="#8A8F95"/>
+      <stop offset="100%" stop-color="#3A3D42"/>
+    </radialGradient>
+    <linearGradient id="hi_rim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A6ACB3"/>
+      <stop offset="50%" stop-color="#5E6268"/>
+      <stop offset="100%" stop-color="#23252A"/>
+    </linearGradient>
+    <linearGradient id="hi_shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="hi_sym" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E6EAEE"/>
+      <stop offset="100%" stop-color="#6B6F75"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer rim -->
+  <circle cx="100" cy="100" r="94" fill="url(#hi_rim)"/>
+  <circle cx="100" cy="100" r="94" fill="none" stroke="#16181B" stroke-width="2"/>
+  <circle cx="100" cy="100" r="82" fill="none" stroke="#1C1E22" stroke-width="1.5"/>
+
+  <!-- Rivets -->
+  <g fill="#2A2D31" stroke="#0F1013" stroke-width="0.6">
+    <circle cx="100" cy="14" r="3"/>
+    <circle cx="160.8" cy="39.2" r="3"/>
+    <circle cx="186" cy="100" r="3"/>
+    <circle cx="160.8" cy="160.8" r="3"/>
+    <circle cx="100" cy="186" r="3"/>
+    <circle cx="39.2" cy="160.8" r="3"/>
+    <circle cx="14" cy="100" r="3"/>
+    <circle cx="39.2" cy="39.2" r="3"/>
+  </g>
+
+  <!-- Inner disc -->
+  <circle cx="100" cy="100" r="78" fill="url(#hi_disc)"/>
+
+  <!-- Gear symbol -->
+  <g fill="url(#hi_sym)" stroke="#1A1C20" stroke-width="1.2" stroke-linejoin="round">
+    <path d="M100 38
+             L108 46 L120 44 L124 56
+             L136 60 L134 72 L142 80
+             L134 88 L136 100 L124 104
+             L120 116 L108 114 L100 122
+             L92 114 L80 116 L76 104
+             L64 100 L66 88 L58 80
+             L66 72 L64 60 L76 56
+             L80 44 L92 46 Z"
+          transform="translate(0,20)"/>
+  </g>
+  <circle cx="100" cy="100" r="14" fill="#2A2D31" stroke="#0F1013" stroke-width="1.5"/>
+  <circle cx="100" cy="100" r="6" fill="#15171A"/>
+
+  <!-- Top shine -->
+  <ellipse cx="100" cy="62" rx="56" ry="22" fill="url(#hi_shine)"/>
+</svg>

@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/country_utils.dart';
 import '../../models/food_log.dart';
 import '../../services/analytics_service.dart';
 import '../../services/food_scan_service.dart';
 import '../../services/food_service.dart';
-import '../../services/meal_plan_generator.dart';
-import '../../services/simulated_ai_service.dart';
+import '../../services/nutrition_calculator.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
@@ -37,6 +37,10 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
   Map<String, dynamic>? _plan;
   List<Map<String, dynamic>> _items = [];
+  // Plan semanal cacheado en memoria. Cada elemento = { day, meals: [...] }.
+  // Se carga 1 vez por week_index desde nutrition_plans (DB) o edge fallback.
+  List<Map<String, dynamic>>? _weekDays;
+  int? _weekPlanIndex;
   // Unidad checkeable = "itemIndex:compIndex" (compIndex -1 = item completo/receta).
   final Set<String> _checkedKeys = {};
   // Mapea la unidad del plan al id de su food_log registrado.
@@ -56,10 +60,6 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   int _age = 30;
   double _height = 170.0;
   int _trainingDaysPerWeek = 3;
-  String _mealsPerDay = '3';
-  List<String> _foodPrefs = [];
-  List<String> _allergies = [];
-  List<String> _dislikedFoods = [];
   bool _eatingDisorderRisk = false;
   String? _cookingTime;
   String? _userId;
@@ -101,11 +101,18 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   void didUpdateWidget(AlimentacionScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.resetToken != widget.resetToken) {
+      // TODO: si el onboarding cambio (peso/objetivo/restricciones), invalidar
+      // el plan semanal cacheado en DB:
+      //   await Supabase.instance.client
+      //     .from('nutrition_plans').delete().eq('user_id', _userId);
+      // y forzar regeneracion. Por ahora solo limpia cache en memoria.
+      _weekDays = null;
+      _weekPlanIndex = null;
       final today = DateTime.now().weekday - 1;
       if (_selectedDayIndex != today) {
         setState(() => _selectedDayIndex = today);
-        _refreshSelectedDay();
       }
+      _refreshSelectedDay();
     }
   }
 
@@ -131,18 +138,6 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final rawDays = (onboarding?['available_days'] as List?)?.cast<String>() ?? [];
       final trainingDaysPerWeek = rawDays.isEmpty ? 3 : rawDays.length.clamp(1, 7);
 
-      final rawFoodPrefs = (onboarding?['food_preferences'] as List?)?.cast<String>() ?? [];
-      // Aceptamos valores nuevos (intermittent_fasting) y legacy (ayuno).
-      bool isSpecialMeal(String p) =>
-          p == 'ayuno' || p == 'intermittent_fasting' || p == 'flexible';
-      final specialMeal = rawFoodPrefs.firstWhere(isSpecialMeal, orElse: () => '');
-      final mealsPerDay = specialMeal.isNotEmpty
-          ? specialMeal
-          : (onboarding?['meals_per_day']?.toString() ?? '3');
-      final cleanFoodPrefs =
-          rawFoodPrefs.where((p) => !isSpecialMeal(p)).toList();
-      final rawAllergies = (onboarding?['allergies'] as List?)?.cast<String>() ?? [];
-      final rawDisliked = (onboarding?['disliked_foods'] as List?)?.cast<String>() ?? [];
       final cookingTime = onboarding?['cooking_time_preference'] as String?;
       final eatingDisorderRisk =
           profile?['eating_disorder_risk'] == true;
@@ -162,10 +157,6 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _age = age;
         _height = height;
         _trainingDaysPerWeek = trainingDaysPerWeek;
-        _mealsPerDay = mealsPerDay;
-        _foodPrefs = cleanFoodPrefs;
-        _allergies = rawAllergies;
-        _dislikedFoods = rawDisliked;
         _cookingTime = cookingTime;
         _eatingDisorderRisk = eatingDisorderRisk;
         _userId = userId;
@@ -187,6 +178,8 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   }
 
   Future<void> _refreshSelectedDay() async {
+    // No invoca edge: solo re-mapea el dia del plan semanal cacheado y
+    // refresca los logs reales del dia.
     await _generatePlan();
     await _loadDailyLogs(_dateForDayIndex(_selectedDayIndex));
     _reconcilePlanChecks();
@@ -199,53 +192,199 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     });
   }
 
+  /// Construye el plan diario que ve la UI. NO invoca IA: lee del plan semanal
+  /// cacheado (`_weekDays`). Si la semana actual aun no esta cargada en memoria,
+  /// llama a `_loadWeekPlan()` que consulta DB y como ultimo recurso la edge.
   Future<void> _generatePlan() async {
     final selectedDate = _dateForDayIndex(_selectedDayIndex);
     final weekIndex = _weeksSinceEpoch(selectedDate);
 
     _slotVariations = await _loadVariations(weekIndex);
 
-    final input = MealPlanInput(
-      goal: _goal,
+    // Targets nutricionales (locales, deterministas).
+    final effectiveTarget = _targetWeight > 0 ? _targetWeight : _weight;
+    final nutrition = NutritionCalculator.calculate(
       gender: _gender,
-      weightKg: _weight,
-      targetWeightKg: _targetWeight,
       age: _age,
+      weightKg: _weight,
       heightCm: _height,
+      targetWeightKg: effectiveTarget,
+      fitnessGoal: _goal,
       trainingDaysPerWeek: _trainingDaysPerWeek,
-      mealsPerDay: _mealsPerDay,
-      foodPreferences: _foodPrefs,
-      allergies: _allergies,
-      dislikedFoods: _dislikedFoods,
-      cookingTime: _cookingTime,
-      userId: _userId,
-      weekIndex: weekIndex,
-      dayIndex: _selectedDayIndex,
-      slotVariations: _slotVariations,
-      countryCode: _countryCode,
       eatingDisorderRisk: _eatingDisorderRisk,
     );
 
-    final plan = await MealPlanGeneratorProvider.current.generate(input);
+    // Carga plan semanal solo si no esta cacheado para este weekIndex.
+    if (_weekDays == null || _weekPlanIndex != weekIndex) {
+      await _loadWeekPlan(weekIndex);
+    }
 
-    assert(() {
-      final uidShort = (_userId ?? 'null').length >= 8
-          ? (_userId ?? 'null').substring(0, 8)
-          : (_userId ?? 'null');
-      debugPrint(
-        '[Dieta] userId=$uidShort week=$weekIndex day=$_selectedDayIndex '
-        'mode=${plan['food_mode']} country=$_countryCode cookingTime=$_cookingTime '
-        'items=${(plan['items'] as List).length}',
-      );
-      return true;
-    }());
+    final items = _mapDayToItems(_selectedDayIndex);
 
     if (!mounted) return;
+
+    final plan = <String, dynamic>{
+      'title': 'Plan ${_goalLabel(_goal)}',
+      'country_code': _countryCode,
+      'total_calories': nutrition.recommendedCalories,
+      'maintenance_calories': nutrition.maintenanceCalories,
+      'bmr': nutrition.bmr,
+      'calorie_adjustment': nutrition.calorieAdjustment,
+      'goal_interpretation': nutrition.goalInterpretation,
+      'strategy': nutrition.strategy,
+      'explanation_text': nutrition.explanationText,
+      'protein_grams': nutrition.proteinGrams,
+      'carbs_grams': nutrition.carbsGrams,
+      'fats_grams': nutrition.fatsGrams,
+      'disclaimer': _disclaimerText,
+      'week_index': weekIndex,
+      'cooking_time': _cookingTime,
+      'items': items,
+    };
+
     setState(() {
       _plan = plan;
-      _items = List<Map<String, dynamic>>.from(plan['items'] as List);
+      _items = items;
       _checkedKeys.clear();
     });
+  }
+
+  /// Carga el plan semanal: 1) lee `nutrition_plans` (cache DB), 2) si no
+  /// existe, invoca edge `generate-nutrition-plan` con `week_index` actual.
+  /// La edge persiste en DB asi que la siguiente apertura no quema IA.
+  Future<void> _loadWeekPlan(int weekIndex, {bool forceRegenerate = false}) async {
+    if (!forceRegenerate) {
+      try {
+        final row = await Supabase.instance.client
+            .from('nutrition_plans')
+            .select('plan_json')
+            .eq('user_id', _userId ?? '')
+            .eq('week_index', weekIndex)
+            .maybeSingle();
+        if (row != null) {
+          final planJson = row['plan_json'];
+          final week = planJson is Map ? (planJson['week'] as List?) : null;
+          if (week != null && week.isNotEmpty) {
+            _weekDays = week
+                .whereType<Map>()
+                .map((d) => Map<String, dynamic>.from(d))
+                .toList();
+            _weekPlanIndex = weekIndex;
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('nutrition_plans cache read error: $e');
+      }
+    }
+
+    // Fallback: invocar edge (la edge upsert-ea en DB).
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'generate-nutrition-plan',
+        body: <String, dynamic>{'week_index': weekIndex},
+      );
+
+      if (res.status == 429) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Llegaste al límite mensual de IA. Vuelve el próximo mes.',
+              ),
+            ),
+          );
+        }
+        _weekDays = [];
+        _weekPlanIndex = weekIndex;
+        return;
+      }
+      if (res.status >= 400) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No pudimos generar tu plan, intenta más tarde.'),
+            ),
+          );
+        }
+        _weekDays = [];
+        _weekPlanIndex = weekIndex;
+        return;
+      }
+
+      final data = res.data;
+      if (data is Map) {
+        final plan = data['plan'];
+        final week = plan is Map ? (plan['week'] as List?) : null;
+        if (week != null) {
+          _weekDays = week
+              .whereType<Map>()
+              .map((d) => Map<String, dynamic>.from(d))
+              .toList();
+          _weekPlanIndex = weekIndex;
+          return;
+        }
+      }
+      _weekDays = [];
+      _weekPlanIndex = weekIndex;
+    } catch (e) {
+      debugPrint('generate-nutrition-plan edge error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No pudimos generar tu plan, intenta más tarde.'),
+          ),
+        );
+      }
+      _weekDays = [];
+      _weekPlanIndex = weekIndex;
+    }
+  }
+
+  /// Convierte el dia indicado del plan semanal a la lista plana de items
+  /// que consume la UI (formato historico: meal_type/name/calories/macros/porcion_g).
+  List<Map<String, dynamic>> _mapDayToItems(int dayIndex) {
+    final days = _weekDays;
+    if (days == null || days.isEmpty) return const [];
+    // Plan tiene "day": 1..7. Mapeamos dayIndex (0..6) con el orden de la lista.
+    if (dayIndex < 0 || dayIndex >= days.length) return const [];
+    final day = days[dayIndex];
+    final meals = (day['meals'] as List?) ?? const [];
+    final out = <Map<String, dynamic>>[];
+    for (final m in meals) {
+      if (m is! Map) continue;
+      final mealType = m['meal_type']?.toString() ?? 'snack';
+      final foods = (m['foods'] as List?) ?? const [];
+      for (final f in foods) {
+        if (f is! Map) continue;
+        final grams = (f['grams'] as num?)?.toDouble() ?? 0;
+        out.add({
+          'meal_type': mealType,
+          'name': f['name']?.toString() ?? '',
+          'ingredients': const <String>[],
+          'calories': (f['kcal'] as num?)?.round() ?? 0,
+          'protein': (f['protein'] as num?)?.toDouble() ?? 0,
+          'carbs': (f['carbs'] as num?)?.toDouble() ?? 0,
+          'fats': (f['fat'] as num?)?.toDouble() ?? 0,
+          'porcion_g': grams.round(),
+        });
+      }
+    }
+    return out;
+  }
+
+  static const String _disclaimerText =
+      'Plan generado por IA con fines orientativos. Consulta a un profesional para casos específicos.';
+
+  static String _goalLabel(String goal) {
+    switch (goal.toUpperCase()) {
+      case 'LOSE_WEIGHT':
+        return 'pérdida de grasa';
+      case 'GAIN_MUSCLE':
+        return 'ganancia muscular';
+      default:
+        return 'mantenimiento';
+    }
   }
 
   // ── Persistencia de "cambios de comida" (swap) por día ──────────────────
@@ -273,15 +412,85 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     } catch (_) {}
   }
 
-  /// Cambia una comida del plan por otra alternativa (estable y persistida).
+  /// Swap LOCAL de una comida: rota entre alimentos del mismo meal_type
+  /// presentes en OTROS dias de la misma semana cacheada. NO invoca IA.
   Future<void> _swapMeal(int itemIndex) async {
+    if (itemIndex < 0 || itemIndex >= _items.length) return;
+    final current = _items[itemIndex];
+    final mealType = current['meal_type']?.toString();
+    final currentName = current['name']?.toString();
+    if (mealType == null) return;
+
+    final days = _weekDays;
+    if (days == null || days.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sin alternativas disponibles.')),
+      );
+      return;
+    }
+
+    // Junta candidatos de OTROS dias con mismo meal_type, excluyendo el actual
+    // y los nombres ya presentes en el dia actual (evita duplicados visuales).
+    final inDayNames = _items
+        .where((i) => i['meal_type'] == mealType)
+        .map((i) => i['name']?.toString().toLowerCase())
+        .whereType<String>()
+        .toSet();
+
+    final candidates = <Map<String, dynamic>>[];
+    for (var d = 0; d < days.length; d++) {
+      if (d == _selectedDayIndex) continue;
+      final meals = (days[d]['meals'] as List?) ?? const [];
+      for (final m in meals) {
+        if (m is! Map) continue;
+        if (m['meal_type']?.toString() != mealType) continue;
+        final foods = (m['foods'] as List?) ?? const [];
+        for (final f in foods) {
+          if (f is! Map) continue;
+          final name = f['name']?.toString() ?? '';
+          if (name.isEmpty) continue;
+          if (name.toLowerCase() == (currentName ?? '').toLowerCase()) continue;
+          if (inDayNames.contains(name.toLowerCase())) continue;
+          candidates.add(Map<String, dynamic>.from(f));
+        }
+      }
+    }
+
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sin alternativas disponibles.')),
+      );
+      return;
+    }
+
+    // Persistir el contador (sirve para elegir distinta opcion en clicks repetidos).
     final selectedDate = _dateForDayIndex(_selectedDayIndex);
     final weekIndex = _weeksSinceEpoch(selectedDate);
     final next = Map<int, int>.from(_slotVariations);
-    next[itemIndex] = (next[itemIndex] ?? 0) + 1;
+    final n = (next[itemIndex] ?? 0) + 1;
+    next[itemIndex] = n;
     await _saveVariations(weekIndex, next);
-    await _generatePlan();
-    await _loadDailyLogs(selectedDate);
+
+    final pick = candidates[n % candidates.length];
+    final grams = (pick['grams'] as num?)?.toDouble() ?? 0;
+    final replaced = <String, dynamic>{
+      'meal_type': mealType,
+      'name': pick['name']?.toString() ?? '',
+      'ingredients': const <String>[],
+      'calories': (pick['kcal'] as num?)?.round() ?? 0,
+      'protein': (pick['protein'] as num?)?.toDouble() ?? 0,
+      'carbs': (pick['carbs'] as num?)?.toDouble() ?? 0,
+      'fats': (pick['fat'] as num?)?.toDouble() ?? 0,
+      'porcion_g': grams.round(),
+    };
+
+    if (!mounted) return;
+    setState(() {
+      _items[itemIndex] = replaced;
+      _slotVariations = next;
+      _checkedKeys.removeWhere((k) => k.startsWith('$itemIndex:'));
+      _registeredLogIds.removeWhere((k, _) => k.startsWith('$itemIndex:'));
+    });
     _reconcilePlanChecks();
   }
 
@@ -698,7 +907,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
               child: Text(
-                SimulatedAIService.disclaimer,
+                _disclaimerText,
                 style: const TextStyle(
                   color: Colors.black45,
                   fontSize: 12,

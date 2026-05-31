@@ -1,0 +1,64 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="dm_disc" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#DCE6FF"/>
+      <stop offset="45%" stop-color="#6A8DFF"/>
+      <stop offset="100%" stop-color="#1B2C66"/>
+    </radialGradient>
+    <linearGradient id="dm_rim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B3CBFF"/>
+      <stop offset="50%" stop-color="#3D55B0"/>
+      <stop offset="100%" stop-color="#0E1A40"/>
+    </linearGradient>
+    <linearGradient id="dm_shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="dm_f1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#B3CBFF"/>
+    </linearGradient>
+    <linearGradient id="dm_f2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B3CBFF"/>
+      <stop offset="100%" stop-color="#3D55B0"/>
+    </linearGradient>
+    <linearGradient id="dm_f3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6A8DFF"/>
+      <stop offset="100%" stop-color="#0E1A40"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer rim -->
+  <circle cx="100" cy="100" r="94" fill="url(#dm_rim)"/>
+  <circle cx="100" cy="100" r="94" fill="none" stroke="#08123A" stroke-width="2"/>
+  <circle cx="100" cy="100" r="82" fill="none" stroke="#0E1A40" stroke-width="1.5"/>
+
+  <!-- Inner disc -->
+  <circle cx="100" cy="100" r="78" fill="url(#dm_disc)"/>
+
+  <!-- Brilliant-cut diamond -->
+  <g stroke="#08123A" stroke-width="1.7" stroke-linejoin="round">
+    <!-- Crown (top facets) -->
+    <path d="M60 80 L80 60 L120 60 L140 80 L100 92 Z" fill="url(#dm_f1)"/>
+    <path d="M60 80 L80 60 L80 80 Z" fill="#FFFFFF" opacity="0.85" stroke="none"/>
+    <path d="M120 60 L140 80 L120 80 Z" fill="#FFFFFF" opacity="0.55" stroke="none"/>
+    <path d="M80 60 L100 78 L120 60" fill="none" stroke="#08123A" stroke-width="1.2"/>
+    <path d="M60 80 L100 92 L80 80 Z" fill="url(#dm_f2)" stroke="#08123A" stroke-width="1.2"/>
+    <path d="M120 80 L140 80 L100 92 Z" fill="url(#dm_f2)" stroke="#08123A" stroke-width="1.2"/>
+
+    <!-- Pavilion (bottom point) -->
+    <path d="M60 80 L100 92 L100 148 Z" fill="url(#dm_f2)"/>
+    <path d="M140 80 L100 92 L100 148 Z" fill="url(#dm_f3)"/>
+    <!-- Center facet line -->
+    <path d="M100 92 L100 148" stroke="#DCE6FF" stroke-width="0.8" opacity="0.6"/>
+  </g>
+
+  <!-- Sparkles -->
+  <g fill="#FFFFFF">
+    <path d="M50 50 L52 56 L58 58 L52 60 L50 66 L48 60 L42 58 L48 56 Z" opacity="0.9"/>
+    <path d="M150 110 L151.5 114 L155 115 L151.5 116 L150 120 L148.5 116 L145 115 L148.5 114 Z" opacity="0.8"/>
+  </g>
+
+  <!-- Top disc shine -->
+  <ellipse cx="100" cy="50" rx="58" ry="20" fill="url(#dm_shine)"/>
+</svg>

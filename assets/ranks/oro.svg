@@ -1,0 +1,60 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="or_disc" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#FFF2B0"/>
+      <stop offset="45%" stop-color="#E2B23B"/>
+      <stop offset="100%" stop-color="#5A4310"/>
+    </radialGradient>
+    <linearGradient id="or_rim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE07A"/>
+      <stop offset="50%" stop-color="#B98A22"/>
+      <stop offset="100%" stop-color="#3A2A08"/>
+    </linearGradient>
+    <linearGradient id="or_shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="or_shield" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF8C8"/>
+      <stop offset="50%" stop-color="#F0C040"/>
+      <stop offset="100%" stop-color="#7A5A14"/>
+    </linearGradient>
+    <linearGradient id="or_crown" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFEFA8"/>
+      <stop offset="100%" stop-color="#C8941F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer rim -->
+  <circle cx="100" cy="100" r="94" fill="url(#or_rim)"/>
+  <circle cx="100" cy="100" r="94" fill="none" stroke="#2A1F08" stroke-width="2"/>
+  <circle cx="100" cy="100" r="82" fill="none" stroke="#34270A" stroke-width="1.5"/>
+
+  <!-- Inner disc -->
+  <circle cx="100" cy="100" r="78" fill="url(#or_disc)"/>
+
+  <!-- Crown on top of shield -->
+  <g stroke="#3A2A08" stroke-width="1.8" stroke-linejoin="round">
+    <!-- Crown -->
+    <path d="M68 64 L78 50 L88 62 L100 44 L112 62 L122 50 L132 64 L132 76 L68 76 Z"
+          fill="url(#or_crown)"/>
+    <circle cx="78" cy="50" r="3" fill="#FFFFFF" stroke="none"/>
+    <circle cx="100" cy="44" r="3.5" fill="#FF6B6B" stroke="#3A2A08" stroke-width="1"/>
+    <circle cx="122" cy="50" r="3" fill="#FFFFFF" stroke="none"/>
+    <path d="M68 76 L132 76 L132 82 L68 82 Z" fill="#A07418"/>
+
+    <!-- Shield -->
+    <path d="M72 84 L128 84 L128 124 Q128 148 100 160 Q72 148 72 124 Z"
+          fill="url(#or_shield)"/>
+    <!-- Facets -->
+    <path d="M72 84 L100 130 L128 84 Z" fill="#FFF8C8" opacity="0.35" stroke="none"/>
+    <!-- Star center -->
+    <path d="M100 100
+             L105 112 L118 113 L108 121 L111 134
+             L100 127 L89 134 L92 121 L82 113 L95 112 Z"
+          fill="#FFEFA8" stroke="#3A2A08" stroke-width="1.2"/>
+  </g>
+
+  <!-- Top disc shine -->
+  <ellipse cx="100" cy="50" rx="58" ry="20" fill="url(#or_shine)"/>
+</svg>
