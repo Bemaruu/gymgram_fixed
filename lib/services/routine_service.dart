@@ -42,6 +42,47 @@ class RoutineService {
   // (kind='personal' por compatibilidad con RoutineScreen)
   Future<List<Map<String, dynamic>>> getMyRoutines() => getMyPersonalRoutines();
 
+  /// Pide a la edge `analyze-routine` una opinión IA sobre la rutina
+  /// importada por el usuario. Devuelve el análisis estructurado o null
+  /// si falla. El backend ya persiste el resultado en `routines.routine_analysis`.
+  Future<Map<String, dynamic>?> requestRoutineAnalysis() async {
+    try {
+      final res = await _client.functions.invoke('analyze-routine');
+      if (res.status != 200) return null;
+      final data = res.data;
+      if (data is! Map) return null;
+      final analysis = data['analysis'];
+      return analysis is Map ? Map<String, dynamic>.from(analysis) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Marca el análisis IA de una rutina como dismissed por el usuario.
+  /// El banner deja de aparecer hasta que se pida un nuevo análisis (que
+  /// sobrescribe `routine_analysis`).
+  Future<bool> dismissRoutineAnalysis(String routineId) async {
+    try {
+      final current = await _client
+          .from('routines')
+          .select('routine_analysis')
+          .eq('id', routineId)
+          .maybeSingle();
+      final analysis = current?['routine_analysis'];
+      final next = <String, dynamic>{
+        if (analysis is Map) ...Map<String, dynamic>.from(analysis),
+        'dismissed': true,
+      };
+      await _client
+          .from('routines')
+          .update({'routine_analysis': next})
+          .eq('id', routineId);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Rutina personal (semanal) propia: una entrada por dia
   Future<List<Map<String, dynamic>>> getMyPersonalRoutines() async {
     final uid = _uid;

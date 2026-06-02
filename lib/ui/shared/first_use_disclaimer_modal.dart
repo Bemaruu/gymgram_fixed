@@ -6,14 +6,26 @@ import '../../core/app_colors.dart';
 /// Modal de aceptación del disclaimer de IA. Se muestra UNA SOLA VEZ
 /// la primera vez que el usuario entra a la pantalla de rutina o
 /// alimentación. Al aceptar, persiste `profiles.disclaimer_accepted_at`.
+///
+/// El texto varía si el usuario importó su rutina (analyze_existing_routine):
+/// en ese caso, la IA sólo opina sobre su rutina, no la genera.
 class FirstUseDisclaimerModal extends StatefulWidget {
-  const FirstUseDisclaimerModal({super.key});
+  const FirstUseDisclaimerModal({super.key, this.routineIsImported = false});
 
-  static const String _bodyText =
+  final bool routineIsImported;
+
+  static const String _bodyAi =
       'Tu rutina y plan de comidas son recomendaciones generadas por IA '
       'sobre un catálogo validado profesionalmente. No reemplazan la opinión '
       'de un médico, kinesiólogo o nutricionista. Puedes modificar ejercicios, '
       'comidas, lesiones o restricciones desde tu perfil cuando quieras. Si '
+      'sientes dolor o incomodidad, detente y consulta a un profesional.';
+
+  static const String _bodyImported =
+      'Estás usando tu propia rutina: la IA no la generó, sólo te dará una '
+      'opinión sobre cobertura muscular, advertencias y sugerencias. Tu plan '
+      'de comidas sí es una recomendación generada por IA. Nada de esto '
+      'reemplaza la opinión de un médico, kinesiólogo o nutricionista. Si '
       'sientes dolor o incomodidad, detente y consulta a un profesional.';
 
   /// Comprueba si el usuario ya aceptó el disclaimer. Si no, muestra el modal
@@ -36,12 +48,27 @@ class FirstUseDisclaimerModal extends StatefulWidget {
       return;
     }
 
+    bool imported = false;
+    try {
+      final r = await client
+          .from('routines')
+          .select('id')
+          .eq('user_id', uid)
+          .eq('source', 'user_imported')
+          .eq('is_archived', false)
+          .limit(1)
+          .maybeSingle();
+      imported = r != null;
+    } catch (_) {
+      // Si la query falla usamos el texto por defecto.
+    }
+
     if (!context.mounted) return;
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const FirstUseDisclaimerModal(),
+      builder: (_) => FirstUseDisclaimerModal(routineIsImported: imported),
     );
 
     try {
@@ -83,9 +110,11 @@ class _FirstUseDisclaimerModalState extends State<FirstUseDisclaimerModal> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              FirstUseDisclaimerModal._bodyText,
-              style: TextStyle(
+            Text(
+              widget.routineIsImported
+                  ? FirstUseDisclaimerModal._bodyImported
+                  : FirstUseDisclaimerModal._bodyAi,
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
                 height: 1.45,

@@ -15,6 +15,8 @@ import '../../models/weekly_mission_model.dart';
 import '../../services/ranked_service.dart';
 import '../../services/subscription_service.dart';
 import 'all_tiers_screen.dart';
+import 'match/match_challenge_banner.dart';
+import 'match/challenge_friend_sheet.dart';
 import 'tier_up_overlay.dart';
 import 'season_recap_screen.dart';
 
@@ -35,7 +37,11 @@ class _RankedScreenState extends State<RankedScreen> {
   List<SeasonReward> _history = const [];
   int _boardTab = 0; // 0 = amigos, 1 = global
   bool _isPremium = false;
+  bool _isPlusOrPremium = false;
   RoutineImpact? _impact;
+
+  final GlobalKey<MatchChallengeBannerState> _challengeBannerKey =
+      GlobalKey<MatchChallengeBannerState>();
 
   static const _prefsLastTierKey = 'ranked_last_seen_tier';
 
@@ -77,6 +83,8 @@ class _RankedScreenState extends State<RankedScreen> {
     final profile = results[0] as RankedProfile?;
     final tier = results[6] as SubscriptionTier;
     final isPremium = tier == SubscriptionTier.premium;
+    final isPlusOrPremium = tier == SubscriptionTier.premium ||
+        tier == SubscriptionTier.plus;
     setState(() {
       _profile = profile;
       _season = results[1] as RankedSeason?;
@@ -85,6 +93,7 @@ class _RankedScreenState extends State<RankedScreen> {
       _friendsBoard = results[4] as List<LeaderboardEntry>;
       _history = results[5] as List<SeasonReward>;
       _isPremium = isPremium;
+      _isPlusOrPremium = isPlusOrPremium;
       _loading = false;
     });
     if (profile != null) {
@@ -170,7 +179,7 @@ class _RankedScreenState extends State<RankedScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.accentOrange.withValues(alpha: 0.15),
+                  color: AppColors.accentOrange.withValues(alpha: 0.22),
                   borderRadius: BorderRadius.circular(8),
                   border:
                       Border.all(color: AppColors.accentOrange, width: 0.8),
@@ -213,11 +222,17 @@ class _RankedScreenState extends State<RankedScreen> {
                   children: [
                     const SizedBox(height: 12),
                     _buildHero(),
-                    const SizedBox(height: 8),
-                    _buildAllTiersButton(),
+                    // Señales urgentes inmediatamente después del hero.
                     const SizedBox(height: 8),
                     _buildDecayBanner(),
-                    const SizedBox(height: 12),
+                    if (_isPlusOrPremium) ...[
+                      const SizedBox(height: 8),
+                      MatchChallengeBanner(key: _challengeBannerKey),
+                      const SizedBox(height: 8),
+                      _buildChallengeButton(),
+                    ],
+                    // Núcleo de progreso.
+                    const SizedBox(height: 16),
                     _buildStatsRow(),
                     const SizedBox(height: 16),
                     _buildNextTierGoals(),
@@ -235,6 +250,8 @@ class _RankedScreenState extends State<RankedScreen> {
                     _buildBoardToggle(),
                     const SizedBox(height: 12),
                     _buildLeaderboard(),
+                    const SizedBox(height: 16),
+                    _buildAllTiersButton(),
                     const SizedBox(height: 40),
                     _sectionTitle('Historial de temporadas'),
                     const SizedBox(height: 12),
@@ -281,14 +298,14 @@ class _RankedScreenState extends State<RankedScreen> {
             borderRadius: BorderRadius.circular(8),
             child: SizedBox(
               height: 8,
-              child: Container(color: Colors.white.withValues(alpha: 0.06)),
+              child: Container(color: AppColors.darkSurfaceElevated),
             ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Completa tu primer entrenamiento para clasificarte',
             style: TextStyle(
-              color: Colors.white60,
+              color: AppColors.darkTextSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -352,10 +369,10 @@ class _RankedScreenState extends State<RankedScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(
-            color: AppColors.accentOrange.withValues(alpha: 0.12),
+            color: AppColors.accentOrange.withValues(alpha: 0.20),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: AppColors.accentOrange.withValues(alpha: 0.35),
+              color: AppColors.accentOrange.withValues(alpha: 0.55),
               width: 1,
             ),
           ),
@@ -404,7 +421,7 @@ class _RankedScreenState extends State<RankedScreen> {
         Text(
           isInmortal ? 'Élite mundial' : 'Próximo: $nextTier',
           style: const TextStyle(
-            color: Colors.white60,
+            color: AppColors.darkTextSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
@@ -414,9 +431,39 @@ class _RankedScreenState extends State<RankedScreen> {
         if (!isInmortal)
           Text(
             'Tier $lo - $hi RP',
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
+            style: TextStyle(
+              color: AppColors.darkTextSecondary.withValues(alpha: 0.7),
+              fontSize: 10,
+            ),
           ),
       ],
+    );
+  }
+
+  Widget _buildChallengeButton() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () {
+            showChallengeFriendSheet(context).then((_) {
+              _challengeBannerKey.currentState?.reload();
+            });
+          },
+          icon: const Icon(PhosphorIconsFill.sword, size: 18),
+          label: const Text('Desafiar a un amigo'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.accentOrange,
+            side: const BorderSide(color: AppColors.accentOrange, width: 1.4),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            textStyle:
+                const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+        ),
+      ),
     );
   }
 
@@ -435,10 +482,10 @@ class _RankedScreenState extends State<RankedScreen> {
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
+              color: AppColors.darkSurfaceCard,
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: AppColors.darkBorder,
               ),
             ),
             child: Row(
@@ -458,7 +505,7 @@ class _RankedScreenState extends State<RankedScreen> {
                 ),
                 const SizedBox(width: 6),
                 Icon(PhosphorIconsRegular.caretRight,
-                    color: Colors.white38, size: 12),
+                    color: AppColors.darkTextSecondary, size: 12),
               ],
             ),
           ),
@@ -501,13 +548,13 @@ class _RankedScreenState extends State<RankedScreen> {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.04),
-        border: Border.all(color: Colors.white24, width: 2),
+        color: AppColors.darkSurfaceCard,
+        border: Border.all(color: AppColors.darkBorder, width: 2),
       ),
       child: Center(
         child: Icon(
           PhosphorIconsRegular.question,
-          color: Colors.white24,
+          color: AppColors.darkTextSecondary,
           size: size * 0.4,
         ),
       ),
@@ -559,7 +606,14 @@ class _RankedScreenState extends State<RankedScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A2E),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
+          border: Border.all(color: color.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.18),
+              blurRadius: 18,
+              spreadRadius: -4,
+            ),
+          ],
         ),
         child: const Text(
           '🔥 Eres top 500 global. Mantén tu posición — el decay es agresivo aquí.',
@@ -690,7 +744,14 @@ class _RankedScreenState extends State<RankedScreen> {
         color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.35)),
+            color: const Color(0xFFFFD700).withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+            blurRadius: 18,
+            spreadRadius: -4,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -745,7 +806,8 @@ class _RankedScreenState extends State<RankedScreen> {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: const TextStyle(
+                color: AppColors.darkTextSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -806,7 +868,8 @@ class _RankedScreenState extends State<RankedScreen> {
           const SizedBox(height: 6),
           Text(
             m.description,
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: const TextStyle(
+                color: AppColors.darkTextSecondary, fontSize: 11),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -928,7 +991,7 @@ class _RankedScreenState extends State<RankedScreen> {
             child: Text(
               '#${e.globalRank}',
               style: const TextStyle(
-                color: Colors.white60,
+                color: AppColors.darkTextSecondary,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -1040,10 +1103,18 @@ class _RankedScreenState extends State<RankedScreen> {
               Colors.transparent,
             ],
           ),
-          border: Border.all(color: color.withValues(alpha: 0.6), width: 1.4),
+          border: Border.all(color: color.withValues(alpha: 0.8), width: 1.4),
         ),
         child: Center(
-          child: Icon(_iconForTier(tier), color: color, size: 36),
+          child: Icon(
+            _iconForTier(tier),
+            color: Colors.white,
+            size: 36,
+            shadows: [
+              Shadow(color: color, blurRadius: 12),
+              Shadow(color: color.withValues(alpha: 0.6), blurRadius: 4),
+            ],
+          ),
         ),
       ),
     );
@@ -1086,7 +1157,8 @@ class _RankedScreenState extends State<RankedScreen> {
         ),
         child: Text(
           msg,
-          style: const TextStyle(color: Colors.white54, fontSize: 13),
+          style: const TextStyle(
+              color: AppColors.darkTextSecondary, fontSize: 13),
           textAlign: TextAlign.center,
         ),
       );
@@ -1262,7 +1334,7 @@ class _TierProgressBarState extends State<_TierProgressBar>
                               end: Alignment.centerRight,
                               colors: [
                                 Colors.white.withValues(alpha: 0),
-                                Colors.white.withValues(alpha: 0.35),
+                                Colors.white.withValues(alpha: 0.55),
                                 Colors.white.withValues(alpha: 0),
                               ],
                             ),
@@ -1520,9 +1592,9 @@ class _DecayWarningBanner extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: orange.withValues(alpha: 0.12),
+        color: orange.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: orange.withValues(alpha: 0.35), width: 1),
+        border: Border.all(color: orange.withValues(alpha: 0.55), width: 1),
       ),
       child: Row(
         children: [
@@ -2289,7 +2361,7 @@ class _SeasonHeroBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         gradient: LinearGradient(

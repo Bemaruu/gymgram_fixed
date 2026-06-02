@@ -180,15 +180,27 @@ class SupabaseService {
       final routineId = routine['id'] as String;
       final rows = exercises.asMap().entries.map((e) {
         final ex = e.value;
+        final isCardio = ex['muscle_group'] == 'cardio';
+        final dur = ex['duration_minutes'];
+        final distance = ex['distance']?.toString();
+        final extraNote = isCardio && distance != null && distance.isNotEmpty
+            ? distance
+            : null;
+        final userNote = ex['optional_notes']?.toString();
+        final notes = [extraNote, userNote]
+            .where((s) => s != null && s.isNotEmpty)
+            .join(' • ');
         return {
           'routine_id': routineId,
           'name': ex['name'],
-          'sets': ex['sets'],
-          'reps': ex['reps'],
-          'rest_seconds': ex['rest_seconds'],
+          'sets': isCardio ? 1 : ex['sets'],
+          'reps': isCardio && dur != null ? '$dur min' : ex['reps'],
+          'rest_seconds': isCardio ? 0 : ex['rest_seconds'],
           'muscle_group': ex['muscle_group'],
           'order_index': e.key,
-          if (ex['optional_notes'] != null) 'notes': ex['optional_notes'],
+          if (notes.isNotEmpty) 'notes': notes,
+          if (ex['exercise_id'] != null) 'exercise_id': ex['exercise_id'],
+          'is_custom': ex['is_custom'] == true || ex['exercise_id'] == null,
         };
       }).toList();
       await client.from('routine_exercises').insert(rows);

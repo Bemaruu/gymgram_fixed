@@ -70,4 +70,22 @@ class ExerciseService {
     final result = await q.order('name_es');
     return List<Map<String, dynamic>>.from(result);
   }
+
+  /// Búsqueda liviana para autocomplete (onboarding, importar rutina, etc).
+  /// Devuelve hasta `limit` filas con id, name_es y muscle_group_primary.
+  Future<List<Map<String, dynamic>>> searchForAutocomplete(
+    String query, {
+    int limit = 8,
+  }) async {
+    final safeQuery = InputSanitizers.safePostgrestLike(query);
+    if (safeQuery.isEmpty) return const [];
+    final result = await _client
+        .from('exercise_catalog')
+        .select('id, name_es, muscle_group_primary')
+        .eq('is_active', true)
+        .ilike('name_es', '%$safeQuery%')
+        .order('name_es')
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(result);
+  }
 }

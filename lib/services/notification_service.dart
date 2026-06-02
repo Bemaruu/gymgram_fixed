@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../ui/ranked/ranked_screen.dart';
+import '../ui/ranked/match/match_screen.dart';
+
 class NotificationService {
   static final instance = NotificationService._();
   NotificationService._();
@@ -23,6 +26,49 @@ class NotificationService {
     await _saveToken();
     FirebaseMessaging.instance.onTokenRefresh.listen(_updateToken);
     FirebaseMessaging.onMessage.listen(_handleForeground);
+    // Tap en la notificación (app en background o cerrada).
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNavigation);
+    final initial = await _fcm.getInitialMessage();
+    if (initial != null) _handleNavigation(initial);
+  }
+
+  /// Envía una notificación push a otro usuario vía la edge function send-push.
+  Future<void> sendPushToUser({
+    required String userId,
+    required String title,
+    required String body,
+    Map<String, String>? data,
+  }) async {
+    try {
+      await Supabase.instance.client.functions.invoke('send-push-notification', body: {
+        'user_id': userId,
+        'title': title,
+        'body': body,
+        if (data != null) 'data': data,
+      });
+    } catch (e) {
+      debugPrint('sendPushToUser error: $e');
+    }
+  }
+
+  void _handleNavigation(RemoteMessage message) {
+    final data = message.data;
+    final type = data['type'];
+    final nav = navigatorKey.currentState;
+    if (nav == null || type == null) return;
+    switch (type) {
+      case 'match_challenge':
+        nav.push(MaterialPageRoute(builder: (_) => const RankedScreen()));
+        break;
+      case 'match_turn':
+      case 'match_started':
+        final matchId = data['match_id'];
+        if (matchId != null && matchId.isNotEmpty) {
+          nav.push(MaterialPageRoute(
+              builder: (_) => MatchScreen(matchId: matchId)));
+        }
+        break;
+    }
   }
 
   Future<void> _saveToken() async {

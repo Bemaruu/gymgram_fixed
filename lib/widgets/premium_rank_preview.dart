@@ -114,7 +114,7 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
       decoration: BoxDecoration(
         color: _darkSurfaceCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: const Color(0xFF1F4368)),
       ),
       child: Column(
         children: [
@@ -202,54 +202,469 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
     );
   }
 
+  List<Widget> _buildMeasurementTicks(Color color) {
+    // 4 ticks cardinales (12, 3, 6, 9) tangentes al borde interior del disco.
+    // Disco Ø 78 → radio 39. Tick a 30dp del centro.
+    const double radius = 30;
+    final tickColor = color.withValues(alpha: 0.65);
+    return [
+      // 12 (top)
+      Transform.translate(
+        offset: const Offset(0, -radius),
+        child: Container(width: 1, height: 5, color: tickColor),
+      ),
+      // 6 (bottom)
+      Transform.translate(
+        offset: const Offset(0, radius),
+        child: Container(width: 1, height: 5, color: tickColor),
+      ),
+      // 3 (right)
+      Transform.translate(
+        offset: const Offset(radius, 0),
+        child: Container(width: 5, height: 1, color: tickColor),
+      ),
+      // 9 (left)
+      Transform.translate(
+        offset: const Offset(-radius, 0),
+        child: Container(width: 5, height: 1, color: tickColor),
+      ),
+    ];
+  }
+
   Widget _buildUnrankedCard() {
-    const Color unrankedColor = Color(0xFF7A7A7A);
+    const Color silver = Color(0xFFB8C5D6);
+    const Color silverDeep = Color(0xFF6B7C90);
+    const Color skyAccent = Color(0xFF63C8FC);
+    const Color trackBg = Color(0xFF13314E);
+
+    // TODO: cuando exista lógica real de entrenamientos hacia BRONCE, cablear.
+    const totalRequired = 5;
+    const completed = 0;
+    const remaining = totalRequired - completed;
+    const percent = (completed * 100) ~/ totalRequired;
+
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: _openRankedScreen,
+      borderRadius: BorderRadius.circular(20),
+      onTap: _isOwnProfile ? _openRankedScreen : null,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
         decoration: BoxDecoration(
-          color: _darkSurfaceCard,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0E2238), Color(0xFF091D2E)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: silver.withValues(alpha: 0.18), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: skyAccent.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header: pill RANKED + Ver detalles
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  height: 26,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        silver.withValues(alpha: 0.08),
+                        silver.withValues(alpha: 0.18),
+                        silver.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: silver.withValues(alpha: 0.55), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: skyAccent,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: skyAccent.withValues(alpha: 0.80),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                      )
+                          .animate(onPlay: (c) => c.repeat(reverse: true))
+                          .fadeIn(
+                            begin: 0.6,
+                            duration: 1200.ms,
+                            curve: Curves.easeInOut,
+                          ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'RANKED',
+                        style: TextStyle(
+                          color: silver,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isOwnProfile)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Ver detalles',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.70),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        PhosphorIconsRegular.caretRight,
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.70),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            // Body: emblema + datos
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 110,
+                        height: 110,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Capa 1: halo radial externo pulsante
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    skyAccent.withValues(alpha: 0.22),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            )
+                                .animate(
+                                  onPlay: (c) => c.repeat(reverse: true),
+                                )
+                                .scale(
+                                  begin: const Offset(0.92, 0.92),
+                                  end: const Offset(1.08, 1.08),
+                                  duration: 2400.ms,
+                                  curve: Curves.easeInOut,
+                                ),
+                            // Capa 3: disco base plata cóncavo
+                            Container(
+                              width: 78,
+                              height: 78,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  stops: const [0.0, 0.6, 1.0],
+                                  colors: [
+                                    silver.withValues(alpha: 0.05),
+                                    silver.withValues(alpha: 0.18),
+                                    silverDeep.withValues(alpha: 0.28),
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: silver.withValues(alpha: 0.85),
+                                  width: 1.2,
+                                ),
+                              ),
+                              // Sombra interna (concavidad)
+                              child: Container(
+                                margin: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      const Color(0xFF091D2E)
+                                          .withValues(alpha: 0.40),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Capa 5: 4 ticks de medición (12/3/6/9)
+                            ..._buildMeasurementTicks(silver),
+                            // Capa 4: núcleo pulsante (latido)
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  stops: const [0.0, 0.4, 1.0],
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.95),
+                                    skyAccent.withValues(alpha: 0.85),
+                                    skyAccent.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: skyAccent.withValues(alpha: 0.55),
+                                    blurRadius: 14,
+                                  ),
+                                ],
+                              ),
+                            )
+                                .animate(
+                                  onPlay: (c) => c.repeat(reverse: true),
+                                )
+                                .scale(
+                                  begin: const Offset(0.85, 0.85),
+                                  end: const Offset(1.15, 1.15),
+                                  duration: 1400.ms,
+                                  curve: Curves.easeInOut,
+                                ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ShaderMask(
+                        shaderCallback: (rect) => const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          stops: [0.0, 0.5, 1.0],
+                          colors: [
+                            Colors.white,
+                            silver,
+                            Colors.white,
+                          ],
+                        ).createShader(rect),
+                        blendMode: BlendMode.srcIn,
+                        child: const Text(
+                          'ASPIRANTE',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.4,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x4D63C8FC),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tu viaje recién comienza',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  flex: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RichText(
+                        text: TextSpan(
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            height: 1.35,
+                          ),
+                          children: const [
+                            TextSpan(text: 'Te faltan '),
+                            TextSpan(
+                              text: '$remaining entrenamientos',
+                              style: TextStyle(
+                                color: skyAccent,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            TextSpan(
+                                text:
+                                    ' para que GymGram calcule tu rango inicial.'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          for (var i = 0; i < totalRequired; i++) ...[
+                            Expanded(
+                              child: Container(
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(3),
+                                  color: i < completed ? null : trackBg,
+                                  gradient: i < completed
+                                      ? const LinearGradient(
+                                          colors: [
+                                            skyAccent,
+                                            Color(0xFF7DCFFC),
+                                          ],
+                                        )
+                                      : null,
+                                  border: i >= completed
+                                      ? Border.all(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.05),
+                                          width: 1,
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (i < totalRequired - 1)
+                              const SizedBox(width: 3),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$percent%',
+                            style: TextStyle(
+                              color: completed > 0
+                                  ? skyAccent
+                                  : silver.withValues(alpha: 0.55),
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
+                              '$completed / $totalRequired completados',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: unrankedColor.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-                border: Border.all(color: unrankedColor, width: 2),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                PhosphorIconsFill.question,
-                color: Colors.white70,
-                size: 40,
-              ),
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.06),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Sin rango aún',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Completa tu primer entrenamiento',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        skyAccent.withValues(alpha: 0.22),
+                        silver.withValues(alpha: 0.12),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: skyAccent.withValues(alpha: 0.40),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    PhosphorIconsFill.sparkle,
+                    size: 16,
+                    color: skyAccent,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'EVALUACIÓN INICIAL',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.50),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'TU PRIMER RANGO',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'Se asignará según tus PRs y rendimiento',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -309,11 +724,13 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
                           shape: BoxShape.circle,
                           gradient: RadialGradient(
                             colors: [
-                              tierColor.withValues(alpha: 0.35),
-                              tierColor.withValues(alpha: 0.05),
+                              tierColor.withValues(
+                                  alpha: _isLowLuminanceTier(p.tier) ? 0.55 : 0.35),
+                              tierColor.withValues(
+                                  alpha: _isLowLuminanceTier(p.tier) ? 0.15 : 0.05),
                               Colors.transparent,
                             ],
-                            stops: const [0.0, 0.6, 1.0],
+                            stops: const [0.0, 0.55, 1.0],
                           ),
                         ),
                       ),
@@ -446,6 +863,11 @@ class _PremiumRankPreviewState extends State<PremiumRankPreview> {
         return 'inmortal';
     }
   }
+
+  /// Hierro y Plata son colores grisáceos: necesitan más alpha en el aura para
+  /// no perderse contra el fondo dark.
+  bool _isLowLuminanceTier(RankedTier t) =>
+      t == RankedTier.hierro || t == RankedTier.plata;
 
   Color _tierColor(RankedTier t) {
     switch (t) {

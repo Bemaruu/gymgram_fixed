@@ -5,6 +5,9 @@
 /// - `signup_equipment` se omite si el lugar elegido es GYM (default `full_gym`).
 /// - `signup_experience_path` se omite si el nivel es `beginner` (default `create_ai_routine`).
 /// - `signup_import_routine` se muestra sólo si el path es `analyze_existing_routine`.
+/// - `signup_split` y `signup_days_duration` se omiten si el usuario importó
+///   su propia rutina: el split queda implícito (`custom`) y los días ya
+///   vienen del import.
 class OnboardingFlow {
   OnboardingFlow._();
 
@@ -41,12 +44,15 @@ class OnboardingFlow {
     final hasHealthIssue = userData['hasHealthIssue'] as bool? ?? false;
     final hasFoodRestriction =
         userData['hasFoodRestriction'] as bool? ?? false;
+    final importedRutine = path == 'analyze_existing_routine';
     return _routes.where((r) {
       if (r == '/signup_equipment' && place == 'GYM') return false;
       if (r == '/signup_experience_path' && level == 'beginner') return false;
       if (r == '/signup_import_routine' && path != 'analyze_existing_routine') {
         return false;
       }
+      if (r == '/signup_split' && importedRutine) return false;
+      if (r == '/signup_days_duration' && importedRutine) return false;
       if (r == '/signup_parq' && !hasHealthIssue) return false;
       if (r == '/signup_injuries' && !hasHealthIssue) return false;
       if (r == '/signup_scoff' && !hasFoodRestriction) return false;

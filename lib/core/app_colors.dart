@@ -55,6 +55,9 @@ class AppColors {
 
   // === Semánticos ===
   static const Color info = sky400;
+  static const Color success = Color(0xFF2ECC71);
+  static const Color danger = Color(0xFFFF5252);
+  static const Color gold = Color(0xFFFFD700);
   static const Color successSoft = Color(0xFF0F3D24);
 
   // === Surfaces Dark "Deep Sky" ===

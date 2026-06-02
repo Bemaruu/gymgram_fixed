@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/analytics_service.dart';
@@ -8,6 +9,7 @@ import '../../services/exercise_service.dart';
 import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/routine_analysis_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
 import '../ranked/set_logger_sheet.dart';
@@ -47,6 +49,15 @@ class _RoutineScreenState extends State<RoutineScreen> {
   List<Map<String, dynamic>> _savedRoutines = [];
   bool _hasArchivedForDay = false;
   bool _isRestoring = false;
+
+  // Rutina del día con source='user_imported' → mostrar banner de opinión IA.
+  bool _isImportedRoutine = false;
+  Map<String, dynamic>? _routineAnalysis;
+  // Flag global: si el usuario cerró el banner una vez, no vuelve a aparecer
+  // en ningún día hasta que pida un nuevo análisis (que lo resetea).
+  static const _prefsAnalysisDismissedGlobalKey =
+      'routine_analysis_dismissed_global';
+  bool _analysisDismissedGlobal = false;
 
   // ID del workout_log de hoy (se crea/recupera la primera vez que se
   // intenta registrar un set). Necesario para set_logs.
@@ -100,11 +111,15 @@ class _RoutineScreenState extends State<RoutineScreen> {
         SupabaseService.instance.getRawMyProfile(),
         SupabaseService.instance.getOnboardingData(),
         RoutineService.instance.getMyRoutines(),
+        SharedPreferences.getInstance(),
       ]);
 
       final profile = results[0] as Map<String, dynamic>?;
       final onboarding = results[1] as Map<String, dynamic>?;
       final savedRoutines = results[2] as List<Map<String, dynamic>>;
+      final prefs = results[3] as SharedPreferences;
+      _analysisDismissedGlobal =
+          prefs.getBool(_prefsAnalysisDismissedGlobalKey) ?? false;
 
       // available_days puede venir en dos formatos:
       //   - Nuevo (onboarding extendido): ['0','1','3','4']  (índices 0..6)
@@ -180,6 +195,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
         _exercises = [];
         _hasArchivedForDay = false;
         _rankableMatches.clear();
+        _isImportedRoutine = false;
+        _routineAnalysis = null;
       });
       return;
     }
@@ -192,8 +209,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
     if (saved != null) {
       final exercises =
           (saved['routine_exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final isImported = saved['source'] == 'user_imported';
+      final analysis = saved['routine_analysis'];
       setState(() {
         _savedRoutineId = saved['id'] as String;
+        _isImportedRoutine = isImported;
+        _routineAnalysis =
+            analysis is Map ? Map<String, dynamic>.from(analysis) : null;
         _exercises = exercises
             .map((e) => _Exercise(
                   name: e['name'] as String? ?? '',
@@ -214,6 +236,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
     // sesión: pide plan completo de la semana, lo persiste por día, y los
     // siguientes accesos ya leen de _savedRoutines).
     _savedRoutineId = null;
+    _isImportedRoutine = false;
+    _routineAnalysis = null;
 
     final trainingDayIndices = <int>[];
     for (int i = 0; i < 7; i++) {
@@ -1528,6 +1552,35 @@ class _RoutineScreenState extends State<RoutineScreen> {
                   ),
                 ],
               ),
+            ),
+
+          if (_isImportedRoutine &&
+              !_isEditMode &&
+              _exercises.isNotEmpty &&
+              !_analysisDismissedGlobal)
+            RoutineAnalysisBanner(
+              analysis: _routineAnalysis,
+              onAnalysisUpdated: (updated) async {
+                setState(() {
+                  _routineAnalysis = updated;
+                  // Un análisis nuevo deja sin efecto el dismiss global.
+                  _analysisDismissedGlobal = false;
+                  for (final r in _savedRoutines) {
+                    if (r['source'] == 'user_imported') {
+                      r['routine_analysis'] = updated;
+                    }
+                  }
+                });
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool(
+                    _prefsAnalysisDismissedGlobalKey, false);
+              },
+              onDismiss: () async {
+                setState(() => _analysisDismissedGlobal = true);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool(
+                    _prefsAnalysisDismissedGlobalKey, true);
+              },
             ),
 
           Expanded(

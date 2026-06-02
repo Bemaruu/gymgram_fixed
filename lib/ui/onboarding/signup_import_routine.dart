@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../core/input_sanitizers.dart';
 import '../../core/onboarding_flow.dart';
+import '../../services/exercise_service.dart';
 import '../shared/custom_button.dart';
 
 /// Captura de la rutina semanal del usuario para importarla a su perfil
@@ -86,6 +89,48 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
     setState(() => _routine[_selectedDay]!.removeAt(idx));
   }
 
+  Future<void> _openCopyDay() async {
+    final source = _selectedDay;
+    final sourceExercises = _routine[source];
+    if (sourceExercises == null || sourceExercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este día no tiene ejercicios para copiar.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final targets = await showModalBottomSheet<List<int>>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _CopyDaySheet(
+        sourceDay: source,
+        sourceDayName: _dayNames[source],
+        dayNames: _dayNames,
+        dayLabels: _dayLabels,
+      ),
+    );
+    if (targets == null || targets.isEmpty) return;
+    setState(() {
+      for (final t in targets) {
+        _routine[t] = sourceExercises
+            .map((ex) => Map<String, dynamic>.from(ex))
+            .toList();
+      }
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Rutina de ${_dayNames[source]} copiada a ${targets.length} día(s).',
+        ),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+  }
+
   bool get _hasAtLeastOneExercise =>
       _routine.values.any((exs) => exs.isNotEmpty);
 
@@ -117,6 +162,14 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
     // coherente al guardar.
     userData['availableDays'] =
         _routine.keys.map((d) => d.toString()).toList();
+    userData['trainingDays'] =
+        _routine.keys.map((d) => _dayNames[d]).join(', ');
+
+    // Defaults derivados: como el usuario importa rutina, se omiten
+    // signup_split y signup_days_duration. El split queda sin preferencia
+    // (NULL en BD, el CHECK constraint no acepta 'custom') y el tiempo
+    // por sesión cae al default estándar.
+    userData['sessionDurationMinutes'] ??= 60;
 
     final next = OnboardingFlow.nextRoute('/signup_import_routine', userData);
     if (next != null) {
@@ -143,6 +196,12 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
         ),
         centerTitle: true,
         actions: [
+          if ((_routine[_selectedDay]?.isNotEmpty ?? false))
+            IconButton(
+              tooltip: 'Copiar este día a otro',
+              icon: const Icon(Icons.copy_all_rounded, size: 22),
+              onPressed: _openCopyDay,
+            ),
           TextButton(
             onPressed: _hasAtLeastOneExercise ? _onContinue : null,
             child: Text(
@@ -367,10 +426,16 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
   Widget _buildExerciseCard(Map<String, dynamic> e, int idx) {
     final name = e['name']?.toString() ?? '';
     final mg = e['muscle_group']?.toString() ?? '';
+    final isCardio = mg == 'cardio';
     final sets = e['sets']?.toString() ?? '';
     final reps = e['reps']?.toString() ?? '';
     final rest = e['rest_seconds']?.toString() ?? '';
+    final duration = e['duration_minutes']?.toString() ?? '';
+    final distance = e['distance']?.toString() ?? '';
     final notes = e['optional_notes']?.toString() ?? '';
+    final detail = isCardio
+        ? '$duration min${distance.isNotEmpty ? '  •  $distance' : ''}'
+        : '$sets series × $reps  •  Descanso ${rest}s';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -410,7 +475,7 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
                         TextStyle(color: AppColors.primary, fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(
-                  '$sets series × $reps  •  Descanso ${rest}s',
+                  detail,
                   style: const TextStyle(color: Colors.black54, fontSize: 12),
                 ),
                 if (notes.isNotEmpty) ...[
@@ -443,10 +508,37 @@ class _AddExerciseSheetState extends State<_AddExerciseSheet> {
   final _name = TextEditingController();
   final _reps = TextEditingController(text: '8-12');
   final _notes = TextEditingController();
+  final _distance = TextEditingController();
 
   String _muscleGroup = 'chest';
   int _sets = 3;
   int _restSeconds = 60;
+  int _durationMinutes = 20;
+  String? _exerciseId;
+  Timer? _debounce;
+  List<Map<String, dynamic>> _suggestions = const [];
+
+  bool get _isCardio => _muscleGroup == 'cardio';
+
+  /// Mapea `muscle_group_primary` del catálogo (español) al código que usa
+  /// el dropdown del form (inglés). Si no hay match exacto, devuelve null
+  /// para no pisar la selección manual.
+  static const _muscleMap = {
+    'Pecho': 'chest',
+    'Espalda': 'back',
+    'Cuádriceps': 'legs',
+    'Femoral': 'legs',
+    'Pantorrillas': 'legs',
+    'Glúteos': 'glutes',
+    'Hombros': 'shoulders',
+    'Bíceps': 'biceps',
+    'Tríceps': 'triceps',
+    'Core': 'core',
+    'Lumbar': 'core',
+    'Cardio': 'cardio',
+    'Cadena posterior': 'full_body',
+    'Deportes': 'full_body',
+  };
 
   static const _muscles = <Map<String, String>>[
     {'v': 'chest', 'l': 'Pecho'},
@@ -466,19 +558,69 @@ class _AddExerciseSheetState extends State<_AddExerciseSheet> {
     _name.dispose();
     _reps.dispose();
     _notes.dispose();
+    _distance.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void _onNameChanged(String value) {
+    // Si el usuario edita el texto después de elegir un canónico,
+    // se invalida el match.
+    if (_exerciseId != null) {
+      setState(() => _exerciseId = null);
+    }
+    _debounce?.cancel();
+    final q = value.trim();
+    if (q.length < 2) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        final rows = await ExerciseService.instance
+            .searchForAutocomplete(q, limit: 6);
+        if (!mounted) return;
+        setState(() => _suggestions = rows);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _suggestions = const []);
+      }
+    });
+  }
+
+  void _pickSuggestion(Map<String, dynamic> row) {
+    final id = row['id']?.toString();
+    final name = row['name_es']?.toString() ?? '';
+    final mg = row['muscle_group_primary']?.toString();
+    final mapped = mg != null ? _muscleMap[mg] : null;
+    setState(() {
+      _name.text = name;
+      _exerciseId = id;
+      _suggestions = const [];
+      if (mapped != null) _muscleGroup = mapped;
+    });
+    FocusScope.of(context).unfocus();
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    Navigator.pop<Map<String, dynamic>>(context, {
+    final base = <String, dynamic>{
       'name': InputSanitizers.cleanText(_name.text, maxLen: 60),
       'muscle_group': _muscleGroup,
-      'sets': _sets,
-      'reps': InputSanitizers.cleanText(_reps.text, maxLen: 30),
-      'rest_seconds': _restSeconds,
       'optional_notes': InputSanitizers.cleanOptional(_notes.text, maxLen: 160),
-    });
+      'exercise_id': _exerciseId,
+      'is_custom': _exerciseId == null,
+    };
+    if (_isCardio) {
+      base['duration_minutes'] = _durationMinutes;
+      final dist = InputSanitizers.cleanOptional(_distance.text, maxLen: 20);
+      if (dist != null && dist.isNotEmpty) base['distance'] = dist;
+    } else {
+      base['sets'] = _sets;
+      base['reps'] = InputSanitizers.cleanText(_reps.text, maxLen: 30);
+      base['rest_seconds'] = _restSeconds;
+    }
+    Navigator.pop<Map<String, dynamic>>(context, base);
   }
 
   @override
@@ -506,12 +648,64 @@ class _AddExerciseSheetState extends State<_AddExerciseSheet> {
                 TextFormField(
                   controller: _name,
                   maxLength: 60,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Nombre del ejercicio',
                     hintText: 'Ej. Press banca',
+                    suffixIcon: _exerciseId != null
+                        ? const Icon(Icons.verified, color: Colors.green, size: 20)
+                        : null,
                   ),
+                  onChanged: _onNameChanged,
                   validator: InputSanitizers.validateExerciseName,
                 ),
+                if (_suggestions.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF6F8FC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Column(
+                      children: _suggestions.map((s) {
+                        return InkWell(
+                          onTap: () => _pickSuggestion(s),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(Icons.fitness_center,
+                                    size: 16, color: AppColors.primary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    s['name_es']?.toString() ?? '',
+                                    style: const TextStyle(
+                                        fontSize: 13, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                Text(
+                                  s['muscle_group_primary']?.toString() ?? '',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  )
+                else if (_name.text.trim().length >= 2 && _exerciseId == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 4),
+                    child: Text(
+                      'No coincide con nuestro catálogo: lo guardaremos como ejercicio personalizado.',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.orange.shade700),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: _muscleGroup,
@@ -525,41 +719,61 @@ class _AddExerciseSheetState extends State<_AddExerciseSheet> {
                   onChanged: (v) => setState(() => _muscleGroup = v ?? 'chest'),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _numberStepper(
-                        label: 'Series',
-                        value: _sets,
-                        min: 1,
-                        max: 10,
-                        step: 1,
-                        onChanged: (v) => setState(() => _sets = v),
-                      ),
+                if (_isCardio) ...[
+                  _numberStepper(
+                    label: 'Duración (minutos)',
+                    value: _durationMinutes,
+                    min: 5,
+                    max: 180,
+                    step: 5,
+                    onChanged: (v) => setState(() => _durationMinutes = v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _distance,
+                    maxLength: 20,
+                    decoration: const InputDecoration(
+                      labelText: 'Distancia o intensidad (opcional)',
+                      hintText: 'Ej. 5 km, ritmo moderado',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _reps,
-                        maxLength: 30,
-                        decoration: const InputDecoration(
-                          labelText: 'Reps',
-                          hintText: '8-12',
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _numberStepper(
+                          label: 'Series',
+                          value: _sets,
+                          min: 1,
+                          max: 10,
+                          step: 1,
+                          onChanged: (v) => setState(() => _sets = v),
                         ),
-                        validator: InputSanitizers.validateReps,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _numberStepper(
-                  label: 'Descanso (segundos)',
-                  value: _restSeconds,
-                  min: 15,
-                  max: 300,
-                  step: 15,
-                  onChanged: (v) => setState(() => _restSeconds = v),
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _reps,
+                          maxLength: 30,
+                          decoration: const InputDecoration(
+                            labelText: 'Reps',
+                            hintText: '8-12',
+                          ),
+                          validator: InputSanitizers.validateReps,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _numberStepper(
+                    label: 'Descanso (segundos)',
+                    value: _restSeconds,
+                    min: 15,
+                    max: 300,
+                    step: 15,
+                    onChanged: (v) => setState(() => _restSeconds = v),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _notes,
@@ -613,6 +827,107 @@ class _AddExerciseSheetState extends State<_AddExerciseSheet> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _CopyDaySheet extends StatefulWidget {
+  const _CopyDaySheet({
+    required this.sourceDay,
+    required this.sourceDayName,
+    required this.dayNames,
+    required this.dayLabels,
+  });
+
+  final int sourceDay;
+  final String sourceDayName;
+  final List<String> dayNames;
+  final List<String> dayLabels;
+
+  @override
+  State<_CopyDaySheet> createState() => _CopyDaySheetState();
+}
+
+class _CopyDaySheetState extends State<_CopyDaySheet> {
+  final Set<int> _targets = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Center(
+            child: Text(
+              'Copiar día',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Copiar los ejercicios de ${widget.sourceDayName} a:',
+            style: const TextStyle(fontSize: 13, color: Colors.black54),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(7, (i) {
+              if (i == widget.sourceDay) return const SizedBox.shrink();
+              final selected = _targets.contains(i);
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (selected) {
+                    _targets.remove(i);
+                  } else {
+                    _targets.add(i);
+                  }
+                }),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.primary : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected ? AppColors.primary : Colors.black26,
+                    ),
+                  ),
+                  child: Text(
+                    widget.dayLabels[i],
+                    style: TextStyle(
+                      color: selected ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Sobrescribe los ejercicios del día destino.',
+            style: TextStyle(fontSize: 11, color: Colors.black45),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          CustomButton(
+            text: _targets.isEmpty
+                ? 'Selecciona al menos un día'
+                : 'Copiar a ${_targets.length} día(s)',
+            onPressed: _targets.isEmpty
+                ? null
+                : () => Navigator.pop<List<int>>(context, _targets.toList()),
+          ),
+        ],
+      ),
     );
   }
 }

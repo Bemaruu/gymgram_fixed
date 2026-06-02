@@ -2043,7 +2043,22 @@ class _MealSection extends StatelessWidget {
     );
   }
 
-  Widget _swapButton(VoidCallback onSwap) {
+  Widget _swapButton(VoidCallback onSwap, {bool compact = false}) {
+    if (compact) {
+      return InkWell(
+        onTap: onSwap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00BFFF).withValues(alpha: 0.10),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.swap_horiz,
+              size: 18, color: Color(0xFF00BFFF)),
+        ),
+      );
+    }
     return InkWell(
       onTap: onSwap,
       borderRadius: BorderRadius.circular(8),
@@ -2110,31 +2125,34 @@ class _MealSection extends StatelessWidget {
                 children: [
                   Text(
                     name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: bold ? FontWeight.bold : FontWeight.w600,
                       fontSize: bold ? 14 : 13,
+                      height: 1.15,
                       decoration:
                           isChecked ? TextDecoration.lineThrough : null,
                       color: isChecked ? Colors.black45 : Colors.black87,
                     ),
                   ),
-                  if (detail != null && detail.isNotEmpty)
-                    Text(
-                      detail,
-                      style: const TextStyle(
-                          color: Colors.black54, fontSize: 11),
-                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail != null && detail.isNotEmpty
+                        ? '$kcal kcal · $detail'
+                        : '$kcal kcal',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.black54, fontSize: 11),
+                  ),
                 ],
               ),
             ),
             if (onSwap != null) ...[
-              _swapButton(onSwap),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
+              _swapButton(onSwap, compact: true),
             ],
-            Text(
-              '$kcal kcal',
-              style: const TextStyle(color: Colors.black54, fontSize: 12),
-            ),
           ],
         ),
       ),

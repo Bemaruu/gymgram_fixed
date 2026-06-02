@@ -40,7 +40,7 @@ class TierUpOverlay extends StatefulWidget {
     return Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder<void>(
         opaque: false,
-        barrierColor: Colors.transparent,
+        barrierColor: const Color(0xE6040E18),
         transitionDuration: const Duration(milliseconds: 200),
         pageBuilder: (_, __, ___) => TierUpOverlay(
           oldTier: oldTier,
