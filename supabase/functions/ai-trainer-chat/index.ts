@@ -18,6 +18,7 @@ import { getAuthedUser, serviceClient } from '../_shared/supabase.ts';
 import { chat, ChatMessage, OpenAIError } from '../_shared/openai.ts';
 import { profileContext, trainerPersona, UserProfile } from '../_shared/prompts.ts';
 import { enforceMonthlyCap, UsageCapError } from '../_shared/usage.ts';
+import { CANNED_REFUSAL, GUARDRAIL_REMINDER, screenUserMessage } from '../_shared/chat_guard.ts';
 
 const DAILY_LIMIT = 10;
 
@@ -86,6 +87,25 @@ serve(async (req) => {
     return errorResponse('Could not record message', 500);
   }
 
+  // 3.5) Pre-filtro anti-abuso: inyección de prompt / jailbreak, código,
+  // sondeo de internals/seguridad o pedir datos de otros usuarios se rechazan
+  // SIN llamar al modelo (costo 0 y rechazo garantizado). El mensaje ya quedó
+  // registrado, así que el intento consume cuota diaria.
+  const guard = screenUserMessage(content);
+  if (guard.blocked) {
+    await supabase.from('ai_trainer_messages').insert({
+      user_id: user.id,
+      role: 'assistant',
+      content: CANNED_REFUSAL,
+      message_type: 'chat',
+    });
+    return jsonResponse({
+      ok: true,
+      assistant_message: CANNED_REFUSAL,
+      daily_used: usedToday + 1,
+    });
+  }
+
   // 4) Config + history
   const { data: cfgRow } = await supabase
     .from('ai_trainer_config')
@@ -136,6 +156,9 @@ serve(async (req) => {
       role: m.role as 'user' | 'assistant',
       content: m.content as string,
     })),
+    // Guardarraíl reforzado como último system: ancla las reglas DESPUÉS del
+    // historial para resistir intentos de inyección dentro de los mensajes.
+    { role: 'system', content: GUARDRAIL_REMINDER },
   ];
 
   // 6) OpenAI
