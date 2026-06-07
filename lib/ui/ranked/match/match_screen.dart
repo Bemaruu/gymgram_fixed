@@ -23,10 +23,12 @@ class MatchScreen extends StatefulWidget {
 class _MatchScreenState extends State<MatchScreen> {
   final _svc = MatchService.instance;
   StreamSubscription<MatchState>? _sub;
+  Timer? _ticker;
   MatchState? _state;
   bool _initialized = false;
   bool _navigatedToResult = false;
   bool _submitting = false;
+  bool _claimingTimeout = false;
 
   final _revealedRounds = <int>{};
   final _weightCtrl = TextEditingController();
@@ -40,11 +42,15 @@ class _MatchScreenState extends State<MatchScreen> {
   void initState() {
     super.initState();
     _sub = _svc.watchMatch(widget.matchId).listen(_onState);
+    _ticker = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _ticker?.cancel();
     _weightCtrl.dispose();
     _repsCtrl.dispose();
     super.dispose();
@@ -206,6 +212,7 @@ class _MatchScreenState extends State<MatchScreen> {
         _buildHeaderVs(me, rival),
         const SizedBox(height: 8),
         _buildScoreboard(myWins, rivalWins),
+        _buildTimeoutBanner(s, isMyTurn, iSubmitted, rival),
         const SizedBox(height: 8),
         Expanded(
           child: SingleChildScrollView(
@@ -216,6 +223,154 @@ class _MatchScreenState extends State<MatchScreen> {
         if (isMyTurn) _buildInput() else _buildWaiting(rival, iSubmitted),
       ],
     );
+  }
+
+  Widget _buildTimeoutBanner(
+      MatchState s, bool isMyTurn, bool iSubmitted, MatchPlayer rival) {
+    if (s.match.status != MatchStatus.active) return const SizedBox.shrink();
+    final startedAt = s.match.turnStartedAt;
+    if (startedAt == null) return const SizedBox.shrink();
+    final remaining = MatchService.turnTimeoutSeconds -
+        DateTime.now().difference(startedAt).inSeconds;
+
+    // Rival está agotando su tiempo y aún no es mi turno: ofrecer reclamar.
+    final waitingForRival = !isMyTurn && !iSubmitted;
+    if (waitingForRival && remaining <= 0) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+        child: _bannerCard(
+          color: AppColors.danger,
+          icon: PhosphorIconsFill.flag,
+          title: '@${rival.username} no responde',
+          subtitle: 'Han pasado 7 minutos. Puedes ganar por inactividad.',
+          action: 'Reclamar victoria',
+          onTap: _claimingTimeout ? null : _claimTimeout,
+          loading: _claimingTimeout,
+        ),
+      );
+    }
+    if (waitingForRival && remaining <= 120) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+        child: _bannerCard(
+          color: AppColors.accentOrange,
+          icon: PhosphorIconsRegular.hourglass,
+          title: 'El rival tiene ${_fmt(remaining)} para responder',
+          subtitle: null,
+        ),
+      );
+    }
+
+    // Es mi turno y se acerca el límite.
+    if (isMyTurn && remaining <= 120 && remaining > 0) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+        child: _bannerCard(
+          color: AppColors.accentOrange,
+          icon: PhosphorIconsRegular.clock,
+          title: 'Te quedan ${_fmt(remaining)} para registrar',
+          subtitle: 'Si no envías tu marca, el rival podrá reclamar la victoria.',
+        ),
+      );
+    }
+    if (isMyTurn && remaining <= 0) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+        child: _bannerCard(
+          color: AppColors.danger,
+          icon: PhosphorIconsFill.warning,
+          title: 'Tiempo agotado',
+          subtitle: 'Registra tu marca ya antes de que el rival reclame.',
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  String _fmt(int secs) {
+    final s = secs.clamp(0, 9999);
+    final m = s ~/ 60;
+    final r = s % 60;
+    return '$m:${r.toString().padLeft(2, '0')}';
+  }
+
+  Widget _bannerCard({
+    required Color color,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    String? action,
+    VoidCallback? onTap,
+    bool loading = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800)),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 11.5)),
+                ],
+              ],
+            ),
+          ),
+          if (action != null) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: loading
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(action,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 12)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _claimTimeout() async {
+    if (_claimingTimeout) return;
+    setState(() => _claimingTimeout = true);
+    HapticFeedback.lightImpact();
+    final ok = await _svc.claimTimeout(widget.matchId);
+    if (!mounted) return;
+    setState(() => _claimingTimeout = false);
+    if (!ok) {
+      _toast('Aún no se cumple el tiempo. Inténtalo en unos segundos.');
+    }
   }
 
   Widget _buildHeaderVs(MatchPlayer me, MatchPlayer rival) {
@@ -229,32 +384,50 @@ class _MatchScreenState extends State<MatchScreen> {
           ],
         ),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Expanded(child: _playerColumn(me, AppColors.primary, isMe: true)),
-          Column(
-            mainAxisSize: MainAxisSize.min,
+          Row(
             children: [
-              ShaderMask(
-                shaderCallback: (rect) => const LinearGradient(
-                  colors: [AppColors.primary, AppColors.accentOrange],
-                ).createShader(rect),
-                child: const Text(
-                  'VS',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1,
+              Expanded(child: _playerColumn(me, AppColors.primary, isMe: true)),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShaderMask(
+                    shaderCallback: (rect) => const LinearGradient(
+                      colors: [AppColors.primary, AppColors.accentOrange],
+                    ).createShader(rect),
+                    child: const Text(
+                      'VS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
                   ),
-                ),
+                  const Text('Mejor de 5',
+                      style: TextStyle(color: Colors.white38, fontSize: 10)),
+                ],
               ),
-              const Text('Mejor de 5',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Expanded(
+                  child: _playerColumn(rival, AppColors.accentOrange,
+                      isMe: false)),
             ],
           ),
-          Expanded(
-              child: _playerColumn(rival, AppColors.accentOrange, isMe: false)),
+          Positioned(
+            top: -4,
+            right: -4,
+            child: IconButton(
+              tooltip: 'Abandonar duelo',
+              icon: const Icon(PhosphorIconsRegular.signOut,
+                  color: Colors.white54, size: 22),
+              onPressed: () async {
+                final ok = await _confirmForfeit();
+                if (ok && mounted) Navigator.of(context).pop();
+              },
+            ),
+          ),
         ],
       ),
     );

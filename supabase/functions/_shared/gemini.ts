@@ -11,6 +11,16 @@ export class GeminiError extends Error {
   }
 }
 
+/** Lanzada cuando Gemini bloquea por safety (NSFW/violencia/etc). */
+export class GeminiSafetyBlocked extends Error {
+  category: string;
+  constructor(category: string) {
+    super(`Gemini blocked by safety: ${category}`);
+    this.name = 'GeminiSafetyBlocked';
+    this.category = category;
+  }
+}
+
 export type GeminiVisionOptions = {
   /** Flash is the cheapest vision model; good enough for food estimation. */
   model?: 'gemini-2.0-flash' | 'gemini-2.0-flash-lite' | 'gemini-2.5-flash';
@@ -25,7 +35,16 @@ export type GeminiVisionOptions = {
   maxTokens?: number;
   /** Optional OpenAPI-subset schema to force the JSON shape. */
   schema?: Record<string, unknown>;
+  /** Activa safety settings al maximo (BLOCK_LOW_AND_ABOVE para NSFW). */
+  strictSafety?: boolean;
 };
+
+const STRICT_SAFETY_SETTINGS = [
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+];
 
 /** Vision call that returns a parsed JSON object. Forces JSON output. */
 export async function visionJson<T>(opts: GeminiVisionOptions): Promise<T> {
@@ -47,7 +66,7 @@ export async function visionJson<T>(opts: GeminiVisionOptions): Promise<T> {
   };
   if (opts.schema) generationConfig.responseSchema = opts.schema;
 
-  const body = {
+  const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: opts.system }] },
     contents: [
       {
@@ -60,6 +79,7 @@ export async function visionJson<T>(opts: GeminiVisionOptions): Promise<T> {
     ],
     generationConfig,
   };
+  if (opts.strictSafety) body.safetySettings = STRICT_SAFETY_SETTINGS;
 
   const res = await fetch(url, {
     method: 'POST',
@@ -73,7 +93,23 @@ export async function visionJson<T>(opts: GeminiVisionOptions): Promise<T> {
   }
 
   const data = await res.json();
-  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  // Bloqueo por safety: el prompt entero pudo ser bloqueado (promptFeedback)
+  // o solo el candidato (finishReason === 'SAFETY').
+  const promptBlock = data?.promptFeedback?.blockReason;
+  if (promptBlock) {
+    throw new GeminiSafetyBlocked(String(promptBlock));
+  }
+  const candidate = data?.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  if (finishReason === 'SAFETY' || finishReason === 'PROHIBITED_CONTENT') {
+    const blockedCat = candidate?.safetyRatings?.find?.(
+      (r: { blocked?: boolean; category?: string }) => r?.blocked,
+    )?.category;
+    throw new GeminiSafetyBlocked(String(blockedCat ?? finishReason));
+  }
+
+  const content = candidate?.content?.parts?.[0]?.text;
   if (typeof content !== 'string') {
     throw new GeminiError(500, 'Gemini returned no text content');
   }

@@ -160,6 +160,7 @@ class Match {
   final String? winnerId;
   final int? rpDeltaA;
   final int? rpDeltaB;
+  final DateTime? turnStartedAt;
 
   const Match({
     required this.id,
@@ -173,6 +174,7 @@ class Match {
     this.winnerId,
     this.rpDeltaA,
     this.rpDeltaB,
+    this.turnStartedAt,
   });
 
   factory Match.fromMap(Map<String, dynamic> m) {
@@ -188,6 +190,7 @@ class Match {
       winnerId: m['winner_id'] as String?,
       rpDeltaA: (m['rp_delta_a'] as num?)?.toInt(),
       rpDeltaB: (m['rp_delta_b'] as num?)?.toInt(),
+      turnStartedAt: DateTime.tryParse(m['turn_started_at']?.toString() ?? ''),
     );
   }
 }

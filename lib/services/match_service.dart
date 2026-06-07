@@ -80,6 +80,24 @@ class MatchService {
     }
   }
 
+  /// Reclama victoria por inactividad. Solo aplica si el rival no envió su
+  /// marca en el tiempo límite (7 min). Devuelve true si se aplicó.
+  Future<bool> claimTimeout(String matchId) async {
+    try {
+      final res = await _client.rpc(
+        'timeout_match',
+        params: {'p_match_id': matchId},
+      );
+      return res == true;
+    } catch (e) {
+      debugPrint('MatchService.claimTimeout error: $e');
+      return false;
+    }
+  }
+
+  /// Segundos máximos por turno antes de que el rival pueda reclamar victoria.
+  static const int turnTimeoutSeconds = 420;
+
   // ---------------------------------------------------------------------------
   // Lectura
   // ---------------------------------------------------------------------------
@@ -172,7 +190,7 @@ class MatchService {
       final matchRow = await _client
           .from('matches')
           .select(
-              'id, player_a, player_b, status, current_round, current_turn, wins_a, wins_b, winner_id, rp_delta_a, rp_delta_b')
+              'id, player_a, player_b, status, current_round, current_turn, wins_a, wins_b, winner_id, rp_delta_a, rp_delta_b, turn_started_at')
           .eq('id', matchId)
           .maybeSingle();
       if (matchRow == null) return null;

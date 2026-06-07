@@ -682,10 +682,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     );
     if (source == null) return;
 
+    // maxWidth evita cargar 12MP en memoria; la compresion final la hace
+    // ImageCompressor.compressForVision (896/70) dentro del servicio.
     final picked = await ImagePicker().pickImage(
       source: source,
-      maxWidth: 1600,
-      imageQuality: 85,
+      maxWidth: 1280,
     );
     if (picked == null || !mounted) return;
 
@@ -711,24 +712,49 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     );
 
     ScanResult? result;
-    String? error;
+    ScanException? scanError;
     try {
       result = await FoodScanService.instance.scan(File(picked.path));
+    } on ScanException catch (e) {
+      scanError = e;
     } catch (e) {
-      error = e.toString().replaceFirst('Exception: ', '');
+      scanError = ScanException(code: 'error', message: e.toString());
     }
 
     if (!mounted) return;
     Navigator.pop(context); // cierra el loading
 
-    if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+    if (scanError != null) {
+      // NSFW o suspensión → diálogo rojo bloqueante. Resto → SnackBar.
+      if (scanError.isNsfw || scanError.isSuspended) {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            icon: const Icon(PhosphorIconsFill.warningOctagon,
+                color: Color(0xFFE53935), size: 36),
+            title: Text(
+              scanError!.isSuspended
+                  ? 'Cuenta suspendida'
+                  : 'Solo fotos de comida',
+            ),
+            content: Text(scanError.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(scanError.message)));
+      }
       return;
     }
     if (result == null || result.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No detectamos comida en la foto.')),
+        SnackBar(content: Text(result?.message ?? 'No detectamos comida en la foto.')),
       );
       return;
     }

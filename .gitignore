@@ -47,6 +47,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Local working files (no subir)
+tmp/
+*.mp4
+
 # AI/IDE tool folders
 .adal/
 .agents/

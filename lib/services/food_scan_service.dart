@@ -58,13 +58,40 @@ class ScannedFood {
 
 class ScanResult {
   final List<ScannedFood> items;
-
-  /// Nombres de items que coinciden con alguna alergia del usuario.
   final List<String> allergyWarnings;
 
-  const ScanResult({required this.items, required this.allergyWarnings});
+  /// Mensaje opcional del backend (ej: "no detectamos comida en la foto").
+  final String? message;
+
+  const ScanResult({
+    required this.items,
+    required this.allergyWarnings,
+    this.message,
+  });
 
   bool get isEmpty => items.isEmpty;
+}
+
+/// Excepción tipada para que la UI pueda diferenciar:
+/// - `nsfw_violation` → strike, advertencia roja
+/// - `suspended` → cuenta suspendida temporalmente
+/// - genérico → SnackBar normal
+class ScanException implements Exception {
+  final String code;
+  final String message;
+  final DateTime? suspendedUntil;
+
+  const ScanException({
+    required this.code,
+    required this.message,
+    this.suspendedUntil,
+  });
+
+  bool get isNsfw => code == 'nsfw_violation';
+  bool get isSuspended => code == 'suspended';
+
+  @override
+  String toString() => message;
 }
 
 /// Escanea una foto de comida con la edge function `scan-food` (Gemini).
@@ -77,9 +104,9 @@ class FoodScanService {
   final _client = Supabase.instance.client;
 
   /// Comprime [image], la manda a la IA y devuelve los alimentos estimados.
-  /// Lanza [Exception] con un mensaje legible si algo falla.
+  /// Lanza [ScanException] con código si el backend rechaza por moderación.
   Future<ScanResult> scan(File image) async {
-    final compressed = await ImageCompressor.compress(image);
+    final compressed = await ImageCompressor.compressForVision(image);
     final bytes = await compressed.readAsBytes();
     final b64 = base64Encode(bytes);
 
@@ -89,7 +116,8 @@ class FoodScanService {
         body: {'image_base64': b64, 'mime_type': 'image/jpeg'},
       );
       final data = res.data;
-      if (res.status == 200 && data is Map && data['ok'] == true) {
+
+      if (data is Map && data['ok'] == true) {
         final raw = (data['items'] as List?) ?? const [];
         final items = raw
             .whereType<Map>()
@@ -99,15 +127,31 @@ class FoodScanService {
         final warnings = ((data['allergy_warnings'] as List?) ?? const [])
             .map((e) => e.toString())
             .toList();
-        return ScanResult(items: items, allergyWarnings: warnings);
+        return ScanResult(
+          items: items,
+          allergyWarnings: warnings,
+          message: data['message']?.toString(),
+        );
       }
+
+      // ok=false → puede traer code para diferenciar (nsfw/suspended/etc).
+      final code = (data is Map ? data['code'] : null)?.toString() ?? 'error';
       final msg = (data is Map ? data['error'] : null)?.toString() ??
           'No se pudo analizar la foto.';
-      throw Exception(msg);
+      final until = (data is Map ? data['suspended_until'] : null);
+      throw ScanException(
+        code: code,
+        message: msg,
+        suspendedUntil: until is String ? DateTime.tryParse(until) : null,
+      );
+    } on ScanException {
+      rethrow;
     } catch (e) {
       debugPrint('scan-food invoke error: $e');
-      if (e is Exception) rethrow;
-      throw Exception('No se pudo analizar la foto. Intenta más tarde.');
+      throw const ScanException(
+        code: 'error',
+        message: 'No se pudo analizar la foto. Intenta más tarde.',
+      );
     }
   }
 }
