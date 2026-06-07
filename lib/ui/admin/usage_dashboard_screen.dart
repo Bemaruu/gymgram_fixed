@@ -132,6 +132,11 @@ class _UsageDashboardScreenState extends State<UsageDashboardScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Moderación',
+            icon: const Icon(Icons.flag_outlined, color: Colors.white),
+            onPressed: () => Navigator.pushNamed(context, '/admin/reports'),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _load,
           ),

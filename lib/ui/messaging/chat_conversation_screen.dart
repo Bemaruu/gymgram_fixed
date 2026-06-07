@@ -174,14 +174,51 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
   }
 
-  Future<void> _reportUser() async {
+  Future<void> _confirmReportMessage(String messageId) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.flag_outlined, color: Color(0xFFFF4D4D)),
+              title: const Text(
+                'Reportar este mensaje',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.pop(ctx, 'report'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close, color: Colors.white54),
+              title: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == 'report') {
+      await _reportUser(messageId: messageId);
+    }
+  }
+
+  Future<void> _reportUser({String? messageId}) async {
+    final isMessage = messageId != null;
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) {
         final controller = TextEditingController();
         return AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('Reportar usuario', style: TextStyle(color: Colors.white)),
+          title: Text(
+            isMessage ? 'Reportar mensaje' : 'Reportar usuario',
+            style: const TextStyle(color: Colors.white),
+          ),
           content: TextField(
             controller: controller,
             maxLines: 3,
@@ -210,6 +247,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     try {
       await ChatService.instance.reportUser(
         targetUserId: widget.otherUserId,
+        targetMessageId: messageId,
         reason: reason,
       );
       if (!mounted) return;
@@ -349,6 +387,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                             );
                           }
                           final m = _messages[i];
+                          final isMine = m.senderId == _myUid;
+                          final canReport = !isMine &&
+                              !m.isDeleted &&
+                              !m.id.startsWith('__optimistic__');
                           return TweenAnimationBuilder<double>(
                             key: ValueKey('msg-${m.id}'),
                             tween: Tween(begin: 0.0, end: 1.0),
@@ -361,9 +403,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                 child: child,
                               ),
                             ),
-                            child: MessageBubble(
-                              message: m,
-                              isMine: m.senderId == _myUid,
+                            child: GestureDetector(
+                              onLongPress:
+                                  canReport ? () => _confirmReportMessage(m.id) : null,
+                              child: MessageBubble(
+                                message: m,
+                                isMine: isMine,
+                              ),
                             ),
                           );
                         },

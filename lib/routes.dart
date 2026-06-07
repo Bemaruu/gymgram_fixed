@@ -43,6 +43,7 @@ import 'ui/main_screens/create_custom_routine_screen.dart';
 import 'ui/main_screens/create_community_routine_screen.dart';
 import 'ui/messaging/chat_list_screen.dart';
 import 'ui/admin/usage_dashboard_screen.dart';
+import 'ui/admin/moderation_screen.dart';
 import 'ui/main_screens/weight_log_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
@@ -145,5 +146,19 @@ final Map<String, WidgetBuilder> appRoutes = {
       );
     }
     return const UsageDashboardScreen();
+  },
+
+  '/admin/reports': (_) {
+    const adminUid = String.fromEnvironment('ADMIN_UID', defaultValue: '');
+    final currentUid = Supabase.instance.client.auth.currentUser?.id ?? '';
+    if (adminUid.isEmpty || currentUid != adminUid) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Text('No autorizado', style: TextStyle(color: Colors.white70)),
+        ),
+      );
+    }
+    return const ModerationScreen();
   },
 };
