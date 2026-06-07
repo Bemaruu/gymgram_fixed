@@ -148,9 +148,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       if (!mounted) return;
       final msg = e.toString();
       String show = 'No se pudo enviar';
-      if (msg.contains('Rate limit')) show = 'Espera unos segundos antes de enviar más';
-      if (msg.contains('Blocked'))    show = 'No puedes enviar mensajes a este usuario';
-      if (msg.contains('too long'))   show = 'Mensaje demasiado largo';
+      if (msg.contains('Rate limit'))      show = 'Espera unos segundos antes de enviar más';
+      if (msg.contains('Blocked'))         show = 'No puedes enviar mensajes a este usuario';
+      if (msg.contains('too long'))        show = 'Mensaje demasiado largo';
+      if (msg.contains('mutual followers')) show = 'Ya no se siguen mutuamente. No puedes enviar mensajes.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(show)));
     }
   }

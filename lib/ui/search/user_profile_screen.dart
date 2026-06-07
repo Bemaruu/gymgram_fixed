@@ -265,12 +265,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
         ),
       );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir el chat')),
-        );
+    } catch (e) {
+      if (!mounted) return;
+      final err = e.toString();
+      String show = 'No se pudo abrir el chat';
+      if (err.contains('mutual followers')) {
+        show = 'Solo puedes escribir a usuarios que te siguen y que sigues.';
+      } else if (err.contains('Blocked')) {
+        show = 'No puedes escribir a este usuario.';
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(show)),
+      );
     }
   }
 
