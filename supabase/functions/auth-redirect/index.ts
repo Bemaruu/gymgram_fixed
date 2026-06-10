@@ -1,8 +1,15 @@
 // Intermediate redirect page for GymGram password reset.
+// iOS Safari bloquea custom schemes en redirects automaticos. Esta pagina
+// muestra un boton para que el usuario tappee y dispare el scheme.
 // Android: intent:// URL targets package com.gymgram.app to bypass Chrome's ERR_UNKNOWN_URL_SCHEME.
 // iOS: custom scheme com.gymgram.fit:// (bundle distinto al Android).
 Deno.serve((req) => {
   const url = new URL(req.url);
+  // Supabase puede usar dos flujos:
+  //   PKCE (default actual): ?code=AUTH_CODE  -> la app llama exchangeCodeForSession
+  //   Legacy:                ?token_hash=...&type=recovery
+  // Forward TODOS los params al deep link para que la app maneje cualquiera.
+  const code = url.searchParams.get('code') ?? '';
   const tokenHash = url.searchParams.get('token_hash') ?? '';
   const type = url.searchParams.get('type') ?? 'recovery';
 
@@ -14,12 +21,15 @@ Deno.serve((req) => {
   const androidScheme = 'com.gymgram.app';
   const androidPackage = 'com.gymgram.app';
 
-  const query = tokenHash
-    ? `token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type)}`
-    : '';
+  // Construir query preservando los params relevantes.
+  const params: string[] = [];
+  if (code) params.push(`code=${encodeURIComponent(code)}`);
+  if (tokenHash) params.push(`token_hash=${encodeURIComponent(tokenHash)}`);
+  if (type) params.push(`type=${encodeURIComponent(type)}`);
+  const query = params.join('&');
 
-  // iOS: redirección directa al custom scheme.
-  const iosUrl = tokenHash
+  // iOS: deep link al custom scheme con los params para que la app exchange.
+  const iosUrl = query
     ? `${iosScheme}://password-reset?${query}`
     : `${iosScheme}://password-reset`;
 

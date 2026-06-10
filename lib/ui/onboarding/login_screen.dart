@@ -16,10 +16,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static String get _passwordResetRedirectTo =>
-      Platform.isIOS
-          ? 'com.gymgram.fit://password-reset'
-          : 'com.gymgram.app://password-reset';
+  // Apuntamos al edge function intermedio en vez de directo al custom scheme.
+  // iOS Safari bloquea custom schemes que vienen de redirects automaticos
+  // (politica de seguridad). El edge function muestra una pagina HTML con un
+  // boton "Abrir GymGram" que dispara el scheme via tap del usuario.
+  // El edge function detecta plataforma (iOS vs Android) por User-Agent y
+  // usa el scheme correcto en el boton.
+  static const _passwordResetRedirectTo =
+      'https://qnrpyaoyzecjbryejccm.supabase.co/functions/v1/auth-redirect';
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
