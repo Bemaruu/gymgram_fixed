@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../core/country_utils.dart';
@@ -329,6 +331,14 @@ String _mapTrainingLocation(String value) {
         gender: gender,
       );
 
+      // Prefetch IA en background ANTES de navegar. La edge generate-nutrition-plan
+      // persiste en `nutrition_plans` (cache DB), asi que la pestaña Alimentacion
+      // carga instantaneo cuando el usuario llegue. generate-routine no persiste
+      // todavia (TODO: routine_plans table) pero la llamada igual deja Gemini
+      // "tibio" y reduce latencia percibida. Fire-and-forget, no bloqueamos
+      // la navegacion.
+      unawaited(_prefetchAiPlansInBackground());
+
       if (!mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(
@@ -352,6 +362,27 @@ String _mapTrainingLocation(String value) {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  // Llama a las edges generate-routine y generate-nutrition-plan en paralelo.
+  // No bloquea la navegacion; cualquier error se silencia (las pantallas
+  // tienen su propio fallback al primer open). El objetivo es que cuando el
+  // usuario llegue a las pestañas Rutina / Alimentacion, el plan ya este
+  // cacheado en DB (o el servidor ya este calentando la respuesta).
+  Future<void> _prefetchAiPlansInBackground() async {
+    final client = Supabase.instance.client;
+    try {
+      await Future.wait<dynamic>([
+        client.functions.invoke('generate-routine', body: const {
+          'session_duration_min': 60,
+        }),
+        client.functions.invoke('generate-nutrition-plan', body: const {
+          'week_index': 0,
+        }),
+      ]);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Prefetch IA warning (no bloqueante): $e');
     }
   }
 
