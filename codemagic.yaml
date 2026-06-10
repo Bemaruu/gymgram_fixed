@@ -12,6 +12,11 @@ workflows:
       # ios_signing removido a propósito: el bloque ios_signing automatico
       # falla en pre-flight si no hay profile, ANTES de que corran los scripts.
       # Hacemos signing manual abajo con app-store-connect + xcode-project.
+      groups:
+        # Importar los grupos donde estan las dart-defines (Codemagic UI
+        # los pone en grupos por defecto). Sin esto el workflow no las ve.
+        - plain   # SUPABASE_URL, MIXPANEL_TOKEN
+        - secure  # SUPABASE_ANON_KEY, ADMIN_UID
       vars:
         BUNDLE_ID: com.gymgram.fit
         XCODE_WORKSPACE: ios/Runner.xcworkspace
