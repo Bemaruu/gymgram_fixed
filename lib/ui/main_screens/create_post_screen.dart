@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'dart:io';
 
 import '../../core/error_messages.dart';
@@ -42,12 +42,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(PhosphorIconsDuotone.image, color: Colors.white),
+              leading: const Icon(PhosphorIconsRegular.image, color: Colors.white),
               title: const Text('Imagen', style: TextStyle(color: Colors.white)),
               onTap: () { Navigator.pop(context); _pickImage(); },
             ),
             ListTile(
-              leading: const Icon(PhosphorIconsDuotone.videoCamera, color: Colors.white),
+              leading: const Icon(PhosphorIconsRegular.videoCamera, color: Colors.white),
               title: const Text('Video', style: TextStyle(color: Colors.white)),
               onTap: () { Navigator.pop(context); _pickVideo(); },
             ),
@@ -174,7 +174,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(PhosphorIconsDuotone.imageSquare, size: 48, color: Colors.white24),
+                            Icon(PhosphorIconsRegular.imageSquare, size: 48, color: Colors.white24),
                             SizedBox(height: 8),
                             Text('Toca para seleccionar imagen o video', style: TextStyle(color: Colors.white38, fontSize: 13)),
                           ],

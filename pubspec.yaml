@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.5.0 <4.0.0"
+  sdk: ^3.7.2
 
 dependencies:
   flutter:
@@ -14,7 +14,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   image_picker: ^1.1.0
   intl: ^0.20.2
-  video_player: 2.9.5  # pin para compat con Flutter 3.24.5 / Dart 3.5.4
+  video_player: ^2.10.0
 
   supabase_flutter: ^2.8.4
   app_links: ^6.4.1
@@ -29,7 +29,7 @@ dependencies:
   shared_preferences: ^2.3.3
   cached_network_image: ^3.4.1
   flutter_svg: ^2.0.10
-  phosphor_flutter: ^2.1.0
+  phosphoricons_flutter: ^1.0.0
   flutter_animate: ^4.5.0
   lottie: ^3.1.2
   google_fonts: ^6.2.1

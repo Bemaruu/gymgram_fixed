@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 enum MuscleGroup {
   chest,
@@ -19,18 +19,18 @@ enum MuscleGroup {
 
 class MuscleIconMap {
   static const Map<MuscleGroup, IconData> iconByGroup = {
-    MuscleGroup.chest: PhosphorIconsDuotone.personSimpleTaiChi,
-    MuscleGroup.back: PhosphorIconsDuotone.personArmsSpread,
-    MuscleGroup.quad: PhosphorIconsDuotone.personSimpleWalk,
-    MuscleGroup.hamstring: PhosphorIconsDuotone.personSimpleRun,
-    MuscleGroup.glute: PhosphorIconsDuotone.barbell,
-    MuscleGroup.shoulder: PhosphorIconsDuotone.personSimple,
-    MuscleGroup.biceps: PhosphorIconsDuotone.barbell,
-    MuscleGroup.triceps: PhosphorIconsDuotone.barbell,
-    MuscleGroup.forearm: PhosphorIconsDuotone.handFist,
-    MuscleGroup.core: PhosphorIconsDuotone.personSimpleTaiChi,
-    MuscleGroup.cardio: PhosphorIconsDuotone.heartbeat,
-    MuscleGroup.fullBody: PhosphorIconsDuotone.personSimpleHike,
+    MuscleGroup.chest: PhosphorIconsRegular.personSimpleTaiChi,
+    MuscleGroup.back: PhosphorIconsRegular.personArmsSpread,
+    MuscleGroup.quad: PhosphorIconsRegular.personSimpleWalk,
+    MuscleGroup.hamstring: PhosphorIconsRegular.personSimpleRun,
+    MuscleGroup.glute: PhosphorIconsRegular.barbell,
+    MuscleGroup.shoulder: PhosphorIconsRegular.personSimple,
+    MuscleGroup.biceps: PhosphorIconsRegular.barbell,
+    MuscleGroup.triceps: PhosphorIconsRegular.barbell,
+    MuscleGroup.forearm: PhosphorIconsRegular.handFist,
+    MuscleGroup.core: PhosphorIconsRegular.personSimpleTaiChi,
+    MuscleGroup.cardio: PhosphorIconsRegular.heartbeat,
+    MuscleGroup.fullBody: PhosphorIconsRegular.personSimpleHike,
   };
 
   /// Heuristica por nombre de ejercicio o grupo (espanol).

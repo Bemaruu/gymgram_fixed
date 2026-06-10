@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../services/analytics_service.dart';
 import '../../services/badge_service.dart';
 import '../../services/profile_photo_local.dart';
@@ -299,7 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(PhosphorIconsDuotone.plusCircle,
+                      Icon(PhosphorIconsRegular.plusCircle,
                           color: Color(0xFF00BFFF), size: 20),
                       SizedBox(width: 8),
                       Text(
@@ -349,7 +349,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(PhosphorIconsDuotone.plusCircle,
+                      Icon(PhosphorIconsRegular.plusCircle,
                           color: Color(0xFF00BFFF), size: 20),
                       SizedBox(width: 8),
                       Text(

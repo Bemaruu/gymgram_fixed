@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
@@ -917,7 +917,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
           color: const Color(0xFF00BFFF).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(PhosphorIconsDuotone.barbell, color: Color(0xFF00BFFF)),
+        child: const Icon(PhosphorIconsRegular.barbell, color: Color(0xFF00BFFF)),
       );
 
   Widget _buildExerciseCard(
@@ -1442,7 +1442,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                             )
                           : IconButton(
                               icon: const Icon(
-                                PhosphorIconsDuotone.clockCounterClockwise,
+                                PhosphorIconsRegular.clockCounterClockwise,
                                 color: Color(0xFF00BFFF),
                               ),
                               tooltip: 'Volver a tu rutina anterior',
@@ -1470,7 +1470,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                         )
                       : IconButton(
                           icon: const Icon(
-                            PhosphorIconsDuotone.clockCounterClockwise,
+                            PhosphorIconsRegular.clockCounterClockwise,
                             color: Color(0xFF00BFFF),
                           ),
                           tooltip: 'Volver a tu rutina anterior',

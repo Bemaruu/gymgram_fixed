@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/app_colors.dart';
 import '../../services/auth_service.dart';
@@ -504,14 +504,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       title: 'Datos fisicos',
       children: [
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.scales,
+          leadingIcon: PhosphorIconsRegular.scales,
           title: 'Peso actual',
           subtitle:
               _weight != null ? '${_weight!.toStringAsFixed(1)} kg' : 'Sin registrar',
           onTap: _openWeightSheet,
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.flag,
+          leadingIcon: PhosphorIconsRegular.flag,
           title: 'Peso objetivo',
           subtitle: _targetWeight != null
               ? '${_targetWeight!.toStringAsFixed(1)} kg'
@@ -520,7 +520,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           trailing: const SizedBox.shrink(),
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.chartLineUp,
+          leadingIcon: PhosphorIconsRegular.chartLineUp,
           title: 'Historial completo',
           onTap: () => Navigator.pushNamed(context, '/weight-log'),
         ),
@@ -533,7 +533,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       title: 'Entrenamiento',
       children: [
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.target,
+          leadingIcon: PhosphorIconsRegular.target,
           title: 'Objetivo',
           subtitle: labelForGoal(_fitnessGoal),
           pillState: _pillStateFor(_changesUsed),
@@ -541,7 +541,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           onTap: _openGoalSheet,
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.mapPin,
+          leadingIcon: PhosphorIconsRegular.mapPin,
           title: 'Lugar de entrenamiento',
           subtitle: labelForLocation(_trainingLocation),
           pillState: _pillStateFor(_changesUsed),
@@ -580,7 +580,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       title: 'Suscripcion',
       children: [
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.crown,
+          leadingIcon: PhosphorIconsRegular.crown,
           leadingColor: isPaid
               ? AppColors.accentOrange
               : Colors.white70,
@@ -597,17 +597,17 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       title: 'Legal',
       children: [
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.shieldCheck,
+          leadingIcon: PhosphorIconsRegular.shieldCheck,
           title: 'Politica de privacidad',
           onTap: () => Navigator.pushNamed(context, '/legal/privacy'),
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.fileText,
+          leadingIcon: PhosphorIconsRegular.fileText,
           title: 'Terminos y condiciones',
           onTap: () => Navigator.pushNamed(context, '/legal/terms'),
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.users,
+          leadingIcon: PhosphorIconsRegular.users,
           title: 'Reglas de comunidad',
           onTap: () => Navigator.pushNamed(context, '/legal/community'),
         ),
@@ -635,7 +635,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       title: 'Entrenador IA',
       children: [
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.calendarCheck,
+          leadingIcon: PhosphorIconsRegular.calendarCheck,
           title: 'Check-in semanal',
           onTap: () {
             showModalBottomSheet(
@@ -650,7 +650,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           },
         ),
         SettingsTile(
-          leadingIcon: PhosphorIconsDuotone.chartBar,
+          leadingIcon: PhosphorIconsRegular.chartBar,
           title: 'Reporte mensual IA',
           onTap: () => MonthlyReportScreen.open(context),
         ),

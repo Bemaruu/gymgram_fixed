@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/analytics_service.dart';
@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: MediaQuery.of(context).size.height * 0.8,
                 child: const Center(
                   child: EmptyState(
-                    icon: PhosphorIconsDuotone.imageSquare,
+                    icon: PhosphorIconsRegular.imageSquare,
                     title: 'Aún no hay publicaciones',
                     subtitle: 'Sé el primero en compartir tu progreso',
                   ),
@@ -257,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   children: [
                     const Center(
-                      child: Icon(PhosphorIconsDuotone.bell, color: Colors.white, size: 22),
+                      child: Icon(PhosphorIconsRegular.bell, color: Colors.white, size: 22),
                     ),
                     if (_hasNotifications)
                       Positioned(
@@ -300,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   clipBehavior: Clip.none,
                   children: [
                     const Center(
-                      child: Icon(PhosphorIconsDuotone.paperPlaneTilt, color: Colors.white, size: 22),
+                      child: Icon(PhosphorIconsRegular.paperPlaneTilt, color: Colors.white, size: 22),
                     ),
                     if (_unreadChats > 0)
                       Positioned(
@@ -542,7 +542,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
           child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
         ),
         errorWidget: (_, __, ___) => const Center(
-          child: Icon(PhosphorIconsDuotone.imageBroken, color: Colors.white54, size: 60),
+          child: Icon(PhosphorIconsRegular.imageBroken, color: Colors.white54, size: 60),
         ),
       );
     }
@@ -557,7 +557,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
     }
 
     return const Center(
-      child: Icon(PhosphorIconsDuotone.imageBroken, color: Colors.white54, size: 60),
+      child: Icon(PhosphorIconsRegular.imageBroken, color: Colors.white54, size: 60),
     );
   }
 
@@ -698,7 +698,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
               // COMENTARIOS
               _ActionButton(
                 icon: const Icon(
-                  PhosphorIconsDuotone.chatCircle,
+                  PhosphorIconsRegular.chatCircle,
                   color: Colors.white,
                   size: 28,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 6)],

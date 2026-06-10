@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../recipe_detail_screen.dart';
 
 class RecipesGrid extends StatelessWidget {
@@ -66,7 +66,7 @@ class RecipesGrid extends StatelessWidget {
                   color: const Color(0xFFEEEEEE),
                   alignment: Alignment.center,
                   child: Icon(
-                    PhosphorIconsDuotone.forkKnife,
+                    PhosphorIconsRegular.forkKnife,
                     color: Colors.black38,
                     size: 28,
                   ),

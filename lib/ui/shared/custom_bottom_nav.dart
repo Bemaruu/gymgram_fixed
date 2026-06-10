@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_durations.dart';
 
@@ -50,7 +50,7 @@ class CustomBottomNav extends StatelessWidget {
                   child: _PhosphorIconSwitcher(
                     isActive: currentIndex == 0,
                     activeIcon: PhosphorIconsFill.barbell,
-                    inactiveIcon: PhosphorIconsDuotone.barbell,
+                    inactiveIcon: PhosphorIconsRegular.barbell,
                   ),
                 ),
                 _NavItem(
@@ -59,7 +59,7 @@ class CustomBottomNav extends StatelessWidget {
                   child: _PhosphorIconSwitcher(
                     isActive: currentIndex == 1,
                     activeIcon: PhosphorIconsFill.house,
-                    inactiveIcon: PhosphorIconsDuotone.house,
+                    inactiveIcon: PhosphorIconsRegular.house,
                   ),
                 ),
                 _NavItem(
@@ -68,7 +68,7 @@ class CustomBottomNav extends StatelessWidget {
                   child: _PhosphorIconSwitcher(
                     isActive: currentIndex == 2,
                     activeIcon: PhosphorIconsFill.bowlFood,
-                    inactiveIcon: PhosphorIconsDuotone.bowlFood,
+                    inactiveIcon: PhosphorIconsRegular.bowlFood,
                   ),
                 ),
                 _NavItem(

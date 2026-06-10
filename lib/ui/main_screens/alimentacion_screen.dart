@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
@@ -78,12 +78,12 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     'post_workout': 'Post-entreno',
   };
   static const _mealIcon = {
-    'breakfast': PhosphorIconsDuotone.sun,
-    'lunch': PhosphorIconsDuotone.forkKnife,
-    'dinner': PhosphorIconsDuotone.moon,
-    'snack': PhosphorIconsDuotone.cookie,
-    'pre_workout': PhosphorIconsDuotone.lightning,
-    'post_workout': PhosphorIconsDuotone.barbell,
+    'breakfast': PhosphorIconsRegular.sun,
+    'lunch': PhosphorIconsRegular.forkKnife,
+    'dinner': PhosphorIconsRegular.moon,
+    'snack': PhosphorIconsRegular.cookie,
+    'pre_workout': PhosphorIconsRegular.lightning,
+    'post_workout': PhosphorIconsRegular.barbell,
   };
 
   @override
@@ -1379,7 +1379,7 @@ class _EmptyLog extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
-          Icon(PhosphorIconsDuotone.bowlFood, size: 40, color: Colors.black12),
+          Icon(PhosphorIconsRegular.bowlFood, size: 40, color: Colors.black12),
           const SizedBox(height: 10),
           const Text(
             'Sin registros aún',
@@ -1432,7 +1432,7 @@ class _LogList extends StatelessWidget {
       children: orderedTypes.map((type) {
         final group = grouped[type]!;
         final label = mealLabel[type] ?? type;
-        final icon = mealIcon[type] ?? PhosphorIconsDuotone.bowlFood;
+        final icon = mealIcon[type] ?? PhosphorIconsRegular.bowlFood;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1620,7 +1620,7 @@ class _PlanSection extends StatelessWidget {
         child: ExpansionTile(
           initiallyExpanded: !hasLogs,
           leading: const Icon(
-            PhosphorIconsDuotone.sparkle,
+            PhosphorIconsRegular.sparkle,
             color: Color(0xFF00BFFF),
             size: 20,
           ),
@@ -1696,7 +1696,7 @@ class _WaterSection extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                PhosphorIconsDuotone.drop,
+                PhosphorIconsRegular.drop,
                 color: Color(0xFF00BFFF),
                 size: 20,
               ),
@@ -1828,13 +1828,13 @@ class _NutritionSummaryCard extends StatelessWidget {
               _CalStat(
                 label: 'Mantenimiento',
                 value: '$maintenance kcal',
-                icon: PhosphorIconsDuotone.scales,
+                icon: PhosphorIconsRegular.scales,
               ),
               const SizedBox(width: 12),
               _CalStat(
                 label: 'Objetivo',
                 value: '$recommended kcal',
-                icon: PhosphorIconsDuotone.flag,
+                icon: PhosphorIconsRegular.flag,
                 highlight: true,
               ),
             ],
@@ -2032,7 +2032,7 @@ class _MealSection extends StatelessWidget {
             child: isSupplement
                 ? Row(
                     children: const [
-                      Icon(PhosphorIconsDuotone.sparkle,
+                      Icon(PhosphorIconsRegular.sparkle,
                           size: 14, color: Color(0xFF00BFFF)),
                       SizedBox(width: 4),
                       Flexible(

@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/recipe_service.dart';
 import '../plans/plans_screen.dart';
@@ -330,7 +330,7 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(PhosphorIconsDuotone.camera,
+            Icon(PhosphorIconsRegular.camera,
                 color: AppColors.accentOrange, size: 32),
             const SizedBox(height: 8),
             const Text(
