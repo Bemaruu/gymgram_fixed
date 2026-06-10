@@ -189,8 +189,9 @@ Future<void> _listenForAuthDeepLinks() async {
 }
 
 Future<void> _handleTokenHashUri(Uri uri) async {
-  // PKCE flow (Supabase default): Supabase verifies server-side and redirects to
-  // com.gymgram.app://password-reset?code=CODE. Exchange the code for a session.
+  // PKCE flow (Supabase default): Supabase verifies server-side y redirige al scheme
+  // de la app (Android: com.gymgram.app://, iOS: com.gymgram.fit://) con ?code=CODE.
+  // Exchange the code for a session.
   final code = uri.queryParameters['code'];
   if (code != null) {
     try {

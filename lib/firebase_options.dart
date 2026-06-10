@@ -7,7 +7,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError('iOS no configurado aún — falta GoogleService-Info.plist');
+        return ios;
       default:
         throw UnsupportedError('Plataforma no soportada');
     }
@@ -15,9 +15,17 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBI5zekXp0ygL9iYmha-k_UJuhL1jZa5E4',
-    appId: '1:1037070117892:android:f79929b743493ca4149951',
+    appId: '1:1037070117892:android:baeeadf6aa1eda35149951',
     messagingSenderId: '1037070117892',
     projectId: 'gymgram-6e226',
     storageBucket: 'gymgram-6e226.firebasestorage.app',
+  );
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAgiyYHOY3ChdJGia5Fq-iw5NhoFm1H9vs',
+    appId: '1:1037070117892:ios:2df07bef6e8ac90e149951',
+    messagingSenderId: '1037070117892',
+    projectId: 'gymgram-6e226',
+    storageBucket: 'gymgram-6e226.firebasestorage.app',
+    iosBundleId: 'com.gymgram.fit',
   );
 }

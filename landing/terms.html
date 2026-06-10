@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Términos y Condiciones — GymGram</title>
+  <meta name="description" content="Términos y Condiciones de uso de GymGram." />
+  <meta name="theme-color" content="#0a0a0c" />
+  <link rel="icon" type="image/png" href="/icono_app.png" />
+  <link rel="apple-touch-icon" href="/icono_app.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="brand">
+        <img src="/logo.png" alt="GymGram" />
+        <span>GymGram</span>
+      </a>
+      <div class="nav-links">
+        <a href="/privacy">Privacidad</a>
+        <a href="/terms">Términos</a>
+        <a href="/community">Comunidad</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="legal-wrap">
+    <a href="/" class="legal-back">← Volver al inicio</a>
+    <article id="content" class="legal-content">
+      <p class="legal-loading">Cargando documento…</p>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-bottom">
+      <span>© 2026 GymGram. Hecho en Chile.</span>
+      <span>gymgrambn@gmail.com</span>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+  <script>
+    fetch('/content/terms.md')
+      .then(r => r.text())
+      .then(md => {
+        document.getElementById('content').innerHTML = marked.parse(md);
+      })
+      .catch(() => {
+        document.getElementById('content').innerHTML =
+          '<p style="color:var(--text-muted);">No se pudo cargar el documento. Escríbenos a gymgrambn@gmail.com.</p>';
+      });
+  </script>
+
+</body>
+</html>

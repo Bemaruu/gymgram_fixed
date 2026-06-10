@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,7 +16,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const _passwordResetRedirectTo = 'com.gymgram.app://password-reset';
+  static String get _passwordResetRedirectTo =>
+      Platform.isIOS
+          ? 'com.gymgram.fit://password-reset'
+          : 'com.gymgram.app://password-reset';
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();

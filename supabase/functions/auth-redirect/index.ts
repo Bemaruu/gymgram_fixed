@@ -1,25 +1,34 @@
 // Intermediate redirect page for GymGram password reset.
-// Uses Android Intent URL format (intent://) which reliably opens a sideloaded APK
-// by package name, bypassing Chrome's ERR_UNKNOWN_URL_SCHEME on custom schemes.
+// Android: intent:// URL targets package com.gymgram.app to bypass Chrome's ERR_UNKNOWN_URL_SCHEME.
+// iOS: custom scheme com.gymgram.fit:// (bundle distinto al Android).
 Deno.serve((req) => {
   const url = new URL(req.url);
   const tokenHash = url.searchParams.get('token_hash') ?? '';
   const type = url.searchParams.get('type') ?? 'recovery';
 
-  // Custom URI scheme URL (fallback for non-Android / iOS future use)
-  const customUrl = tokenHash
-    ? `com.gymgram.app://password-reset?token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type)}`
-    : `com.gymgram.app://password-reset`;
+  const ua = req.headers.get('user-agent') ?? '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
 
-  // Android Intent URL: explicitly targets package com.gymgram.app.
-  // Chrome uses this to open the sideloaded APK even without Play Store.
-  // Format: intent://HOST?QUERY#Intent;scheme=SCHEME;package=PKG;S.browser_fallback_url=URL;end
+  // iOS scheme = com.gymgram.fit, Android scheme/package = com.gymgram.app
+  const iosScheme = 'com.gymgram.fit';
+  const androidScheme = 'com.gymgram.app';
+  const androidPackage = 'com.gymgram.app';
+
   const query = tokenHash
     ? `token_hash=${encodeURIComponent(tokenHash)}&type=${encodeURIComponent(type)}`
     : '';
+
+  // iOS: redirección directa al custom scheme.
+  const iosUrl = tokenHash
+    ? `${iosScheme}://password-reset?${query}`
+    : `${iosScheme}://password-reset`;
+
+  // Android: intent URL con package + fallback.
   const intentHost = `password-reset${query ? '?' + query : ''}`;
   const fallbackEncoded = encodeURIComponent('https://qnrpyaoyzecjbryejccm.supabase.co/functions/v1/auth-redirect?not_installed=1');
-  const intentUrl = `intent://${intentHost}#Intent;scheme=com.gymgram.app;package=com.gymgram.app;S.browser_fallback_url=${fallbackEncoded};end`;
+  const intentUrl = `intent://${intentHost}#Intent;scheme=${androidScheme};package=${androidPackage};S.browser_fallback_url=${fallbackEncoded};end`;
+
+  const openUrl = isIOS ? iosUrl : intentUrl;
 
   // If ?not_installed=1 → app truly not installed, show message
   if (url.searchParams.get('not_installed')) {
@@ -50,7 +59,7 @@ Deno.serve((req) => {
 <body>
   <div class="logo">GymGram</div>
   <div class="sub">Restablecer contraseña</div>
-  <a class="btn" href="${intentUrl}">Abrir GymGram</a>
+  <a class="btn" href="${openUrl}">Abrir GymGram</a>
   <p class="note">Toca el botón para continuar en la app.</p>
 </body>
 </html>`;

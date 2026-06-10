@@ -8,21 +8,23 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.gymgram.app
+        bundle_identifier: com.gymgram.fit
       vars:
-        BUNDLE_ID: com.gymgram.app
+        BUNDLE_ID: com.gymgram.fit
         XCODE_WORKSPACE: ios/Runner.xcworkspace
         XCODE_SCHEME: Runner
       flutter: stable
       xcode: latest
       cocoapods: default
 
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
+    # Build manual: lanzar desde el dashboard de Codemagic con "Start new build".
+    # Para reactivar trigger por push, descomenta el bloque triggering:
+    # triggering:
+    #   events:
+    #     - push
+    #   branch_patterns:
+    #     - pattern: main
+    #       include: true
 
     scripts:
       - name: Flutter pub get
@@ -40,7 +42,8 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
-            --dart-define=MIXPANEL_TOKEN=$MIXPANEL_TOKEN
+            --dart-define=MIXPANEL_TOKEN=$MIXPANEL_TOKEN \
+            --dart-define=ADMIN_UID=$ADMIN_UID
 
       - name: Firma y empaquetado IPA
         script: |
