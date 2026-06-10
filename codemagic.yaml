@@ -13,7 +13,10 @@ workflows:
         BUNDLE_ID: com.gymgram.fit
         XCODE_WORKSPACE: ios/Runner.xcworkspace
         XCODE_SCHEME: Runner
-      flutter: stable
+      # Pinned a 3.24.5: phosphor_flutter 2.1.0 (abandonado, usado en 32 archivos)
+      # extiende IconData, lo que rompe en Flutter 3.27+ (final class IconData).
+      # TODO post-Beta: migrar phosphor_flutter -> phosphor_icons o material/cupertino.
+      flutter: 3.24.5
       xcode: latest
       cocoapods: default
 
