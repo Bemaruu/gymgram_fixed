@@ -102,22 +102,46 @@ workflows:
       - name: Aplicar profiles a Xcode
         script: xcode-project use-profiles
 
+      - name: Verificar dart-defines configurados
+        script: |
+          # Fail-fast si alguna env var critica esta vacia. Asi no subimos
+          # un IPA roto a TestFlight (problema diagnosticado en build pasada).
+          MISSING=""
+          [ -z "$SUPABASE_URL" ]      && MISSING="$MISSING SUPABASE_URL"
+          [ -z "$SUPABASE_ANON_KEY" ] && MISSING="$MISSING SUPABASE_ANON_KEY"
+          [ -z "$MIXPANEL_TOKEN" ]    && MISSING="$MISSING MIXPANEL_TOKEN"
+          [ -z "$ADMIN_UID" ]         && MISSING="$MISSING ADMIN_UID"
+
+          if [ -n "$MISSING" ]; then
+            echo ""
+            echo "============================================================"
+            echo "ERROR: Variables de entorno faltantes en Codemagic:"
+            for v in $MISSING; do echo "  - $v"; done
+            echo ""
+            echo "Solucion: Codemagic > App > Environment variables. Agregar"
+            echo "los nombres exactos (case-sensitive) con sus valores."
+            echo "SUPABASE_URL, MIXPANEL_TOKEN, ADMIN_UID pueden ir como"
+            echo "plain. SUPABASE_ANON_KEY como secure."
+            echo "============================================================"
+            exit 1
+          fi
+
+          echo "OK: todas las dart-defines estan configuradas."
+          echo "  SUPABASE_URL length: ${#SUPABASE_URL}"
+          echo "  SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
+          echo "  MIXPANEL_TOKEN length: ${#MIXPANEL_TOKEN}"
+          echo "  ADMIN_UID length: ${#ADMIN_UID}"
+
       - name: Build IPA (firmado, con dart-defines)
         script: |
-          # Usamos flutter build ipa en un solo paso para que las --dart-define
-          # se preserven hasta el archivo final. El flujo de dos pasos
-          # (flutter build ios --no-codesign + xcode-project build-ipa) las
-          # pierde porque xcodebuild re-corre el backend script de Flutter
-          # sin nuestras flags. El export-options-plist lo crea
-          # `xcode-project use-profiles` en step anterior.
           flutter build ipa \
             --release \
             --build-number=$BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist \
-            --dart-define=SUPABASE_URL=$SUPABASE_URL \
-            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
-            --dart-define=MIXPANEL_TOKEN=$MIXPANEL_TOKEN \
-            --dart-define=ADMIN_UID=$ADMIN_UID
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=MIXPANEL_TOKEN="$MIXPANEL_TOKEN" \
+            --dart-define=ADMIN_UID="$ADMIN_UID"
 
     artifacts:
       - build/ios/ipa/*.ipa
