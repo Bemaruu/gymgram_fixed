@@ -16,6 +16,7 @@ import '../../services/nutrition_calculator.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
+import '../../widgets/ai_plan_loading.dart';
 import '../../widgets/food_icon.dart';
 import '../../widgets/skeletons/meal_skeleton.dart';
 import '../shared/first_use_disclaimer_modal.dart';
@@ -768,10 +769,15 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
+      // SmartAiLoading: skeleton primero, AiPlanLoading despues de 2.5s
+      // si la edge function aun no responde (caso primera vez sin cache).
       return const Scaffold(
         backgroundColor: Color(0xFFF5F5F5),
         body: SafeArea(
-          child: MealSkeletonList(count: 3),
+          child: SmartAiLoading(
+            kind: AiPlanKind.nutrition,
+            skeleton: MealSkeletonList(count: 3),
+          ),
         ),
       );
     }

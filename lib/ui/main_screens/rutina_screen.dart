@@ -9,6 +9,7 @@ import '../../services/exercise_service.dart';
 import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/ai_plan_loading.dart';
 import '../../widgets/routine_analysis_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
@@ -1367,10 +1368,16 @@ class _RoutineScreenState extends State<RoutineScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
+      // SmartAiLoading: muestra skeleton los primeros 2.5s; si la carga sigue
+      // (cache miss + IA generando), hace fade-in al AiPlanLoading con mensajes
+      // rotativos para que el usuario sepa que esta esperando una generacion IA.
       return const Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
-          child: RoutineSkeletonList(count: 2),
+          child: SmartAiLoading(
+            kind: AiPlanKind.routine,
+            skeleton: RoutineSkeletonList(count: 2),
+          ),
         ),
       );
     }

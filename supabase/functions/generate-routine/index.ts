@@ -116,12 +116,46 @@ serve(async (req) => {
   const user = await getAuthedUser(req);
   if (!user) return errorResponse('Unauthorized', 401);
 
-  let body: { days_per_week?: number; session_duration_min?: number } = {};
+  let body: {
+    days_per_week?: number;
+    session_duration_min?: number;
+    force_regenerate?: boolean;
+  } = {};
   try {
     body = await req.json();
   } catch { /* body opcional */ }
 
   const supabase = serviceClient();
+
+  // Cache hit: si hay plan vigente para el usuario y los parametros piden son
+  // iguales a los del cache, devolver directo sin tocar Gemini ni el cap.
+  // El force_regenerate del body lo bypasea (boton "regenerar plan" futuro).
+  if (!body.force_regenerate) {
+    const { data: cached } = await supabase
+      .from('routine_plans')
+      .select('plan_json, days_per_week, session_duration_min, catalog_size')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (cached) {
+      const cachedDays = cached.days_per_week as number;
+      const cachedSession = cached.session_duration_min as number;
+      const requestedDays = body.days_per_week;
+      const requestedSession = body.session_duration_min;
+      // Sirve el cache si los params NO fueron explicitamente distintos.
+      const daysMatch = requestedDays == null || requestedDays === cachedDays;
+      const sessionMatch =
+        requestedSession == null || requestedSession === cachedSession;
+      if (daysMatch && sessionMatch) {
+        return jsonResponse({
+          ok: true,
+          plan: cached.plan_json,
+          catalog_size: cached.catalog_size ?? null,
+          cached: true,
+        });
+      }
+    }
+  }
 
   // Tope duro de costo IA (safety net mensual)
   try {
@@ -293,10 +327,30 @@ Reglas:
       ),
   }));
 
+  const finalPlan = { days: cleanDays };
+
+  // Persistir cache (upsert por user_id). Errores no son fatales: igual
+  // devolvemos el plan al cliente.
+  try {
+    await supabase
+      .from('routine_plans')
+      .upsert({
+        user_id: user.id,
+        plan_json: finalPlan,
+        days_per_week: userProfile.training_days_per_week,
+        session_duration_min: userProfile.session_duration_min,
+        catalog_size: exercises.length,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+  } catch (e) {
+    console.error('routine_plans upsert warning:', e);
+  }
+
   const response: Record<string, unknown> = {
     ok: true,
-    plan: { days: cleanDays },
+    plan: finalPlan,
     catalog_size: exercises.length,
+    cached: false,
   };
   if (requiresClearance) {
     response.medical_clearance_warning = true;
