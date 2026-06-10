@@ -40,13 +40,47 @@ workflows:
       - name: Inicializar keychain
         script: keychain initialize
 
-      - name: Generar private key + crear distribution certificate
+      - name: Limpiar certs viejos + crear distribution certificate
         script: |
           set -e
+
+          # 1. Generar private key local para el nuevo cert.
           openssl genrsa -out /tmp/cm_dist.key 2048
-          # Ver flags disponibles para debug (se imprime, no rompe build)
-          app-store-connect certificates create --help || true
-          # Pasar la key con sintaxis @file: (estandar Codemagic CLI)
+
+          # 2. Revocar cualquier IOS_DISTRIBUTION existente. Esto evita
+          #    error 409 "You already have a current iOS Distribution
+          #    certificate" cuando builds anteriores dejaron certs sin
+          #    su private key accesible (caso tipico en CI ephemeral).
+          echo "Listando certs IOS_DISTRIBUTION existentes..."
+          app-store-connect certificates list \
+            --type IOS_DISTRIBUTION \
+            --json > /tmp/existing_certs.json || echo "[]" > /tmp/existing_certs.json
+
+          EXISTING_IDS=$(python3 -c "
+          import json, sys
+          try:
+              with open('/tmp/existing_certs.json') as f:
+                  data = json.load(f)
+              if isinstance(data, dict): data = data.get('data', [])
+              for c in data:
+                  cid = c.get('id') or c.get('attributes', {}).get('id')
+                  if cid: print(cid)
+          except Exception as e:
+              print(f'(no certs o error parseando: {e})', file=sys.stderr)
+          ")
+
+          if [ -n "$EXISTING_IDS" ]; then
+            echo "Revocando certs existentes:"
+            for CERT_ID in $EXISTING_IDS; do
+              echo "  - $CERT_ID"
+              app-store-connect certificates delete "$CERT_ID" \
+                --ignore-not-found 2>&1 || echo "    (no se pudo revocar, continuamos)"
+            done
+          else
+            echo "No hay certs IOS_DISTRIBUTION previos."
+          fi
+
+          # 3. Crear cert nuevo con la private key recien generada.
           app-store-connect certificates create \
             --type IOS_DISTRIBUTION \
             --certificate-key=@file:/tmp/cm_dist.key \
