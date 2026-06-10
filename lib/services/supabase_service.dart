@@ -90,6 +90,7 @@ class SupabaseService {
     String? experiencePath,
     List<String> equipmentAvailable = const [],
     int? sessionDurationMinutes,
+    String? dailyActivityLevel,
     String? routineSplitPreference,
     List<String> injuries = const [],
     String? injuryNotes,
@@ -118,6 +119,7 @@ class SupabaseService {
     if (trainingLevel != null) row['training_level'] = trainingLevel;
     if (experiencePath != null) row['experience_path'] = experiencePath;
     if (sessionDurationMinutes != null) row['session_duration_minutes'] = sessionDurationMinutes;
+    if (dailyActivityLevel != null) row['daily_activity_level'] = dailyActivityLevel;
     if (routineSplitPreference != null) row['routine_split_preference'] = routineSplitPreference;
     if (injuryNotes != null && injuryNotes.isNotEmpty) row['injury_notes'] = injuryNotes;
     if (cookingTimePreference != null) row['cooking_time_preference'] = cookingTimePreference;

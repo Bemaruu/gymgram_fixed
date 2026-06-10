@@ -25,12 +25,14 @@ class OnboardingFlow {
     '/signup_step_5',
     '/signup_split',
     '/signup_days_duration',
+    '/signup_daily_activity',
     '/signup_health_gate',
     '/signup_parq',
     '/signup_injuries',
     '/signup_diet_meals',
     '/signup_food_gate',
     '/signup_scoff',
+    '/signup_menstrual_health',
     '/signup_allergies',
     '/signup_cooking_time',
     '/signup_disliked_foods',
@@ -44,8 +46,12 @@ class OnboardingFlow {
     final hasHealthIssue = userData['hasHealthIssue'] as bool? ?? false;
     final hasFoodRestriction =
         userData['hasFoodRestriction'] as bool? ?? false;
+    final isFemale =
+        (userData['gender'] as String?)?.toUpperCase() == 'FEMALE';
     final importedRutine = path == 'analyze_existing_routine';
     return _routes.where((r) {
+      // Salud menstrual: solo a usuarias mujeres (obligatoria para ellas).
+      if (r == '/signup_menstrual_health' && !isFemale) return false;
       if (r == '/signup_equipment' && place == 'GYM') return false;
       if (r == '/signup_experience_path' && level == 'beginner') return false;
       if (r == '/signup_import_routine' && path != 'analyze_existing_routine') {

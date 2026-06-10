@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/onboarding_flow.dart';
@@ -44,6 +45,10 @@ class _SignupScoffState extends State<SignupScoff> {
 
   final Map<String, bool?> _answers = {};
 
+  // Follow-up de pérdida de peso (solo si responde "sí" a la pregunta 'o').
+  final _lossKgCtrl = TextEditingController();
+  bool? _lossInvoluntary;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -51,19 +56,118 @@ class _SignupScoffState extends State<SignupScoff> {
         ModalRoute.of(context)!.settings.arguments as Map);
   }
 
-  bool get _canContinue =>
-      _questions.every((q) => _answers[q['key']!] != null);
+  @override
+  void dispose() {
+    _lossKgCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _lostWeight => _answers['o'] == true;
+
+  bool get _canContinue {
+    final allAnswered = _questions.every((q) => _answers[q['key']!] != null);
+    // Si perdió peso, exige indicar si fue intencional o no.
+    return allAnswered && (!_lostWeight || _lossInvoluntary != null);
+  }
 
   void _onNext() {
     if (!_canContinue) return;
     final score = _answers.values.where((v) => v == true).length;
     userData['scoffScore'] = score;
-    userData['eatingDisorderRisk'] = score >= 2;
+
+    // Pérdida de peso involuntaria = señal de riesgo nutricional por sí sola
+    // (recomendación nutricionista 2026-06-08), aparte del puntaje SCOFF.
+    final involuntaryLoss = _lostWeight && _lossInvoluntary == true;
+    if (_lostWeight) {
+      final kg = double.tryParse(_lossKgCtrl.text.trim().replaceAll(',', '.'));
+      if (kg != null) userData['weightLossKg'] = kg;
+      userData['weightLossInvoluntary'] = involuntaryLoss;
+    }
+
+    userData['eatingDisorderRisk'] = score >= 2 || involuntaryLoss;
 
     final next = OnboardingFlow.nextRoute(_route, userData);
     if (next != null) {
       Navigator.pushNamed(context, next, arguments: userData);
     }
+  }
+
+  Widget _buildWeightLossFollowUp() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.accentOrange, width: 1.2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Sobre esa pérdida de peso:',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _lossKgCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+              ],
+              style: const TextStyle(color: Colors.black),
+              decoration: InputDecoration(
+                hintText: '¿Cuántos kg aprox.? (opcional)',
+                hintStyle: const TextStyle(color: Colors.black54),
+                filled: true,
+                fillColor: AppColors.lightGray,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '¿Fue intencional (dieta/ejercicio) o sin proponértelo?',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _PillChoice(
+                    label: 'Intencional',
+                    selected: _lossInvoluntary == false,
+                    onTap: () => setState(() => _lossInvoluntary = false),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _PillChoice(
+                    label: 'Sin proponérmelo',
+                    selected: _lossInvoluntary == true,
+                    onTap: () => setState(() => _lossInvoluntary = true),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -101,6 +205,7 @@ class _SignupScoffState extends State<SignupScoff> {
                 value: _answers[q['key']!],
                 onChanged: (v) => setState(() => _answers[q['key']!] = v),
               )),
+          if (_lostWeight) _buildWeightLossFollowUp(),
           const SizedBox(height: 18),
           CustomButton(
             text: 'Siguiente',

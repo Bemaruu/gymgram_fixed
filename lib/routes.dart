@@ -18,12 +18,14 @@ import 'ui/onboarding/signup_experience_path.dart';
 import 'ui/onboarding/signup_import_routine.dart';
 import 'ui/onboarding/signup_split.dart';
 import 'ui/onboarding/signup_days_duration.dart';
+import 'ui/onboarding/signup_daily_activity.dart';
 import 'ui/onboarding/signup_health_gate.dart';
 import 'ui/onboarding/signup_parq.dart';
 import 'ui/onboarding/signup_injuries.dart';
 import 'ui/onboarding/signup_diet_meals.dart';
 import 'ui/onboarding/signup_food_gate.dart';
 import 'ui/onboarding/signup_scoff.dart';
+import 'ui/onboarding/signup_menstrual_health.dart';
 import 'ui/onboarding/signup_allergies.dart';
 import 'ui/onboarding/signup_cooking_time.dart';
 import 'ui/onboarding/signup_disliked_foods.dart';
@@ -72,12 +74,14 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/signup_import_routine': (_) => const SignupImportRoutine(),
   '/signup_split': (_) => const SignupSplit(),
   '/signup_days_duration': (_) => const SignupDaysDuration(),
+  '/signup_daily_activity': (_) => const SignupDailyActivity(),
   '/signup_health_gate': (_) => const SignupHealthGate(),
   '/signup_parq': (_) => const SignupParq(),
   '/signup_injuries': (_) => const SignupInjuries(),
   '/signup_diet_meals': (_) => const SignupDietMeals(),
   '/signup_food_gate': (_) => const SignupFoodGate(),
   '/signup_scoff': (_) => const SignupScoff(),
+  '/signup_menstrual_health': (_) => const SignupMenstrualHealth(),
   '/signup_allergies': (_) => const SignupAllergies(),
   '/signup_cooking_time': (_) => const SignupCookingTime(),
   '/signup_disliked_foods': (_) => const SignupDislikedFoods(),

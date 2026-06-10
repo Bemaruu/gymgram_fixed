@@ -64,6 +64,16 @@ class OnboardingCatalogs {
     ChipOption('full_gym', 'Gimnasio completo'),
   ];
 
+  // Nivel de actividad diaria FUERA del entrenamiento (NEAT / trabajo).
+  // Los valores coinciden con DailyActivityLevel en nutrition_calculator.dart.
+  static const dailyActivity = <ChipOption>[
+    ChipOption('sedentary', 'Sedentario (oficina, poco movimiento)'),
+    ChipOption('light', 'Ligero (de pie a ratos, camino algo)'),
+    ChipOption('moderate', 'Moderado (camino bastante a diario)'),
+    ChipOption('active', 'Activo (trabajo de pie / camino mucho)'),
+    ChipOption('very_active', 'Muy activo (trabajo físico pesado)'),
+  ];
+
   static const sessionDuration = <ChipOption>[
     ChipOption('20', '20 minutos'),
     ChipOption('30', '30 minutos'),
@@ -92,13 +102,13 @@ class OnboardingCatalogs {
     ChipOption('elbow', 'Codo'),
   ];
 
+  // Keto y Low-carb retiradas (nutricionista 2026-06-08): el piso de seguridad
+  // de carbohidratos (≥40%) las hace incompatibles; no se recomiendan.
   static const diet = <ChipOption>[
     ChipOption('omnivore', 'Normal'),
     ChipOption('vegetarian', 'Vegetariana'),
     ChipOption('vegan', 'Vegana'),
     ChipOption('high_protein', 'Alta en proteínas'),
-    ChipOption('low_carb', 'Baja en carbohidratos'),
-    ChipOption('keto', 'Keto'),
     ChipOption('no_preference', 'Sin preferencia'),
   ];
 

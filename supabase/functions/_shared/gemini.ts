@@ -23,7 +23,7 @@ export class GeminiSafetyBlocked extends Error {
 
 export type GeminiVisionOptions = {
   /** Flash is the cheapest vision model; good enough for food estimation. */
-  model?: 'gemini-2.0-flash' | 'gemini-2.0-flash-lite' | 'gemini-2.5-flash';
+  model?: 'gemini-2.5-flash' | 'gemini-2.5-flash-lite' | 'gemini-2.5-pro';
   /** System instruction defining the task and output contract. */
   system: string;
   /** User instruction sent alongside the image. */
@@ -55,7 +55,7 @@ export async function visionJson<T>(opts: GeminiVisionOptions): Promise<T> {
     );
   }
 
-  const model = opts.model ?? 'gemini-2.0-flash';
+  const model = opts.model ?? 'gemini-2.5-flash-lite';
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 

@@ -229,7 +229,7 @@ serve(async (req) => {
   let result: ScanPayload;
   try {
     result = await visionJson<ScanPayload>({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash-lite',
       system: SYSTEM_PROMPT,
       prompt: 'Clasifica esta foto y, si es comida, devuelve los alimentos visibles con su porcion estimada en gramos y macros para esa porcion.',
       imageBase64,

@@ -29,6 +29,10 @@ class _MatchScreenState extends State<MatchScreen> {
   bool _navigatedToResult = false;
   bool _submitting = false;
   bool _claimingTimeout = false;
+  bool _forfeiting = false;
+  // Serializa el procesamiento del stream para evitar race entre _onState
+  // concurrentes (revelar dos rondas, navegar dos veces, etc).
+  Future<void> _processing = Future.value();
 
   final _revealedRounds = <int>{};
   final _weightCtrl = TextEditingController();
@@ -41,7 +45,7 @@ class _MatchScreenState extends State<MatchScreen> {
   @override
   void initState() {
     super.initState();
-    _sub = _svc.watchMatch(widget.matchId).listen(_onState);
+    _sub = _svc.watchMatch(widget.matchId).listen(_enqueueState);
     _ticker = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) setState(() {});
     });
@@ -56,9 +60,11 @@ class _MatchScreenState extends State<MatchScreen> {
     super.dispose();
   }
 
+  void _enqueueState(MatchState s) {
+    _processing = _processing.then((_) => _onState(s)).catchError((_) {});
+  }
+
   Future<void> _onState(MatchState s) async {
-    // En la primera carga, marca como ya vistas las rondas ya resueltas
-    // para no re-reproducir revelados al reconectar a mitad de partida.
     if (!_initialized) {
       for (final r in s.rounds) {
         if (r.roundWinner != null) _revealedRounds.add(r.roundNumber);
@@ -69,7 +75,6 @@ class _MatchScreenState extends State<MatchScreen> {
       return;
     }
 
-    // Detecta rondas recién resueltas para mostrar el revelado.
     final newlyResolved = s.rounds
         .where((r) =>
             r.roundWinner != null && !_revealedRounds.contains(r.roundNumber))
@@ -126,6 +131,7 @@ class _MatchScreenState extends State<MatchScreen> {
   Future<bool> _confirmForfeit() async {
     final s = _state;
     if (s == null || s.match.status != MatchStatus.active) return true;
+    if (_forfeiting) return false;
     final res = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black87,
@@ -153,11 +159,28 @@ class _MatchScreenState extends State<MatchScreen> {
         ],
       ),
     );
-    if (res == true) {
+    if (res != true) return false;
+
+    setState(() => _forfeiting = true);
+    try {
       await _svc.forfeit(widget.matchId);
-      return true;
+      // Forzamos la transición al result screen aunque el realtime tarde.
+      // El status ya está 'abandoned' en el server.
+      final fresh = await _svc.getMatchState(widget.matchId);
+      if (!mounted) return true;
+      if (fresh != null && fresh.match.status != MatchStatus.active) {
+        _navigatedToResult = true;
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (_) => MatchResultScreen(state: fresh, mySlot: _mySlotOf(fresh)),
+        ));
+        return true;
+      }
+    } catch (_) {
+      // El realtime debería resolver. Si no, dejamos al usuario en pantalla.
+    } finally {
+      if (mounted) setState(() => _forfeiting = false);
     }
-    return false;
+    return true;
   }
 
   void _toast(String msg) {
@@ -178,8 +201,7 @@ class _MatchScreenState extends State<MatchScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final ok = await _confirmForfeit();
-        if (ok && mounted) Navigator.of(context).pop();
+        await _confirmForfeit();
       },
       child: Scaffold(
         backgroundColor: AppColors.darkSurface,
@@ -207,24 +229,35 @@ class _MatchScreenState extends State<MatchScreen> {
         s.match.currentTurn == mySlot &&
         !iSubmitted;
 
-    return Column(
-      children: [
-        _buildHeaderVs(me, rival),
-        const SizedBox(height: 8),
-        _buildScoreboard(myWins, rivalWins),
-        _buildTimeoutBanner(s, isMyTurn, iSubmitted, rival),
-        const SizedBox(height: 8),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _buildRoundCard(s, round, isMyTurn, iSubmitted, rival),
-          ),
-        ),
-        if (isMyTurn) _buildInput() else _buildWaiting(rival, iSubmitted),
-      ],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final compact = c.maxHeight < 680;
+        return Column(
+          children: [
+            _buildHeaderVs(me, rival, compact),
+            SizedBox(height: compact ? 4 : 8),
+            _buildScoreboard(myWins, rivalWins, compact),
+            _buildTimeoutBanner(s, isMyTurn, iSubmitted, rival),
+            SizedBox(height: compact ? 4 : 8),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20),
+                child: _buildRoundCard(s, round, isMyTurn, iSubmitted, rival, compact),
+              ),
+            ),
+            if (isMyTurn)
+              _buildInput(compact)
+            else
+              _buildWaiting(rival, iSubmitted, compact),
+          ],
+        );
+      },
     );
   }
 
+  // Banner sutil: si toca reclamar timeout muestra una chip pequeña a la derecha
+  // del header (no un bloque gigante). Estados de "te queda poco" siguen siendo
+  // pills compactas centradas.
   Widget _buildTimeoutBanner(
       MatchState s, bool isMyTurn, bool iSubmitted, MatchPlayer rival) {
     if (s.match.status != MatchStatus.active) return const SizedBox.shrink();
@@ -233,58 +266,122 @@ class _MatchScreenState extends State<MatchScreen> {
     final remaining = MatchService.turnTimeoutSeconds -
         DateTime.now().difference(startedAt).inSeconds;
 
-    // Rival está agotando su tiempo y aún no es mi turno: ofrecer reclamar.
     final waitingForRival = !isMyTurn && !iSubmitted;
+
+    // Caso clave: rival inactivo. Botón sutil (chip), no banner gigante.
     if (waitingForRival && remaining <= 0) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-        child: _bannerCard(
-          color: AppColors.danger,
-          icon: PhosphorIconsFill.flag,
-          title: '@${rival.username} no responde',
-          subtitle: 'Han pasado 7 minutos. Puedes ganar por inactividad.',
-          action: 'Reclamar victoria',
-          onTap: _claimingTimeout ? null : _claimTimeout,
-          loading: _claimingTimeout,
-        ),
+        child: _claimChip(),
       );
     }
     if (waitingForRival && remaining <= 120) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-        child: _bannerCard(
-          color: AppColors.accentOrange,
-          icon: PhosphorIconsRegular.hourglass,
-          title: 'El rival tiene ${_fmt(remaining)} para responder',
-          subtitle: null,
-        ),
+      return _miniPill(
+        color: AppColors.accentOrange,
+        icon: PhosphorIconsRegular.hourglass,
+        text: 'El rival tiene ${_fmt(remaining)} para responder',
       );
     }
-
-    // Es mi turno y se acerca el límite.
     if (isMyTurn && remaining <= 120 && remaining > 0) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-        child: _bannerCard(
-          color: AppColors.accentOrange,
-          icon: PhosphorIconsRegular.clock,
-          title: 'Te quedan ${_fmt(remaining)} para registrar',
-          subtitle: 'Si no envías tu marca, el rival podrá reclamar la victoria.',
-        ),
+      return _miniPill(
+        color: AppColors.accentOrange,
+        icon: PhosphorIconsRegular.clock,
+        text: 'Te quedan ${_fmt(remaining)} para registrar',
       );
     }
     if (isMyTurn && remaining <= 0) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-        child: _bannerCard(
-          color: AppColors.danger,
-          icon: PhosphorIconsFill.warning,
-          title: 'Tiempo agotado',
-          subtitle: 'Registra tu marca ya antes de que el rival reclame.',
-        ),
+      return _miniPill(
+        color: AppColors.danger,
+        icon: PhosphorIconsFill.warning,
+        text: 'Tiempo agotado, registra ya',
       );
     }
     return const SizedBox.shrink();
+  }
+
+  Widget _miniPill({
+    required Color color,
+    required IconData icon,
+    required String text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                style: TextStyle(
+                    color: color, fontSize: 11.5, fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Botón sutil de reclamar victoria. Pequeño, alineado a la derecha.
+  Widget _claimChip() {
+    const color = AppColors.danger;
+    final chip = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _claimingTimeout ? null : _claimTimeout,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.55)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _claimingTimeout
+                  ? const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.danger),
+                    )
+                  : const Icon(PhosphorIconsFill.flag, color: color, size: 13),
+              const SizedBox(width: 6),
+              const Text(
+                'Reclamar victoria',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return Align(
+      alignment: Alignment.centerRight,
+      child: chip
+          .animate(onPlay: (c) => c.repeat(reverse: true))
+          .fadeIn(duration: 220.ms)
+          .scaleXY(end: 1.04, duration: 1100.ms, curve: Curves.easeInOut),
+    );
   }
 
   String _fmt(int secs) {
@@ -292,73 +389,6 @@ class _MatchScreenState extends State<MatchScreen> {
     final m = s ~/ 60;
     final r = s % 60;
     return '$m:${r.toString().padLeft(2, '0')}';
-  }
-
-  Widget _bannerCard({
-    required Color color,
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    String? action,
-    VoidCallback? onTap,
-    bool loading = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800)),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 11.5)),
-                ],
-              ],
-            ),
-          ),
-          if (action != null) ...[
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: onTap,
-              style: TextButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child: loading
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(action,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12)),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 
   Future<void> _claimTimeout() async {
@@ -373,9 +403,12 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
-  Widget _buildHeaderVs(MatchPlayer me, MatchPlayer rival) {
+  Widget _buildHeaderVs(MatchPlayer me, MatchPlayer rival, bool compact) {
+    final width = MediaQuery.of(context).size.width;
+    final emblemSize = (width / 8).clamp(44.0, 56.0);
+    final avatarR = (emblemSize * 0.30).clamp(14.0, 18.0);
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: EdgeInsets.fromLTRB(16, compact ? 8 : 12, 16, compact ? 8 : 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -387,8 +420,14 @@ class _MatchScreenState extends State<MatchScreen> {
       child: Stack(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: _playerColumn(me, AppColors.primary, isMe: true)),
+              Expanded(
+                  child: _playerColumn(me, AppColors.primary,
+                      isMe: true,
+                      emblemSize: emblemSize,
+                      avatarR: avatarR,
+                      compact: compact)),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -396,36 +435,40 @@ class _MatchScreenState extends State<MatchScreen> {
                     shaderCallback: (rect) => const LinearGradient(
                       colors: [AppColors.primary, AppColors.accentOrange],
                     ).createShader(rect),
-                    child: const Text(
+                    child: Text(
                       'VS',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 28,
+                        fontSize: compact ? 24 : 28,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1,
                       ),
                     ),
                   ),
-                  const Text('Mejor de 5',
-                      style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  Text('Mejor de 5',
+                      style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: compact ? 9 : 10)),
                 ],
               ),
               Expanded(
                   child: _playerColumn(rival, AppColors.accentOrange,
-                      isMe: false)),
+                      isMe: false,
+                      emblemSize: emblemSize,
+                      avatarR: avatarR,
+                      compact: compact)),
             ],
           ),
           Positioned(
             top: -4,
-            right: -4,
+            right: -8,
             child: IconButton(
               tooltip: 'Abandonar duelo',
               icon: const Icon(PhosphorIconsRegular.signOut,
-                  color: Colors.white54, size: 22),
-              onPressed: () async {
-                final ok = await _confirmForfeit();
-                if (ok && mounted) Navigator.of(context).pop();
-              },
+                  color: Colors.white54, size: 20),
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
+              onPressed: _forfeiting ? null : _confirmForfeit,
             ),
           ),
         ],
@@ -433,59 +476,75 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  Widget _playerColumn(MatchPlayer p, Color glow, {required bool isMe}) {
+  Widget _playerColumn(MatchPlayer p, Color glow,
+      {required bool isMe,
+      required double emblemSize,
+      required double avatarR,
+      required bool compact}) {
     return Column(
       children: [
         Stack(
           alignment: Alignment.center,
           children: [
-            TierEmblemBadge(tier: p.tier, size: 54),
+            TierEmblemBadge(tier: p.tier, size: emblemSize),
             Positioned(
               bottom: 0,
               child: CircleAvatar(
-                radius: 16,
+                radius: avatarR,
                 backgroundColor: AppColors.darkSurfaceElevated,
                 backgroundImage:
                     p.avatarUrl != null ? NetworkImage(p.avatarUrl!) : null,
                 child: p.avatarUrl == null
-                    ? const Icon(Icons.person, color: Colors.white54, size: 18)
+                    ? Icon(Icons.person,
+                        color: Colors.white54, size: avatarR * 1.1)
                     : null,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          isMe ? 'Tú' : '@${p.username}',
-          style: TextStyle(
-            color: glow,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
+        SizedBox(height: compact ? 4 : 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              isMe ? 'Tú' : '@${p.username}',
+              style: TextStyle(
+                color: glow,
+                fontSize: compact ? 12 : 13,
+                fontWeight: FontWeight.w800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
-        Text(
-          TierEmblemBadge.labelOf(p.tier),
-          style: TextStyle(
-            color: TierEmblemBadge.colorOf(p.tier),
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            TierEmblemBadge.labelOf(p.tier),
+            style: TextStyle(
+              color: TierEmblemBadge.colorOf(p.tier),
+              fontSize: compact ? 9 : 10,
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 1,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildScoreboard(int myWins, int rivalWins) {
+  Widget _buildScoreboard(int myWins, int rivalWins, bool compact) {
+    final dotSize = compact ? 11.0 : 13.0;
     Widget dots(int wins, Color color) => Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {
             final filled = i < wins;
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: 13,
-              height: 13,
+              width: dotSize,
+              height: dotSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: filled ? color : Colors.white.withValues(alpha: 0.10),
@@ -509,12 +568,12 @@ class _MatchScreenState extends State<MatchScreen> {
       children: [
         dots(myWins, AppColors.primary),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
           child: Text(
             '$myWins - $rivalWins',
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: compact ? 17 : 20,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -525,10 +584,10 @@ class _MatchScreenState extends State<MatchScreen> {
   }
 
   Widget _buildRoundCard(MatchState s, MatchRound? round, bool isMyTurn,
-      bool iSubmitted, MatchPlayer rival) {
+      bool iSubmitted, MatchPlayer rival, bool compact) {
     if (round == null) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(compact ? 16 : 22),
       decoration: BoxDecoration(
         color: AppColors.darkSurfaceCard,
         borderRadius: BorderRadius.circular(18),
@@ -536,39 +595,51 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
       child: Column(
         children: [
-          Text(
-            'RONDA ${round.roundNumber} DE 5',
-            style: const TextStyle(
-              color: AppColors.accentOrange,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 3,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'RONDA ${round.roundNumber} DE 5',
+              style: TextStyle(
+                color: AppColors.accentOrange,
+                fontSize: compact ? 11 : 12,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          const Icon(PhosphorIconsFill.barbell,
-              size: 40, color: AppColors.primary),
-          const SizedBox(height: 12),
-          Text(
-            s.exerciseNameFor(round),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
+          SizedBox(height: compact ? 12 : 16),
+          Icon(PhosphorIconsFill.barbell,
+              size: compact ? 34 : 40, color: AppColors.primary),
+          SizedBox(height: compact ? 8 : 12),
+          // Nombre del ejercicio responsivo: hasta 2 líneas, se reduce si no cabe.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 28),
+            child: Text(
+              s.exerciseNameFor(round),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: compact ? 18 : 22,
+                fontWeight: FontWeight.w900,
+                height: 1.15,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 12 : 16),
           if (isMyTurn)
             _turnPill('Tu turno', PhosphorIconsFill.lightning,
                 AppColors.primary,
-                pulse: true)
+                pulse: true, compact: compact)
           else if (iSubmitted)
             _turnPill('Esperando a @${rival.username}…',
-                PhosphorIconsRegular.hourglass, Colors.white60)
+                PhosphorIconsRegular.hourglass, Colors.white60,
+                compact: compact)
           else
             _turnPill('Turno de @${rival.username}',
-                PhosphorIconsRegular.hourglass, AppColors.accentOrange),
+                PhosphorIconsRegular.hourglass, AppColors.accentOrange,
+                compact: compact),
         ],
       ),
     )
@@ -582,9 +653,10 @@ class _MatchScreenState extends State<MatchScreen> {
   }
 
   Widget _turnPill(String text, IconData icon, Color color,
-      {bool pulse = false}) {
+      {bool pulse = false, bool compact = false}) {
     final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 16, vertical: compact ? 7 : 9),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(22),
@@ -593,13 +665,15 @@ class _MatchScreenState extends State<MatchScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color),
+          Icon(icon, size: compact ? 14 : 16, color: color),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
               text,
               style: TextStyle(
-                  color: color, fontSize: 14, fontWeight: FontWeight.w800),
+                  color: color,
+                  fontSize: compact ? 12.5 : 14,
+                  fontWeight: FontWeight.w800),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -613,9 +687,10 @@ class _MatchScreenState extends State<MatchScreen> {
         .scaleXY(end: 1.03, duration: 900.ms, curve: Curves.easeInOut);
   }
 
-  Widget _buildInput() {
+  Widget _buildInput(bool compact) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      padding: EdgeInsets.fromLTRB(
+          compact ? 14 : 20, compact ? 10 : 14, compact ? 14 : 20, compact ? 14 : 20),
       decoration: const BoxDecoration(
         color: AppColors.darkSurfaceCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -627,19 +702,19 @@ class _MatchScreenState extends State<MatchScreen> {
           children: [
             Row(
               children: [
-                Expanded(child: _numField(_weightCtrl, 'Peso (kg)', true)),
+                Expanded(child: _numField(_weightCtrl, 'Peso (kg)', true, compact)),
                 const SizedBox(width: 12),
-                Expanded(child: _numField(_repsCtrl, 'Reps', false)),
+                Expanded(child: _numField(_repsCtrl, 'Reps', false, compact)),
               ],
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: compact ? 10 : 14),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: _submitting ? null : _submit,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: compact ? 13 : 16),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
@@ -650,11 +725,11 @@ class _MatchScreenState extends State<MatchScreen> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Registrar mi marca',
+                    : Text('Registrar mi marca',
                         style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
-                            fontSize: 15)),
+                            fontSize: compact ? 14 : 15)),
               ),
             ),
           ],
@@ -663,23 +738,26 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  Widget _numField(TextEditingController c, String label, bool decimal) {
+  Widget _numField(
+      TextEditingController c, String label, bool decimal, bool compact) {
     return TextField(
       controller: c,
       keyboardType: TextInputType.numberWithOptions(decimal: decimal),
       inputFormatters: decimal
           ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))]
           : [FilteringTextInputFormatter.digitsOnly],
-      style: const TextStyle(
-          color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+      style: TextStyle(
+          color: Colors.white,
+          fontSize: compact ? 16 : 18,
+          fontWeight: FontWeight.w700),
       cursorColor: AppColors.accentOrange,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white54),
         filled: true,
         fillColor: AppColors.darkSurfaceElevated,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: EdgeInsets.symmetric(
+            horizontal: 16, vertical: compact ? 13 : 16),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.darkBorder),
@@ -693,10 +771,11 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  Widget _buildWaiting(MatchPlayer rival, bool iSubmitted) {
+  Widget _buildWaiting(MatchPlayer rival, bool iSubmitted, bool compact) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: EdgeInsets.fromLTRB(
+          20, compact ? 12 : 16, 20, compact ? 18 : 24),
       decoration: const BoxDecoration(
         color: AppColors.darkSurfaceCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -707,13 +786,16 @@ class _MatchScreenState extends State<MatchScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const _WaitingDots(),
-            const SizedBox(height: 10),
+            SizedBox(height: compact ? 8 : 10),
             Text(
               iSubmitted
                   ? 'Marca registrada. Esperando a @${rival.username}…'
                   : 'Es el turno de @${rival.username}…',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: Colors.white60, fontSize: compact ? 12 : 13),
             ),
           ],
         ),
@@ -739,42 +821,48 @@ class _MatchScreenState extends State<MatchScreen> {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
         });
         return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                tie
-                    ? 'EMPATE'
-                    : (iWon ? '¡GANASTE LA RONDA!' : 'RONDA PARA EL RIVAL'),
-                style: TextStyle(
-                  color: tie
-                      ? Colors.white
-                      : (iWon ? AppColors.success : AppColors.accentOrange),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ).animate().fadeIn().scale(
-                  begin: const Offset(0.6, 0.6),
-                  curve: Curves.elasticOut,
-                  duration: 600.ms),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _scoreCard('Tú', myScore, AppColors.primary,
-                      winner: iWon && !tie),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('vs',
-                        style:
-                            TextStyle(color: Colors.white38, fontSize: 14)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    tie
+                        ? 'EMPATE'
+                        : (iWon ? '¡GANASTE LA RONDA!' : 'RONDA PARA EL RIVAL'),
+                    style: TextStyle(
+                      color: tie
+                          ? Colors.white
+                          : (iWon ? AppColors.success : AppColors.accentOrange),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
                   ),
-                  _scoreCard('Rival', rivalScore, AppColors.accentOrange,
-                      winner: !iWon && !tie),
-                ],
-              ),
-            ],
+                ).animate().fadeIn().scale(
+                    begin: const Offset(0.6, 0.6),
+                    curve: Curves.elasticOut,
+                    duration: 600.ms),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _scoreCard('Tú', myScore, AppColors.primary,
+                        winner: iWon && !tie),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('vs',
+                          style:
+                              TextStyle(color: Colors.white38, fontSize: 14)),
+                    ),
+                    _scoreCard('Rival', rivalScore, AppColors.accentOrange,
+                        winner: !iWon && !tie),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -806,12 +894,15 @@ class _MatchScreenState extends State<MatchScreen> {
                 style: TextStyle(
                     color: color, fontSize: 12, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            Text(
-              score?.toStringAsFixed(0) ?? '-',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                score?.toStringAsFixed(0) ?? '-',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900),
+              ),
             ),
             const Text('puntos',
                 style: TextStyle(color: Colors.white38, fontSize: 10)),

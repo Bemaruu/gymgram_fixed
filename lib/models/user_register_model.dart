@@ -29,6 +29,7 @@ class UserRegisterModel {
   String? experiencePath; // create_ai_routine | analyze_existing_routine
   List<int> availableDays = []; // 0..6
   int? sessionDurationMinutes;
+  String? dailyActivityLevel; // sedentary | light | moderate | active | very_active
   String? trainingTime; // morning_early | morning_late | afternoon | evening | variable
   String? routineSplitPreference;
   List<String> injuries = []; // catálogo cerrado
@@ -73,6 +74,7 @@ class UserRegisterModel {
     r.experiencePath = _s(m, ['experiencePath']);
     r.availableDays = _li(m['availableDays'] ?? m['trainingDays']);
     r.sessionDurationMinutes = _i(m, ['sessionDurationMinutes']);
+    r.dailyActivityLevel = _s(m, ['dailyActivityLevel']);
     r.trainingTime =
         _s(m, ['trainingTime', 'timeAvailability', 'availability', 'tiempoEntrenar']);
     r.routineSplitPreference = _s(m, ['routineSplitPreference']);
@@ -110,6 +112,7 @@ class UserRegisterModel {
         if (experiencePath != null) 'experiencePath': experiencePath,
         'availableDays': availableDays,
         if (sessionDurationMinutes != null) 'sessionDurationMinutes': sessionDurationMinutes,
+        if (dailyActivityLevel != null) 'dailyActivityLevel': dailyActivityLevel,
         if (trainingTime != null) 'trainingTime': trainingTime,
         if (routineSplitPreference != null) 'routineSplitPreference': routineSplitPreference,
         'injuries': injuries,

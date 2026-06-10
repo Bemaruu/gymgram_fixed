@@ -19,6 +19,7 @@ import '../../services/water_service.dart';
 import '../../widgets/food_icon.dart';
 import '../../widgets/skeletons/meal_skeleton.dart';
 import '../shared/first_use_disclaimer_modal.dart';
+import 'food_scan_animation_screen.dart';
 import 'food_search_screen.dart';
 
 class AlimentacionScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   int _age = 30;
   double _height = 170.0;
   int _trainingDaysPerWeek = 3;
+  String _dailyActivityLevel = DailyActivityLevel.moderate;
   bool _eatingDisorderRisk = false;
   String? _cookingTime;
   String? _userId;
@@ -138,6 +140,10 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final rawDays = (onboarding?['available_days'] as List?)?.cast<String>() ?? [];
       final trainingDaysPerWeek = rawDays.isEmpty ? 3 : rawDays.length.clamp(1, 7);
 
+      final dailyActivityLevel =
+          (onboarding?['daily_activity_level'] as String?) ??
+              DailyActivityLevel.moderate;
+
       final cookingTime = onboarding?['cooking_time_preference'] as String?;
       final eatingDisorderRisk =
           profile?['eating_disorder_risk'] == true;
@@ -157,6 +163,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _age = age;
         _height = height;
         _trainingDaysPerWeek = trainingDaysPerWeek;
+        _dailyActivityLevel = dailyActivityLevel;
         _cookingTime = cookingTime;
         _eatingDisorderRisk = eatingDisorderRisk;
         _userId = userId;
@@ -211,6 +218,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       targetWeightKg: effectiveTarget,
       fitnessGoal: _goal,
       trainingDaysPerWeek: _trainingDaysPerWeek,
+      dailyActivityLevel: _dailyActivityLevel,
       eatingDisorderRisk: _eatingDisorderRisk,
     );
 
@@ -690,39 +698,21 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     );
     if (picked == null || !mounted) return;
 
-    // Loading mientras la IA analiza.
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Color(0xFF00BFFF)),
-                SizedBox(height: 16),
-                Text('Analizando tu comida…'),
-              ],
-            ),
-          ),
+    // Cinemática full-screen mientras la IA analiza la foto.
+    final scanFuture = FoodScanService.instance.scan(File(picked.path));
+    final animResult = await Navigator.of(context).push<FoodScanAnimationResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => FoodScanAnimationScreen(
+          imageFile: File(picked.path),
+          scanFuture: scanFuture,
         ),
       ),
     );
 
-    ScanResult? result;
-    ScanException? scanError;
-    try {
-      result = await FoodScanService.instance.scan(File(picked.path));
-    } on ScanException catch (e) {
-      scanError = e;
-    } catch (e) {
-      scanError = ScanException(code: 'error', message: e.toString());
-    }
-
     if (!mounted) return;
-    Navigator.pop(context); // cierra el loading
+    final result = animResult?.success;
+    final scanError = animResult?.error;
 
     if (scanError != null) {
       // NSFW o suspensión → diálogo rojo bloqueante. Resto → SnackBar.
@@ -733,7 +723,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             icon: const Icon(PhosphorIconsFill.warningOctagon,
                 color: Color(0xFFE53935), size: 36),
             title: Text(
-              scanError!.isSuspended
+              scanError.isSuspended
                   ? 'Cuenta suspendida'
                   : 'Solo fotos de comida',
             ),
@@ -767,7 +757,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _ScanResultsSheet(
-        result: result!,
+        result: result,
         mealType: _suggestedMealType(),
         date: _dateForDayIndex(_selectedDayIndex),
       ),
@@ -971,8 +961,10 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Tu plan está en modo mantenimiento por seguridad. Puedes '
-                'ajustarlo desde tu perfil si lo conversaste con un profesional.',
+                'Por tu bienestar ajustamos tu plan con un enfoque seguro (sin '
+                'déficits agresivos). Te recomendamos acompañarte de un '
+                'profesional de la salud —nutricionista o médico— para una guía '
+                'personalizada.',
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.blue.shade700,

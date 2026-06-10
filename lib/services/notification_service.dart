@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +26,7 @@ class NotificationService {
       sound: true,
     );
     await _saveToken();
+    unawaited(_saveTimezone());
     FirebaseMessaging.instance.onTokenRefresh.listen(_updateToken);
     FirebaseMessaging.onMessage.listen(_handleForeground);
     // Tap en la notificación (app en background o cerrada).
@@ -87,6 +90,22 @@ class NotificationService {
       if (kDebugMode) debugPrint('[FCM] token registered (len=${token.length}) for $uid');
     } catch (e) {
       debugPrint('_saveToken error: $e');
+    }
+  }
+
+  /// Guarda el offset horario local del usuario (minutos respecto a UTC) en su
+  /// perfil. Se llama en cada apertura para captar cambios de DST. Lo usa el
+  /// dispatcher de notificaciones para enviar a la hora local correcta.
+  Future<void> _saveTimezone() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      final offset = DateTime.now().timeZoneOffset.inMinutes;
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'tz_offset_minutes': offset}).eq('id', uid);
+    } catch (e) {
+      debugPrint('_saveTimezone error: $e');
     }
   }
 

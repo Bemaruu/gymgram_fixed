@@ -387,6 +387,18 @@ class MatchService {
     if (raw.contains('match not active')) {
       return 'Esta partida ya terminó.';
     }
+    if (raw.contains('not a participant')) {
+      return 'No participas en esta partida.';
+    }
+    if (raw.contains('invalid weight')) {
+      return 'Peso fuera de rango.';
+    }
+    if (raw.contains('invalid reps')) {
+      return 'Reps fuera de rango.';
+    }
+    if (raw.contains('no autorizado')) {
+      return 'No tienes permiso para esta acción.';
+    }
     return 'Algo salió mal. Inténtalo de nuevo.';
   }
 }

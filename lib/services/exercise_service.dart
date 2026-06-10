@@ -20,6 +20,7 @@ class ExerciseService {
     'Pantorrillas',
     'Core',
     'Lumbar',
+    'Cuello',
     'Cadena posterior',
     'Cardio',
     'Deportes',

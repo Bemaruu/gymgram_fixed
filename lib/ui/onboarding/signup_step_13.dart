@@ -210,6 +210,7 @@ String _mapTrainingLocation(String value) {
           experiencePath: model.experiencePath,
           equipmentAvailable: model.equipmentAvailable,
           sessionDurationMinutes: model.sessionDurationMinutes,
+          dailyActivityLevel: model.dailyActivityLevel,
           routineSplitPreference: model.routineSplitPreference,
           injuries: model.injuries,
           injuryNotes: model.injuryNotes,
@@ -234,10 +235,18 @@ String _mapTrainingLocation(String value) {
         healthUpdate['requires_medical_clearance'] =
             userData['requiresMedicalClearance'] == true;
       }
-      if (userData['eatingDisorderRisk'] != null) {
-        healthUpdate['eating_disorder_risk'] =
-            userData['eatingDisorderRisk'] == true;
-      }
+      // Riesgo nutricional combinado (recomendación nutricionista 2026-06-08):
+      // cualquiera de estas señales activa el modo seguro + mensaje de
+      // derivación a profesional: SCOFF ≥ 2, IMC < 18, pérdida de peso
+      // involuntaria, o amenorrea / menstruación intermitente (mujeres).
+      final bmi = (userData['bmi'] as num?)?.toDouble();
+      final lowBmiRisk = bmi != null && bmi < 18.0;
+      final involuntaryLoss = userData['weightLossInvoluntary'] == true;
+      final menstrualRisk = userData['menstrualRisk'] == true;
+      final scoffRisk = userData['eatingDisorderRisk'] == true;
+      final nutritionRisk =
+          scoffRisk || lowBmiRisk || involuntaryLoss || menstrualRisk;
+      healthUpdate['eating_disorder_risk'] = nutritionRisk;
       if (parq is Map) {
         healthUpdate['parq_answers'] = parq;
       }
@@ -247,7 +256,7 @@ String _mapTrainingLocation(String value) {
 
       final hasHealthIssue = userData['hasHealthIssue'] == true;
       final hasFoodRestriction = userData['hasFoodRestriction'] == true;
-      final isMandatory = hasHealthIssue || hasFoodRestriction;
+      final isMandatory = hasHealthIssue || hasFoodRestriction || nutritionRisk;
 
       if (healthUpdate.isNotEmpty) {
         if (isMandatory) {

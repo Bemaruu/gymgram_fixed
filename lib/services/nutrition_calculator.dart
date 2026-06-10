@@ -52,8 +52,9 @@ class DailyActivityLevel {
 class NutritionCalculator {
   NutritionCalculator._();
 
-  // Límites de seguridad (kcal/día)
-  static const double _minCalsFemale = 1200.0;
+  // Límites de seguridad (kcal/día). Pisos validados con nutricionista:
+  // 1300 mujeres / 1500 hombres (2026-06-08).
+  static const double _minCalsFemale = 1300.0;
   static const double _minCalsMale   = 1500.0;
   static const double _maxCals       = 4500.0;
 
@@ -76,8 +77,9 @@ class NutritionCalculator {
     required String fitnessGoal,
     int trainingDaysPerWeek = 3,
     String dailyActivityLevel = DailyActivityLevel.moderate,
-    // Preferencia de dieta normalizada: 'vegana'|'vegetariana'|'lowcarb'|
-    // 'proteica'|'normal'. Ajusta el reparto de macros (keto/low-carb, etc.).
+    // Preferencia de dieta normalizada: 'vegana'|'vegetariana'|'proteica'|
+    // 'normal'. 'proteica' empuja la proteína al tope (30%) respetando los
+    // pisos de carbos/grasas.
     String dietPref = 'normal',
     // Si el screening declarado en onboarding marca riesgo, forzamos modo
     // mantenimiento cuando el objetivo seria perder/cutting. Nunca se etiqueta
@@ -121,6 +123,7 @@ class NutritionCalculator {
       trainingDaysPerWeek: trainingDaysPerWeek,
       weightKg: weightKg,
       heightCm: heightCm,
+      maintenance: maintenance,
     );
 
     // 5. Calorías recomendadas dentro de límites de seguridad
@@ -161,7 +164,10 @@ class NutritionCalculator {
     );
   }
 
-  // ── Metabolismo basal (Mifflin-St Jeor) ────────────────────────────────────
+  // ── Metabolismo basal (promedio Mifflin-St Jeor + Harris-Benedict) ──────────
+  //
+  // Recomendación de nutricionista (2026-06-08): promediar dos métodos para
+  // ganar precisión en vez de depender de una sola fórmula.
 
   static double _bmr({
     required bool isFemale,
@@ -169,10 +175,17 @@ class NutritionCalculator {
     required double heightCm,
     required int age,
   }) {
-    // Hombre: 10p + 6.25h - 5a + 5
-    // Mujer:  10p + 6.25h - 5a - 161
-    final base = 10 * weightKg + 6.25 * heightCm - 5 * age;
-    return isFemale ? base - 161 : base + 5;
+    // Mifflin-St Jeor (1990)
+    // Hombre: 10p + 6.25h - 5a + 5 | Mujer: 10p + 6.25h - 5a - 161
+    final mifflin =
+        10 * weightKg + 6.25 * heightCm - 5 * age + (isFemale ? -161 : 5);
+
+    // Harris-Benedict revisada (Roza & Shizgal, 1984)
+    final harris = isFemale
+        ? 447.593 + 9.247 * weightKg + 3.098 * heightCm - 4.330 * age
+        : 88.362 + 13.397 * weightKg + 4.799 * heightCm - 5.677 * age;
+
+    return (mifflin + harris) / 2;
   }
 
   // ── Factor de actividad ─────────────────────────────────────────────────────
@@ -183,14 +196,16 @@ class NutritionCalculator {
     required int trainingDaysPerWeek,
     required String dailyActivityLevel,
   }) {
-    // Base según actividad laboral o diaria
+    // Base según actividad laboral o diaria. Escala recalibrada con
+    // nutricionista (2026-06-08): piso en sedentario 1.30 para reflejar mejor
+    // a la población fitness (que ya entrena), subiendo toda la escala.
     final double base = switch (dailyActivityLevel) {
-      DailyActivityLevel.sedentary  => 1.20,
-      DailyActivityLevel.light      => 1.30,
-      DailyActivityLevel.moderate   => 1.38,
-      DailyActivityLevel.active     => 1.50,
-      DailyActivityLevel.veryActive => 1.60,
-      _                             => 1.35,
+      DailyActivityLevel.sedentary  => 1.30,
+      DailyActivityLevel.light      => 1.40,
+      DailyActivityLevel.moderate   => 1.48,
+      DailyActivityLevel.active     => 1.58,
+      DailyActivityLevel.veryActive => 1.68,
+      _                             => 1.48,
     };
 
     // Bonus por frecuencia de entrenamiento
@@ -204,7 +219,7 @@ class NutritionCalculator {
       _      => 0.20, // 6-7 días
     };
 
-    return (base + bonus).clamp(1.20, 1.90);
+    return (base + bonus).clamp(1.30, 1.90);
   }
 
   // ── Interpretación del objetivo ─────────────────────────────────────────────
@@ -216,24 +231,37 @@ class NutritionCalculator {
     required int trainingDaysPerWeek,
     required double weightKg,
     required double heightCm,
+    required double maintenance,
   }) {
     final needsToLose  = weightDiff < -2.0;
     final needsToGain  = weightDiff > 2.0;
     final bmi = _bmi(weightKg: weightKg, heightCm: heightCm);
     final isOverweight = bmi >= 27.0;
 
+    // Deltas calóricos PROPORCIONALES al mantenimiento, acotados a la banda
+    // 300-500 kcal recomendada por nutricionista (2026-06-08). Escalar al
+    // individuo evita prescribir -500 a alguien con mantenimiento bajo
+    // (donde -500 sería un déficit demasiado agresivo).
+    int deficit({double pct = 0.20, int max = 500}) =>
+        (maintenance * pct).round().clamp(300, max);
+    int surplus({double pct = 0.12, int max = 450}) =>
+        (maintenance * pct).round().clamp(300, max);
+    // Recomposición: déficit muy suave (cerca de mantenimiento) + proteína alta.
+    int recompDeficit() => (maintenance * 0.10).round().clamp(250, 400);
+
     switch (fitnessGoal) {
 
       // ── Perder grasa ──────────────────────────────────────────────────────
       case 'LOSE_WEIGHT':
-        final int adj = isSenior ? -325 : -400;
+        final int adj =
+            isSenior ? -deficit(pct: 0.15, max: 400) : -deficit();
         return _GoalResult(
           interpretation: isSenior
               ? 'Pérdida de peso gradual (60+)'
               : 'Pérdida de grasa',
           strategy: isSenior
               ? 'Déficit moderado, priorizando salud y energía'
-              : 'Déficit moderado sostenible',
+              : 'Déficit moderado sostenible (~0.5 kg/semana)',
           adjustment: adj,
         );
 
@@ -241,31 +269,35 @@ class NutritionCalculator {
       case 'GAIN_MUSCLE':
         if (isOverweight && needsToLose) {
           // Sobrepeso + quiere bajar → recomposición, no superávit
-          return const _GoalResult(
+          return _GoalResult(
             interpretation: 'Recomposición corporal',
             strategy: 'Déficit suave con alta proteína para preservar músculo',
-            adjustment: -175,
+            adjustment: -recompDeficit(),
           );
         }
-        final int surplus = trainingDaysPerWeek >= 5 ? 300 : 200;
+        final int adj =
+            trainingDaysPerWeek >= 5 ? surplus(pct: 0.15) : surplus();
         return _GoalResult(
           interpretation: 'Ganancia muscular',
           strategy: 'Superávit moderado para apoyar el crecimiento muscular',
-          adjustment: surplus,
+          adjustment: adj,
+        );
+
+      // ── Recomposición corporal (objetivo explícito) ───────────────────────
+      case 'RECOMPOSITION':
+        return _GoalResult(
+          interpretation: 'Recomposición corporal',
+          strategy: 'Cerca de mantenimiento con alta proteína',
+          adjustment: -recompDeficit(),
         );
 
       // ── Mantenerse saludable / mantenimiento ──────────────────────────────
-      default: // 'MAINTAIN'
+      default: // 'MAINTAIN' (también TONE_BODY / IMPROVE_ENDURANCE)
         if (needsToLose) {
           // "Mantenerse saludable" pero con peso objetivo menor → pérdida gradual
-          final int adj;
-          if (weightDiff <= -10) {
-            adj = isSenior ? -300 : -375; // Mucho que bajar
-          } else if (weightDiff <= -5) {
-            adj = isSenior ? -275 : -325; // Moderado
-          } else {
-            adj = isSenior ? -225 : -275; // Poco (-2 a -5 kg)
-          }
+          final int adj = isSenior
+              ? -deficit(pct: 0.12, max: 400)
+              : -deficit(pct: 0.15, max: 450);
           return _GoalResult(
             interpretation: isSenior
                 ? 'Pérdida de peso saludable y gradual (60+)'
@@ -276,10 +308,10 @@ class NutritionCalculator {
         }
 
         if (needsToGain) {
-          return const _GoalResult(
+          return _GoalResult(
             interpretation: 'Mantenimiento con ganancia suave',
             strategy: 'Pequeño superávit para alcanzar el peso objetivo',
-            adjustment: 150,
+            adjustment: surplus(pct: 0.10, max: 350),
           );
         }
 
@@ -294,6 +326,10 @@ class NutritionCalculator {
 
   // ── Macronutrientes ─────────────────────────────────────────────────────────
 
+  // Distribución validada con nutricionista (2026-06-08):
+  //   Proteína 20-30%  |  Carbos 45-55%  |  Grasas 25-35%
+  // Pisos DUROS de seguridad: grasas nunca <20%, carbos nunca <40%.
+  // Macros ancladas a g/kg de peso corporal (no solo a % calórico).
   static (int, int, int) _macros({
     required int calories,
     required String fitnessGoal,
@@ -301,49 +337,48 @@ class NutritionCalculator {
     required double weightKg,
     required String dietPref,
   }) {
-    final isGain = fitnessGoal == 'GAIN_MUSCLE' &&
-        !goalInterpretation.toLowerCase().contains('recomposición');
+    final interp = goalInterpretation.toLowerCase();
+    final isRecomp = interp.contains('recomp');
+    final isGain = fitnessGoal == 'GAIN_MUSCLE' && !isRecomp;
     final isLoss = fitnessGoal == 'LOSE_WEIGHT' ||
-        goalInterpretation.toLowerCase().contains('pérdida') ||
-        goalInterpretation.toLowerCase().contains('recomposición');
+        fitnessGoal == 'RECOMPOSITION' ||
+        isRecomp ||
+        interp.contains('pérdida');
+    final highProtein = dietPref == 'proteica' || isRecomp;
 
-    // Reparto base por objetivo: proteína preserva músculo en déficit; carbs
-    // empujan rendimiento en ganancia.
-    double protPct = isGain ? 0.30 : (isLoss ? 0.35 : 0.28);
-    double carbPct = isGain ? 0.45 : (isLoss ? 0.35 : 0.45);
-    double fatPct  = isGain ? 0.25 : (isLoss ? 0.30 : 0.27);
+    // 1) PROTEÍNA: anclada a g/kg de peso, luego acotada a 20-30% de kcal.
+    //    Más alta en déficit/ganancia/recomposición para preservar músculo.
+    final double pPerKg = (isLoss || isGain || isRecomp) ? 2.0 : 1.8;
+    double pPct = (weightKg * pPerKg * 4) / calories;
+    final double pMax = highProtein ? 0.30 : 0.28;
+    pPct = pPct.clamp(0.20, pMax);
 
-    // Ajuste por preferencia de dieta (sobrescribe el reparto de carbos/grasas).
-    switch (dietPref) {
-      case 'lowcarb': // incluye keto en nuestra normalización
-        protPct = 0.32;
-        carbPct = 0.13;
-        fatPct = 0.55;
-        break;
-      case 'proteica': // alta en proteína
-        protPct = isGain ? 0.35 : 0.40;
-        carbPct = isGain ? 0.40 : 0.35;
-        fatPct = 0.25;
-        break;
-      // vegana/vegetariana/normal mantienen el reparto por objetivo.
+    // 2) GRASAS: objetivo por meta dentro de 25-35%, con piso duro de 20%
+    //    y mínimo de 0.8 g/kg (salud hormonal).
+    double fPct = isGain ? 0.27 : 0.30;
+    final double fatFloorPct =
+        ((weightKg * 0.8 * 9) / calories).clamp(0.20, 0.35);
+    fPct = fPct.clamp(fatFloorPct, 0.35);
+
+    // 3) CARBOS: lo que resta, con piso duro de 40%. Si no alcanza, se libera
+    //    bajando primero grasa (hasta su piso) y luego proteína (hasta 20%).
+    double cPct = 1.0 - pPct - fPct;
+    if (cPct < 0.40) {
+      final double needed = 0.40 - cPct;
+      final double fatRoom = (fPct - fatFloorPct).clamp(0.0, 1.0);
+      final double cutFat = needed < fatRoom ? needed : fatRoom;
+      fPct -= cutFat;
+      final double rem = needed - cutFat;
+      if (rem > 0) {
+        final double pRoom = (pPct - 0.20).clamp(0.0, 1.0);
+        pPct -= rem < pRoom ? rem : pRoom;
+      }
+      cPct = 1.0 - pPct - fPct;
     }
 
-    // Piso de proteína por peso corporal (g/kg): evita planes bajos en proteína
-    // aunque el % calórico sea chico. Más alto si está en déficit o ganancia.
-    final double gPerKg = (isLoss || isGain) ? 1.8 : 1.6;
-    final int proteinFloor = (weightKg * gPerKg).round();
-
-    int proteinG = (calories * protPct / 4).round();
-    if (proteinG < proteinFloor) proteinG = proteinFloor;
-
-    // Reparte las calorías restantes entre carbos y grasas según su ratio,
-    // así el total se mantiene ≈ calorías objetivo tras aplicar el piso.
-    final double remainingKcal =
-        (calories - proteinG * 4).clamp(0, calories).toDouble();
-    final double cfSum = carbPct + fatPct;
-    final int carbsG = (remainingKcal * (carbPct / cfSum) / 4).round();
-    final int fatsG = (remainingKcal * (fatPct / cfSum) / 9).round();
-
+    final int proteinG = (calories * pPct / 4).round();
+    final int carbsG = (calories * cPct / 4).round();
+    final int fatsG = (calories * fPct / 9).round();
     return (proteinG, carbsG, fatsG);
   }
 
@@ -400,21 +435,13 @@ class _GoalResult {
   });
 }
 
-// ── Casos de validación (ejecutar manualmente para verificar) ────────────────
+// ── Notas de cálculo (validado con nutricionista 2026-06-08) ─────────────────
 //
-// Caso 1: Mujer, 64 años, 85 kg, 165 cm, objetivo 75 kg, 3x/sem, sedentaria
-//   BMR ≈ 1400  |  Factor: 1.31  |  Mant: ~1834  |  Ajuste: -300  |  Rec: ~1534 ✓
-//   (si actividad moderate): Factor 1.49 | Mant: ~2086 | Rec: ~1786 ✓
-//
-// Caso 2: Hombre, 25 años, 80 kg, 180 cm, objetivo 85 kg, GAIN_MUSCLE, 5x/sem
-//   BMR ≈ 1805  |  Factor: 1.55  |  Mant: ~2798  |  Ajuste: +300  |  Rec: ~3098 ✓
-//
-// Caso 3: Mujer, 30 años, 65 kg, 165 cm, objetivo 65 kg, MAINTAIN, light, 3x/sem
-//   BMR ≈ 1370  |  Factor: 1.41  |  Mant: ~1932  |  Ajuste: 0    |  Rec: ~1932 ✓
-//
-// Caso 4: Mujer, 70 años, 90 kg, 160 cm, objetivo 75 kg, sedentaria, 1x/sem
-//   BMR ≈ 1389  |  Factor: 1.25  |  Mant: ~1736  |  Ajuste: -300  |  Rec: ~1436 ✓ (> 1200)
-//
-// Caso 5: Hombre, 28 años, 90 kg, 178 cm, objetivo 82 kg, GAIN_MUSCLE, 4x/sem
-//   BMI ≈ 28.4 (sobrepeso) → Recomposición
-//   BMR ≈ 1878  |  Factor: 1.52  |  Mant: ~2854  |  Ajuste: -175  |  Rec: ~2679 ✓
+// BMR: promedio de Mifflin-St Jeor (1990) y Harris-Benedict revisada (1984).
+// Factor de actividad: base 1.30 (sedentario) → 1.68 (muy activo) + bonus por
+//   días de entreno, clamp [1.30, 1.90].
+// Ajuste calórico: proporcional al mantenimiento, acotado a la banda 300-500
+//   (déficit ≈20% mant; superávit ≈12%; recomposición ≈10% con proteína alta).
+// Macros: P 20-30% / C 45-55% / G 25-35%, ancladas a g/kg, con pisos duros
+//   grasas ≥20% y carbos ≥40%. Proteína 2.0 g/kg en déficit/ganancia/recomp.
+// Pisos de seguridad kcal: 1300 mujeres / 1500 hombres.
