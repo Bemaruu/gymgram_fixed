@@ -9,9 +9,9 @@ workflows:
       app_store_connect: gymgram-apple
 
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.gymgram.fit
+      # ios_signing removido a propósito: el bloque ios_signing automatico
+      # falla en pre-flight si no hay profile, ANTES de que corran los scripts.
+      # Hacemos signing manual abajo con app-store-connect + xcode-project.
       vars:
         BUNDLE_ID: com.gymgram.fit
         XCODE_WORKSPACE: ios/Runner.xcworkspace
@@ -40,14 +40,21 @@ workflows:
         script: |
           cd ios && pod install
 
+      - name: Inicializar keychain
+        script: keychain initialize
+
       - name: Fetch/crear signing files (cert + profile)
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create
-          keychain initialize
-          keychain add-certificates
-          xcode-project use-profiles
+            --create \
+            --verbose
+
+      - name: Instalar certificados en keychain
+        script: keychain add-certificates
+
+      - name: Aplicar profiles a Xcode
+        script: xcode-project use-profiles
 
       - name: Flutter build iOS (sin firma)
         script: |
