@@ -40,20 +40,23 @@ workflows:
       - name: Inicializar keychain
         script: keychain initialize
 
-      - name: Crear distribution certificate (si no existe)
+      - name: Generar private key + crear distribution certificate
         script: |
-          # Crear cert + generar private key en Codemagic. --save persiste
-          # ambos asociados al API key para que fetch-signing-files los encuentre.
-          # Si ya existe un cert con private key conocida, este step no hace daño.
-          app-store-connect create-certificate \
+          # Codemagic CLI no genera la private key sola: hay que crearla con
+          # openssl y pasarla. --save persiste cert + key asociados al API key.
+          openssl genrsa -out /tmp/cm_dist.key 2048
+
+          app-store-connect certificates create \
             --type IOS_DISTRIBUTION \
+            --certificate-key-path /tmp/cm_dist.key \
             --save \
-            --verbose || echo "create-certificate fallo (puede ser que ya exista uno valido). Continuamos."
+            --verbose
 
       - name: Fetch/crear provisioning profile
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key-path /tmp/cm_dist.key \
             --create \
             --verbose
 
