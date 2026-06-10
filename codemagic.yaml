@@ -68,22 +68,22 @@ workflows:
       - name: Aplicar profiles a Xcode
         script: xcode-project use-profiles
 
-      - name: Flutter build iOS (sin firma)
+      - name: Build IPA (firmado, con dart-defines)
         script: |
-          flutter build ios \
+          # Usamos flutter build ipa en un solo paso para que las --dart-define
+          # se preserven hasta el archivo final. El flujo de dos pasos
+          # (flutter build ios --no-codesign + xcode-project build-ipa) las
+          # pierde porque xcodebuild re-corre el backend script de Flutter
+          # sin nuestras flags. El export-options-plist lo crea
+          # `xcode-project use-profiles` en step anterior.
+          flutter build ipa \
             --release \
-            --no-codesign \
             --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist \
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
             --dart-define=MIXPANEL_TOKEN=$MIXPANEL_TOKEN \
             --dart-define=ADMIN_UID=$ADMIN_UID
-
-      - name: Empaquetado IPA firmado
-        script: |
-          xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
 
     artifacts:
       - build/ios/ipa/*.ipa
