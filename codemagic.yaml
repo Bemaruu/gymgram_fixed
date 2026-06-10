@@ -42,21 +42,23 @@ workflows:
 
       - name: Generar private key + crear distribution certificate
         script: |
-          # Codemagic CLI no genera la private key sola: hay que crearla con
-          # openssl y pasarla. --save persiste cert + key asociados al API key.
+          set -e
           openssl genrsa -out /tmp/cm_dist.key 2048
-
+          # Ver flags disponibles para debug (se imprime, no rompe build)
+          app-store-connect certificates create --help || true
+          # Pasar la key con sintaxis @file: (estandar Codemagic CLI)
           app-store-connect certificates create \
             --type IOS_DISTRIBUTION \
-            --certificate-key-path /tmp/cm_dist.key \
+            --certificate-key=@file:/tmp/cm_dist.key \
             --save \
             --verbose
 
       - name: Fetch/crear provisioning profile
         script: |
+          set -e
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --certificate-key-path /tmp/cm_dist.key \
+            --certificate-key=@file:/tmp/cm_dist.key \
             --create \
             --verbose
 
