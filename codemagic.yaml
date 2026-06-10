@@ -64,7 +64,8 @@ workflows:
 
     publishing:
       app_store_connect:
-        # Credenciales tomadas automáticamente de la integración `gymgram-apple`.
+        # Credenciales tomadas de la integración `gymgram-apple`.
+        auth: integration
         submit_to_testflight: true
       email:
         recipients:
