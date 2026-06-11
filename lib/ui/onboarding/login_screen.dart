@@ -15,14 +15,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Apuntamos al edge function intermedio en vez de directo al custom scheme.
-  // iOS Safari bloquea custom schemes que vienen de redirects automaticos
-  // (politica de seguridad). El edge function muestra una pagina HTML con un
-  // boton "Abrir GymGram" que dispara el scheme via tap del usuario.
-  // El edge function detecta plataforma (iOS vs Android) por User-Agent y
-  // usa el scheme correcto en el boton.
+  // Pagina intermedia en gymgram.fit (Vercel). Supabase Edge Functions
+  // fuerza Content-Type=text/plain + CSP sandbox en funciones publicas, lo
+  // que renderiza el HTML como texto. Por eso servimos la pagina desde
+  // Vercel, que respeta el Content-Type. La pagina detecta plataforma JS
+  // y dispara el deep link iOS (com.gymgram.fit) o Android (intent://).
   static const _passwordResetRedirectTo =
-      'https://qnrpyaoyzecjbryejccm.supabase.co/functions/v1/auth-redirect';
+      'https://gymgram.fit/auth-redirect';
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
