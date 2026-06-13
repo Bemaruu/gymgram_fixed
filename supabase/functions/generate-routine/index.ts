@@ -169,7 +169,7 @@ serve(async (req) => {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'id, fitness_goal, training_location, weight, target_weight, age, gender, requires_medical_clearance, parq_answers',
+      'id, fitness_goal, training_location, weight, target_weight, age, gender, requires_medical_clearance, pregnancy_status, parq_answers',
     )
     .eq('id', user.id)
     .maybeSingle();
@@ -222,6 +222,7 @@ serve(async (req) => {
 
   // Contraindicaciones: lesiones declaradas + PAR-Q+ (si hay flags clinicos)
   const requiresClearance = profile.requires_medical_clearance === true;
+  const pregnancyStatus = profile.pregnancy_status === true;
   const blockedCats = new Set<string>([
     ...mapInjuriesToContraindications(injuries),
     ...parqToContraindications(profile.parq_answers as Record<string, unknown> | null),
@@ -230,6 +231,13 @@ serve(async (req) => {
     blockedCats.add('cardiaco');
     blockedCats.add('hipertension');
     // Solo principiante/intermedio si requiere clearance medica.
+    allowedDiffs = allowedDiffs.filter((d) => d !== 'avanzado');
+    if (allowedDiffs.length === 0) allowedDiffs = ['principiante'];
+  }
+  // Embarazo (ACOG 804/2020): excluir ejercicios contraindicados en
+  // gestacion (decubito supino prolongado, valsalva, alto impacto).
+  if (pregnancyStatus) {
+    blockedCats.add('embarazo');
     allowedDiffs = allowedDiffs.filter((d) => d !== 'avanzado');
     if (allowedDiffs.length === 0) allowedDiffs = ['principiante'];
   }

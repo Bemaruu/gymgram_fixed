@@ -104,8 +104,10 @@ class OnboardingCatalogs {
 
   // Keto y Low-carb retiradas (nutricionista 2026-06-08): el piso de seguridad
   // de carbohidratos (≥40%) las hace incompatibles; no se recomiendan.
+  // 'omnivore' se rotula como "Casero": la IA prioriza preparaciones típicas
+  // del país del usuario (cazuela, milanesa con pure, ñoquis, asado, etc.).
   static const diet = <ChipOption>[
-    ChipOption('omnivore', 'Normal'),
+    ChipOption('omnivore', 'Casero'),
     ChipOption('vegetarian', 'Vegetariana'),
     ChipOption('vegan', 'Vegana'),
     ChipOption('high_protein', 'Alta en proteínas'),

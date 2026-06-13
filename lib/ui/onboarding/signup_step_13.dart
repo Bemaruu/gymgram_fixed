@@ -237,6 +237,13 @@ String _mapTrainingLocation(String value) {
         healthUpdate['requires_medical_clearance'] =
             userData['requiresMedicalClearance'] == true;
       }
+      // Embarazo (ACOG 804/2020): bandera clave para el motor de
+      // progresion (congela auto-incremento de volumen) y para el filtro
+      // de generate-routine (excluye ejercicios con contraindicacion
+      // 'embarazo').
+      if (userData['pregnancyStatus'] == true) {
+        healthUpdate['pregnancy_status'] = true;
+      }
       // Riesgo nutricional combinado (recomendación nutricionista 2026-06-08):
       // cualquiera de estas señales activa el modo seguro + mensaje de
       // derivación a profesional: SCOFF ≥ 2, IMC < 18, pérdida de peso
@@ -258,7 +265,9 @@ String _mapTrainingLocation(String value) {
 
       final hasHealthIssue = userData['hasHealthIssue'] == true;
       final hasFoodRestriction = userData['hasFoodRestriction'] == true;
-      final isMandatory = hasHealthIssue || hasFoodRestriction || nutritionRisk;
+      final pregnancy = userData['pregnancyStatus'] == true;
+      final isMandatory =
+          hasHealthIssue || hasFoodRestriction || nutritionRisk || pregnancy;
 
       if (healthUpdate.isNotEmpty) {
         if (isMandatory) {

@@ -21,13 +21,17 @@ class _SignupMenstrualHealthState extends State<SignupMenstrualHealth> {
   late Map<String, dynamic> userData;
 
   // value → (label, ¿cuenta como riesgo?)
+  // 'pregnant' separa embarazo del resto (ACOG 804/2020): bloquea
+  // auto-incremento de volumen y filtra ejercicios con contraindicacion
+  // 'embarazo' en el catalogo.
   static const _options = <Map<String, Object>>[
     {'value': 'regular', 'label': 'Regular (cada mes, más o menos)', 'risk': false},
     {'value': 'irregular', 'label': 'Irregular o intermitente', 'risk': true},
     {'value': 'absent', 'label': 'Ausente (no menstrúo)', 'risk': true},
+    {'value': 'pregnant', 'label': 'Estoy embarazada', 'risk': false},
     {
       'value': 'not_applicable',
-      'label': 'No aplica (embarazo, menopausia, anticonceptivo…)',
+      'label': 'No aplica (menopausia, anticonceptivo, otra)',
       'risk': false,
     },
   ];
@@ -50,6 +54,8 @@ class _SignupMenstrualHealthState extends State<SignupMenstrualHealth> {
     } else {
       userData['menstrualRisk'] = false;
     }
+    // Embarazo activa pregnancy_status en profile (ACOG 804/2020).
+    userData['pregnancyStatus'] = _status == 'pregnant';
     final next = OnboardingFlow.nextRoute(_route, userData);
     if (next != null) {
       Navigator.pushNamed(context, next, arguments: userData);

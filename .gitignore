@@ -84,3 +84,10 @@ google-services (*).json
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Logs locales
+firepit-log.txt
+
+# Bulk import OFF — chunks y SQLs son artefactos del script Python
+scripts/chunks/
+scripts/off_*.sql

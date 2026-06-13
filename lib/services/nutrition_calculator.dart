@@ -20,6 +20,13 @@ class NutritionResult {
   final int proteinGrams;
   final int carbsGrams;
   final int fatsGrams;
+  // Fibra diaria: NIH DRI = 14 g por cada 1000 kcal.
+  final int fiberGrams;
+  // Hidratación diaria: ACSM = 35 ml/kg base + 500 ml por sesión de entreno
+  // promediada en la semana.
+  final int waterMl;
+  // Sodio máximo: NIH DRI = 2300 mg/día (1500 si hipertensión declarada).
+  final int sodiumMaxMg;
 
   const NutritionResult({
     required this.bmr,
@@ -33,6 +40,9 @@ class NutritionResult {
     required this.proteinGrams,
     required this.carbsGrams,
     required this.fatsGrams,
+    required this.fiberGrams,
+    required this.waterMl,
+    required this.sodiumMaxMg,
   });
 }
 
@@ -85,6 +95,9 @@ class NutritionCalculator {
     // mantenimiento cuando el objetivo seria perder/cutting. Nunca se etiqueta
     // al usuario; solo se evita prescribir deficit.
     bool eatingDisorderRisk = false,
+    // Si el usuario declaró hipertensión, bajamos el techo de sodio a 1500 mg
+    // (AHA / NIH DRI).
+    bool hypertension = false,
   }) {
     final isFemale = gender.toUpperCase() == 'FEMALE';
     final isSenior = age >= 60;
@@ -149,6 +162,19 @@ class NutritionCalculator {
       weightDiff: weightDiff,
     );
 
+    // 7b. Fibra recomendada: NIH DRI 14 g / 1000 kcal.
+    final fiber = (14.0 * recommended / 1000.0).round().clamp(20, 50);
+
+    // 7c. Hidratación: ACSM ~35 ml/kg + reposición por entreno ~500 ml por
+    //     sesión repartida en la semana. Mujeres embarazadas o adultos mayores
+    //     se mantienen en el mismo rango porque clamp inferior protege.
+    final water = (35.0 * weightKg + (500.0 * trainingDaysPerWeek / 7.0))
+        .round()
+        .clamp(1800, 4500);
+
+    // 7d. Tope sodio: 1500 mg si hipertensión declarada, 2300 mg DRI estándar.
+    final sodium = hypertension ? 1500 : 2300;
+
     return NutritionResult(
       bmr: bmr.round(),
       maintenanceCalories: maintenance.round(),
@@ -161,6 +187,9 @@ class NutritionCalculator {
       proteinGrams: macros.$1,
       carbsGrams: macros.$2,
       fatsGrams: macros.$3,
+      fiberGrams: fiber,
+      waterMl: water,
+      sodiumMaxMg: sodium,
     );
   }
 

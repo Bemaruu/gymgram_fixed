@@ -67,6 +67,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   String? _cookingTime;
   String? _userId;
   String _countryCode = CountryUtils.defaultCountry;
+  // Si food_preferences incluye 'vegan'/'vegana', mostramos warning B12
+  // (NIH DRI: la B12 no se obtiene de fuentes 100% vegetales).
+  bool _isVegan = false;
 
   static const _days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _mealOrder = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -148,6 +151,12 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final cookingTime = onboarding?['cooking_time_preference'] as String?;
       final eatingDisorderRisk =
           profile?['eating_disorder_risk'] == true;
+      final foodPrefs =
+          (onboarding?['food_preferences'] as List?)?.cast<String?>() ?? const [];
+      final isVegan = foodPrefs.any((p) {
+        final s = (p ?? '').toLowerCase();
+        return s == 'vegan' || s == 'vegana';
+      });
       final countryCode = CountryUtils.normalize(
         profile?['country_code'] as String? ??
             onboarding?['country_code'] as String?,
@@ -167,6 +176,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _dailyActivityLevel = dailyActivityLevel;
         _cookingTime = cookingTime;
         _eatingDisorderRisk = eatingDisorderRisk;
+        _isVegan = isVegan;
         _userId = userId;
         _countryCode = countryCode;
         _waterCount = water;
@@ -245,6 +255,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       'protein_grams': nutrition.proteinGrams,
       'carbs_grams': nutrition.carbsGrams,
       'fats_grams': nutrition.fatsGrams,
+      'fiber_grams': nutrition.fiberGrams,
+      'water_ml': nutrition.waterMl,
+      'sodium_max_mg': nutrition.sodiumMaxMg,
       'disclaimer': _disclaimerText,
       'week_index': weekIndex,
       'cooking_time': _cookingTime,
@@ -382,8 +395,14 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     return out;
   }
 
+  // Disclaimer reforzado: GymGram entrega estimaciones nutricionales. NO
+  // sustituye consulta con nutricionista, médico o profesional habilitado.
+  // Macros de marcas comerciales tomadas de etiqueta oficial pública. Macros
+  // de platos caseros LATAM son estimaciones basadas en INTA/LATINFOODS.
   static const String _disclaimerText =
-      'Plan generado por IA con fines orientativos. Consulta a un profesional para casos específicos.';
+      'Estimación nutricional. No reemplaza la asesoría de un nutricionista o '
+      'médico. Marcas comerciales: macros de etiqueta oficial. Platos caseros: '
+      'aproximación basada en tablas INTA/LATINFOODS.';
 
   static String _goalLabel(String goal) {
     switch (goal.toUpperCase()) {
@@ -845,6 +864,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
           if (_eatingDisorderRisk)
             SliverToBoxAdapter(child: _buildSafetyInfoBanner()),
+            if (_isVegan) SliverToBoxAdapter(child: _buildVeganB12Banner()),
 
           // Tarjeta de calorías + macros
           SliverToBoxAdapter(
@@ -918,6 +938,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: _WaterSection(
                 count: _waterCount,
+                targetMl: _plan?['water_ml'] as int?,
                 onAddGlass: _addGlass,
                 onReset: _resetWater,
               ),
@@ -942,6 +963,43 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
+      ),
+    );
+  }
+
+  // Warning B12: dieta vegana requiere suplementación obligatoria de B12
+  // (NIH DRI / Academy of Nutrition and Dietetics 2016). No es opinión nuestra
+  // — es estándar clínico documentado. No bloqueamos, solo informamos.
+  Widget _buildVeganB12Banner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                size: 18, color: Colors.orange.shade800),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Dieta vegana detectada. La vitamina B12 no se obtiene de '
+                'fuentes 100% vegetales. Se recomienda suplementación '
+                '(B12) y supervisión de un nutricionista.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.orange.shade900,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1678,14 +1736,24 @@ class _PlanSection extends StatelessWidget {
 
 class _WaterSection extends StatelessWidget {
   final int count;
+  // Meta diaria de hidratación en ML calculada por NutritionCalculator
+  // (ACSM 35 ml/kg + 500 ml por sesión de entreno repartida en la semana).
+  // Convertido a vasos asumiendo 250 ml por vaso, mínimo 6, máximo 14.
+  final int? targetMl;
   final VoidCallback onAddGlass;
   final VoidCallback onReset;
 
   const _WaterSection({
     required this.count,
+    required this.targetMl,
     required this.onAddGlass,
     required this.onReset,
   });
+
+  int get _targetGlasses {
+    final ml = targetMl ?? 2000;
+    return (ml / 250).round().clamp(6, 14);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1717,7 +1785,7 @@ class _WaterSection extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '$count / 8 vasos',
+                '$count / $_targetGlasses vasos',
                 style: const TextStyle(
                   fontSize: 13,
                   color: Color(0xFF00BFFF),
@@ -1729,7 +1797,7 @@ class _WaterSection extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(8, (i) {
+            children: List.generate(_targetGlasses, (i) {
               final filled = i < count;
               return GestureDetector(
                 onTap: onAddGlass,

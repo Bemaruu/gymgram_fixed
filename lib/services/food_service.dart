@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -69,32 +70,50 @@ class FoodService {
     String query,
     String countryCode,
   ) async {
-    final q = InputSanitizers.safePostgrestLike(query.toLowerCase());
-    if (q.isEmpty) return [];
+    final q = query.trim();
+    if (q.length < 2) return [];
     final country = CountryUtils.normalize(countryCode);
     try {
-      final rows = await _client
-          .from('custom_foods')
-          .select(
-            'name, kcal_per_100g, protein_per_100g, carbs_per_100g, '
-            'fat_per_100g, fiber_per_100g, serving_grams, '
-            'serving_description, country_relevance',
-          )
-          .or('name_normalized.ilike.%$q%,name.ilike.%$q%')
-          .order('name')
-          .limit(50);
-      final foods = rows.map((r) => FoodItem.fromCustomFood(r)).toList();
-      final local = foods.where((f) {
-        if (f.countryRelevance.isEmpty) return true;
-        return f.countryRelevance.contains(country);
-      }).toList();
-      if (local.isNotEmpty || country != CountryUtils.defaultCountry) {
-        return local.take(20).toList();
-      }
-      return foods.take(20).toList();
+      // RPC search_foods usa tsvector (GIN) con ranking + similitud trigrama
+      // + bonus por country_relevance/popular_in. Escala a 50k+ filas.
+      final rows = await _client.rpc(
+        'search_foods',
+        params: <String, dynamic>{
+          'q': q,
+          'country_code': country,
+          'exclude_ai_blocked': false,
+          'max_results': 30,
+        },
+      ) as List<dynamic>;
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .map((r) => FoodItem.fromCustomFood(r))
+          .toList();
     } catch (e) {
-      debugPrint('FoodService._searchCustomFoods error: $e');
-      return [];
+      if (kDebugMode) {
+        debugPrint('FoodService._searchCustomFoods RPC error, fallback: $e');
+      }
+      // Fallback: ilike (compatibilidad si la RPC no existe en algún env).
+      final q2 = InputSanitizers.safePostgrestLike(q.toLowerCase());
+      if (q2.isEmpty) return [];
+      try {
+        final rows = await _client
+            .from('custom_foods')
+            .select(
+              'name, kcal_per_100g, protein_per_100g, carbs_per_100g, '
+              'fat_per_100g, fiber_per_100g, serving_grams, '
+              'serving_description, country_relevance',
+            )
+            .or('name_normalized.ilike.%$q2%,name.ilike.%$q2%')
+            .order('name')
+            .limit(20);
+        return rows
+            .map((r) => FoodItem.fromCustomFood(r))
+            .toList();
+      } catch (e2) {
+        debugPrint('FoodService._searchCustomFoods fallback error: $e2');
+        return [];
+      }
     }
   }
 
@@ -171,6 +190,129 @@ class FoodService {
     );
   }
 
+  /// Mapea `countries_tags` de OFF a códigos ISO de país, con cap a una
+  /// lista corta para no romper el .overlaps() de generate-nutrition-plan.
+  /// Si no hay tags, marca GLOBAL.
+  List<String> _countryRelevanceFromTags(List<String> tags) {
+    if (tags.isEmpty) return const ['GLOBAL'];
+    const map = {
+      'chile': 'CL',
+      'argentina': 'AR',
+      'mexico': 'MX',
+      'colombia': 'CO',
+      'peru': 'PE',
+      'spain': 'ES',
+      'united-states': 'US',
+      'brasil': 'BR',
+      'brazil': 'BR',
+      'uruguay': 'UY',
+      'ecuador': 'EC',
+      'venezuela': 'VE',
+    };
+    final out = <String>{};
+    for (final tag in tags) {
+      // tag formato "en:chile"
+      final i = tag.indexOf(':');
+      final key = i >= 0 ? tag.substring(i + 1) : tag;
+      final iso = map[key];
+      if (iso != null) out.add(iso);
+      if (out.length >= 6) break;
+    }
+    if (out.isEmpty) return const ['GLOBAL'];
+    return out.toList(growable: false);
+  }
+
+  String _normalize(String name) {
+    return name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[^a-z0-9 ]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  /// Categoría heurística por nombre/marca, para que el alimento OFF
+  /// caiga en el grupo correcto del buscador y prompt IA (en caso de
+  /// admitirse en futuro).
+  String _guessCategoryFromName(String name, String? brand) {
+    final s = '${name.toLowerCase()} ${(brand ?? '').toLowerCase()}';
+    if (RegExp(r'\b(monster|red bull|powerade|gatorade|coca|sprite|fanta|pepsi|agua|cerveza|vino|jugo|leche|cafe|te|nescafe|smoothie)\b').hasMatch(s)) {
+      return 'Bebidas';
+    }
+    if (RegExp(r'\b(yogur|yogurt|queso|crema|mantequilla|manjar|leche condensada)\b').hasMatch(s)) {
+      return 'Lacteos';
+    }
+    if (RegExp(r'\b(snickers|kitkat|twix|chocolate|chocman|sublime|chips|papas fritas|galleta|barra|cereal|nesquik|milo|chocapic|frosted|corn flakes|quaker)\b').hasMatch(s)) {
+      // cereales secos van a Cereales, snacks a Snacks. Heurística simple:
+      if (RegExp(r'\b(cereal|corn flakes|chocapic|nesquik cereal|quaker|frosted)\b').hasMatch(s)) {
+        return 'Cereales';
+      }
+      return 'Snacks';
+    }
+    if (RegExp(r'\b(pan|baguette|hallulla|marraqueta|tortilla|fideos|arroz|avena|quinoa|harina)\b').hasMatch(s)) {
+      return 'Cereales';
+    }
+    if (RegExp(r'\b(pollo|carne|cerdo|atun|salmon|huevo|jamon|pavo|chorizo|tocino|sardinas|whey|proteina)\b').hasMatch(s)) {
+      return 'Proteinas';
+    }
+    if (RegExp(r'\b(lentejas|garbanzos|porotos|frijoles|arvejas|habas|soja|edamame|legumbre)\b').hasMatch(s)) {
+      return 'Legumbres';
+    }
+    if (RegExp(r'\b(tomate|lechuga|cebolla|zanahoria|brocoli|coliflor|espinaca|papa|camote|zapallo|pimenton)\b').hasMatch(s)) {
+      return 'Verduras';
+    }
+    if (RegExp(r'\b(platano|manzana|naranja|pera|uva|sandia|melon|frutilla|kiwi|durazno|pina|palta|aguacate|frambuesa|arandano)\b').hasMatch(s)) {
+      return 'Frutas';
+    }
+    if (RegExp(r'\b(aceite|mantequilla mani|nueces|almendras|chia|linaza|mani)\b').hasMatch(s)) {
+      return 'Grasas';
+    }
+    return 'Snacks'; // default seguro para productos de marca no clasificados
+  }
+
+  /// Upsert idempotente del producto OFF en custom_foods. No bloquea el log.
+  /// Si el alimento ya existe (off_product_id duplicado) Postgres ignora el
+  /// insert por la unique index parcial → no rompe nada.
+  Future<void> _cacheOffProductToCustomFoods(FoodItem food) async {
+    try {
+      if (food.kcalPer100g == null) return;
+      final brand = (food.brand ?? '').trim();
+      final displayName = brand.isEmpty
+          ? food.name.trim()
+          : '${food.name.trim()} (${brand.split(',').first.trim()})';
+      final row = <String, dynamic>{
+        'name': displayName,
+        'name_normalized': _normalize(displayName),
+        'category': _guessCategoryFromName(food.name, food.brand),
+        'kcal_per_100g': food.kcalPer100g,
+        'protein_per_100g': food.proteinPer100g ?? 0,
+        'carbs_per_100g': food.carbsPer100g ?? 0,
+        'fat_per_100g': food.fatPer100g ?? 0,
+        'fiber_per_100g': food.fiberPer100g ?? 0,
+        'serving_grams': 100,
+        'serving_description': '100 g',
+        'source': 'OFF',
+        'off_product_id': food.offProductId,
+        'image_url': food.imageUrl,
+        'brand': brand.isEmpty ? null : brand,
+        'country_relevance': _countryRelevanceFromTags(food.countriesTags),
+        // OFF no entra al plan IA por defecto (calidad variable). Sigue
+        // disponible para registro manual y búsqueda.
+        'ai_exclude_from_plan': true,
+      };
+      await _client.from('custom_foods').insert(row);
+    } catch (e) {
+      // duplicate key / RLS → silenciamos, no es un error de usuario.
+      if (kDebugMode) {
+        debugPrint('FoodService._cacheOffProductToCustomFoods skip: $e');
+      }
+    }
+  }
+
   Future<FoodLog> logFood(
     FoodItem food,
     double grams,
@@ -181,6 +323,13 @@ class FoodService {
     if (uid == null) throw Exception('Usuario no autenticado');
     if (grams <= 0) throw ArgumentError('grams debe ser mayor a 0');
     final logDate = date ?? DateTime.now();
+
+    // Auto-cache: si el producto vino de Open Food Facts (no era ya curado),
+    // lo persistimos en custom_foods para que crezca con el uso real. Fire and
+    // forget: si falla por unique constraint o RLS, no rompemos el log.
+    if (!food.isCustom && food.offProductId != null) {
+      unawaited(_cacheOffProductToCustomFoods(food));
+    }
     final log = FoodLog(
       id: '',
       userId: uid,

@@ -16,7 +16,7 @@ class NutritionGoalsService {
       final row = await _client
           .from('nutrition_goals')
           .select(
-            'id, daily_kcal, protein_g, carbs_g, fat_g, meals_per_day, recalc_at, updated_at',
+            'id, daily_kcal, protein_g, carbs_g, fat_g, fiber_g, sodium_max_mg, water_target_ml, meals_per_day, recalc_at, updated_at',
           )
           .eq('user_id', uid)
           .maybeSingle();
@@ -32,6 +32,9 @@ class NutritionGoalsService {
     required int protein,
     required int carbs,
     required int fat,
+    int? fiber,
+    int? sodiumMaxMg,
+    int? waterTargetMl,
     int mealsPerDay = 4,
   }) async {
     final uid = _uid;
@@ -42,6 +45,9 @@ class NutritionGoalsService {
       'protein_g': protein,
       'carbs_g': carbs,
       'fat_g': fat,
+      if (fiber != null) 'fiber_g': fiber,
+      if (sodiumMaxMg != null) 'sodium_max_mg': sodiumMaxMg,
+      if (waterTargetMl != null) 'water_target_ml': waterTargetMl,
       'meals_per_day': mealsPerDay,
       'recalc_at': DateTime.now().toUtc().toIso8601String(),
       'updated_at': DateTime.now().toUtc().toIso8601String(),

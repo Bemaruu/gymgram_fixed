@@ -6,10 +6,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/analytics_service.dart';
 import '../../services/exercise_service.dart';
+import '../../services/progression_service.dart';
 import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/ai_plan_loading.dart';
+import '../../widgets/progression_nudge_chip.dart';
 import '../../widgets/routine_analysis_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
 import '../ai_trainer/workout_feedback_prompt.dart';
@@ -68,6 +70,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
   // Por indice de ejercicio en _exercises: el match contra el catalogo
   // rankeable (si existe). Null = no rankea, solo checkbox.
   final Map<int, RankableExercise?> _rankableMatches = {};
+  // Overlay deterministico: sets/reps/nudge calculado server-side
+  // (RPC recompute_progression_state). Indexado por exercise_name.
+  final Map<String, ExerciseProgression> _progression = {};
 
   String _goal = 'MAINTAIN';
   String _location = 'GYM';
@@ -229,6 +234,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
       });
       _resolveRankableMatches();
       _resolveMediaUrls();
+      _loadProgression();
       _checkArchivedForDay();
       return;
     }
@@ -278,11 +284,31 @@ class _RoutineScreenState extends State<RoutineScreen> {
 
     _resolveRankableMatches();
     _resolveMediaUrls();
+    _loadProgression();
 
     if (_exercises.isNotEmpty) {
       _autoSavePersonal(dayPlan);
     }
     _checkArchivedForDay();
+  }
+
+  /// Llama a la RPC server-side y guarda el overlay (sets/reps/nudge).
+  /// Si falla, simplemente no hay overlay y se sigue mostrando el plan IA.
+  Future<void> _loadProgression() async {
+    final names = _exercises.map((e) => e.name).where((n) => n.isNotEmpty).toList();
+    if (names.isEmpty) {
+      if (mounted) setState(_progression.clear);
+      return;
+    }
+    final snapshot = List<_Exercise>.from(_exercises);
+    final result = await ProgressionService.instance.recompute(names);
+    if (!mounted) return;
+    if (!_sameExerciseList(snapshot, _exercises)) return;
+    setState(() {
+      _progression
+        ..clear()
+        ..addAll(result);
+    });
   }
 
   /// Garantiza que tengamos el plan de la edge en memoria. Si no se ha pedido
@@ -541,14 +567,15 @@ class _RoutineScreenState extends State<RoutineScreen> {
   Future<void> _openSetLoggerFor(_Exercise e, RankableExercise match) async {
     final logId = await _ensureWorkoutLogId();
     if (logId == null || !mounted) return;
+    final overlay = _progression[e.name];
     final added = await SetLoggerSheet.show(
       context,
       exerciseName: e.name,
       muscleGroup: e.muscleGroup,
       exerciseId: match.id,
       movementPattern: match.movementPattern,
-      targetSets: e.sets,
-      targetReps: e.reps,
+      targetSets: overlay?.sets ?? e.sets,
+      targetReps: overlay?.repsLabel ?? e.reps,
       workoutLogId: logId,
     );
     if (!mounted) return;
@@ -927,6 +954,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
     bool rankable = false,
     Key? key,
   }) {
+    // Override del plan IA si hay overlay deterministico para este ejercicio.
+    final overlay = _progression[e.name];
+    final effectiveSets = overlay?.sets ?? e.sets;
+    final effectiveReps = overlay?.repsLabel ?? e.reps;
     return Container(
       key: key,
       margin: const EdgeInsets.only(bottom: 12),
@@ -1028,6 +1059,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
                         ),
                       ),
                     ],
+                    if (!editMode && overlay != null && overlay.hasNudge) ...[
+                      const SizedBox(width: 6),
+                      ProgressionNudgeChip(
+                        nudgeType: overlay.nudgeType!,
+                        nudgeMessage: overlay.nudgeMessage!,
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1040,7 +1078,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${e.sets} series x ${e.reps}  -  Descanso ${e.restSeconds}s',
+                  '$effectiveSets series x $effectiveReps  -  Descanso ${e.restSeconds}s',
                   style: const TextStyle(color: Colors.black54, fontSize: 12),
                 ),
                 if (!editMode && rankable) ...[
