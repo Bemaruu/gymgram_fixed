@@ -49,6 +49,19 @@ class WaterService {
     return next;
   }
 
+  // Fija el contador exacto (subir o bajar). Otorga medalla solo al subir.
+  Future<void> setGlasses(int count) async {
+    final next = count < 0 ? 0 : count;
+    final current = await getGlassesToday();
+    await setGlassesToday(next);
+    if (next > current) {
+      final uid = _uid;
+      if (uid != null) {
+        await BadgeService.instance.checkAndAwardBadges(uid, 'water_logged');
+      }
+    }
+  }
+
   // Resetea el contador de hoy a cero
   Future<void> resetToday() async {
     await setGlassesToday(0);

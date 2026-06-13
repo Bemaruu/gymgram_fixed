@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' show pi;
+import 'dart:math' show pi, sin;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -659,10 +660,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     }
   }
 
-  Future<void> _addGlass() async {
-    final next = await WaterService.instance.addGlass();
-    if (!mounted) return;
-    setState(() => _waterCount = next);
+  // Fija el contador exacto al tocar un vaso (permite subir o bajar).
+  Future<void> _setWater(int count) async {
+    final safe = count < 0 ? 0 : count;
+    setState(() => _waterCount = safe);
+    await WaterService.instance.setGlasses(safe);
   }
 
   Future<void> _resetWater() async {
@@ -939,7 +941,7 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
               child: _WaterSection(
                 count: _waterCount,
                 targetMl: _plan?['water_ml'] as int?,
-                onAddGlass: _addGlass,
+                onSetGlasses: _setWater,
                 onReset: _resetWater,
               ),
             ),
@@ -1740,13 +1742,15 @@ class _WaterSection extends StatelessWidget {
   // (ACSM 35 ml/kg + 500 ml por sesión de entreno repartida en la semana).
   // Convertido a vasos asumiendo 250 ml por vaso, mínimo 6, máximo 14.
   final int? targetMl;
-  final VoidCallback onAddGlass;
+  final ValueChanged<int> onSetGlasses;
   final VoidCallback onReset;
+
+  static const Color _blue = Color(0xFF00BFFF);
 
   const _WaterSection({
     required this.count,
     required this.targetMl,
-    required this.onAddGlass,
+    required this.onSetGlasses,
     required this.onReset,
   });
 
@@ -1757,6 +1761,11 @@ class _WaterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final target = _targetGlasses;
+    final done = count.clamp(0, target);
+    final progress = target == 0 ? 0.0 : done / target;
+    final ml = done * 250;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1769,11 +1778,7 @@ class _WaterSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                PhosphorIconsRegular.drop,
-                color: Color(0xFF00BFFF),
-                size: 20,
-              ),
+              const Icon(PhosphorIconsRegular.drop, color: _blue, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Hidratación',
@@ -1785,64 +1790,77 @@ class _WaterSection extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '$count / $_targetGlasses vasos',
+                '${(ml / 1000).toStringAsFixed(ml % 1000 == 0 ? 0 : 1)} L',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black38,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$done / $target vasos',
                 style: const TextStyle(
                   fontSize: 13,
-                  color: Color(0xFF00BFFF),
-                  fontWeight: FontWeight.w600,
+                  color: _blue,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(_targetGlasses, (i) {
-              final filled = i < count;
+          const SizedBox(height: 12),
+          // Barra de progreso global que se llena con animación.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progress),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                backgroundColor: const Color(0xFFEAF7FE),
+                valueColor: const AlwaysStoppedAnimation(_blue),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Vasos en Wrap: si no caben en la fila, bajan a la siguiente.
+          Wrap(
+            spacing: 10,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: List.generate(target, (i) {
+              final filled = i < done;
               return GestureDetector(
-                onTap: onAddGlass,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 32,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: filled
-                        ? const Color(0xFF00BFFF).withValues(alpha: 0.12)
-                        : const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: filled
-                          ? const Color(0xFF00BFFF)
-                          : const Color(0xFFDDDDDD),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Icon(
-                    PhosphorIconsFill.drop,
-                    size: 18,
-                    color: filled
-                        ? const Color(0xFF00BFFF)
-                        : const Color(0xFFCCCCCC),
-                  ),
-                ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  // Tocar el último vaso lleno lo vacía; si no, llena hasta ahí.
+                  onSetGlasses(i + 1 == done ? i : i + 1);
+                },
+                behavior: HitTestBehavior.opaque,
+                child: _WaterGlass(filled: filled),
               );
             }),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Center(
-            child: TextButton(
-              onPressed: onReset,
+            child: TextButton.icon(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onReset();
+              },
+              icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise,
+                  size: 14, color: Colors.black38),
               style: TextButton.styleFrom(
-                minimumSize: const Size(88, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                minimumSize: const Size(88, 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 foregroundColor: Colors.black38,
               ),
-              child: const Text(
+              label: const Text(
                 'Reiniciar contador',
-                style: TextStyle(
-                  fontSize: 12,
-                  decoration: TextDecoration.underline,
-                ),
+                style: TextStyle(fontSize: 12),
               ),
             ),
           ),
@@ -1850,6 +1868,93 @@ class _WaterSection extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Un vaso individual que se llena con una ola animada al marcarse.
+class _WaterGlass extends StatelessWidget {
+  final bool filled;
+  const _WaterGlass({required this.filled});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: filled ? 1 : 0),
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeOutCubic,
+      builder: (context, fill, _) => CustomPaint(
+        size: const Size(30, 44),
+        painter: _GlassPainter(fill: fill),
+      ),
+    );
+  }
+}
+
+class _GlassPainter extends CustomPainter {
+  final double fill; // 0..1 nivel de agua
+  const _GlassPainter({required this.fill});
+
+  static const Color _blue = Color(0xFF00BFFF);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    // Copa ligeramente cónica: más ancha arriba que abajo.
+    const topInset = 1.0;
+    final botInset = w * 0.16;
+    final glass = Path()
+      ..moveTo(topInset, 2)
+      ..lineTo(w - topInset, 2)
+      ..lineTo(w - botInset, h - 2)
+      ..lineTo(botInset, h - 2)
+      ..close();
+
+    // Fondo del vaso.
+    canvas.drawPath(
+      glass,
+      Paint()..color = const Color(0xFFF3FAFE),
+    );
+
+    // Agua recortada al interior del vaso.
+    if (fill > 0.01) {
+      canvas.save();
+      canvas.clipPath(glass);
+      final level = (h - 2) - fill * (h - 4);
+      final amp = 1.6; // amplitud de la ola
+      final wave = Path()..moveTo(0, level);
+      for (double x = 0; x <= w; x += 1) {
+        final y = level + amp * sin((x / w * 2 * pi) + fill * 6);
+        wave.lineTo(x, y);
+      }
+      wave
+        ..lineTo(w, h)
+        ..lineTo(0, h)
+        ..close();
+      canvas.drawPath(
+        wave,
+        Paint()..color = _blue.withValues(alpha: 0.85),
+      );
+      // Brillo superior del agua.
+      canvas.drawPath(
+        wave,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.18)
+          ..blendMode = BlendMode.softLight,
+      );
+      canvas.restore();
+    }
+
+    // Contorno del vaso.
+    canvas.drawPath(
+      glass,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = fill > 0.01 ? _blue : const Color(0xFFD7E6EE),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassPainter old) => old.fill != fill;
 }
 
 // ─── Nutrition Summary Card (plan IA) ────────────────────────────────────────
