@@ -1577,7 +1577,7 @@ class _LogItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${log.grams.toStringAsFixed(0)}g',
+                    log.portionLabel,
                     style: const TextStyle(fontSize: 12, color: Colors.black45),
                   ),
                 ],

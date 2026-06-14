@@ -14,8 +14,15 @@ class FoodItem {
   // Porción de referencia (solo alimentos curados de custom_foods).
   final double? servingGrams;
   final String? servingDescription;
+  // Si unitLabel != null y unitGrams > 0 el alimento se cuenta en unidades
+  // (manzanas, huevos, piezas de sushi, latas, etc.) y unitGrams es el peso
+  // de UNA unidad. Los macros siguen siendo per 100g.
+  final String? unitLabel;
+  final double? unitGrams;
 
   bool get hasCalories => kcalPer100g != null && kcalPer100g! > 0;
+  bool get isUnitBased =>
+      unitLabel != null && unitLabel!.isNotEmpty && (unitGrams ?? 0) > 0;
 
   const FoodItem({
     required this.name,
@@ -32,6 +39,8 @@ class FoodItem {
     this.countryRelevance = const [],
     this.servingGrams,
     this.servingDescription,
+    this.unitLabel,
+    this.unitGrams,
   });
 
   double? kcalFor(double grams) => kcalPer100g != null ? _calc(kcalPer100g!, grams) : null;
@@ -83,6 +92,8 @@ class FoodItem {
       return double.tryParse(v.toString());
     }
     final serving = d(row['serving_grams']);
+    final unitGrams = d(row['unit_grams']);
+    final unitLabelRaw = row['unit_label'] as String?;
     final countryRelevance = (row['country_relevance'] as List?)
             ?.map((e) => e.toString().toUpperCase())
             .toList() ??
@@ -101,6 +112,10 @@ class FoodItem {
       countryRelevance: countryRelevance,
       servingGrams: (serving != null && serving > 0) ? serving : null,
       servingDescription: row['serving_description'] as String?,
+      unitLabel: (unitLabelRaw != null && unitLabelRaw.trim().isNotEmpty)
+          ? unitLabelRaw.trim()
+          : null,
+      unitGrams: (unitGrams != null && unitGrams > 0) ? unitGrams : null,
     );
   }
 }

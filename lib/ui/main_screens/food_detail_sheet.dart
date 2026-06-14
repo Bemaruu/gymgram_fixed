@@ -38,15 +38,24 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
   late final DraggableScrollableController _sheetController;
   late String _mealType;
   double _grams = 100.0;
+  double _units = 1.0;
   bool _saving = false;
+
+  bool get _byUnit => widget.food.isUnitBased;
+  double get _unitGrams => widget.food.unitGrams ?? 0;
 
   @override
   void initState() {
     super.initState();
     _mealType = widget.initialMealType;
-    // Si el alimento tiene una porción de referencia (custom_foods), parte de ahí.
-    final serving = widget.food.servingGrams;
-    _grams = (serving != null && serving > 0) ? serving : 100.0;
+    if (_byUnit) {
+      _units = 1.0;
+      _grams = _unitGrams;
+    } else {
+      // Si el alimento tiene una porción de referencia (custom_foods), parte de ahí.
+      final serving = widget.food.servingGrams;
+      _grams = (serving != null && serving > 0) ? serving : 100.0;
+    }
     _gramsCtrl = TextEditingController(text: _grams.toStringAsFixed(0));
     _sheetController = DraggableScrollableController();
   }
@@ -59,6 +68,22 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
       opts.add(('${g.toStringAsFixed(0)}g', g));
     }
     return opts;
+  }
+
+  String _unitsLabel(double n) {
+    final lbl = widget.food.unitLabel ?? 'unidad';
+    final countStr = n == n.roundToDouble()
+        ? n.toStringAsFixed(0)
+        : n.toStringAsFixed(1);
+    return '$countStr $lbl${n > 1.0001 ? 's' : ''}';
+  }
+
+  void _setUnits(double n) {
+    final clamped = n < 0.5 ? 0.5 : n;
+    setState(() {
+      _units = clamped;
+      _grams = clamped * _unitGrams;
+    });
   }
 
   @override
@@ -88,6 +113,7 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
         widget.food,
         _grams,
         _mealType,
+        unitCount: _byUnit ? _units : null,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -158,7 +184,8 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
               ],
               const SizedBox(height: 24),
 
-              // Selector de gramos
+              // Selector de cantidad: unidades (manzanas, piezas, latas, etc.)
+              // o gramos, según el alimento.
               const Text(
                 'Cantidad',
                 style: TextStyle(
@@ -168,81 +195,92 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 100,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
-                      borderRadius: BorderRadius.circular(12),
+              if (_byUnit)
+                _UnitStepper(
+                  units: _units,
+                  unitLabel: widget.food.unitLabel ?? 'unidad',
+                  unitGrams: _unitGrams,
+                  primary: _kPrimary,
+                  onChanged: _setUnits,
+                  unitsLabel: _unitsLabel,
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: TextField(
+                        controller: _gramsCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                        ],
+                        onChanged: _onGramsChanged,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     ),
-                    child: TextField(
-                      controller: _gramsCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                      ],
-                      onChanged: _onGramsChanged,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
+                    const SizedBox(width: 8),
+                    const Text(
+                      'g',
+                      style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'g',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black54,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: _quickOptions().map((opt) {
-                          final (label, g) = opt;
-                          final selected = _grams == g;
-                          return GestureDetector(
-                            onTap: () => _selectQuick(g),
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selected ? _kPrimary : const Color(0xFFF5F5F5),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                label,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: selected ? Colors.white : Colors.black54,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _quickOptions().map((opt) {
+                            final (label, g) = opt;
+                            final selected = _grams == g;
+                            return GestureDetector(
+                              onTap: () => _selectQuick(g),
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: selected ? _kPrimary : const Color(0xFFF5F5F5),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: selected ? Colors.white : Colors.black54,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              if (widget.food.servingDescription != null &&
+                  ],
+                ),
+              if (!_byUnit &&
+                  widget.food.servingDescription != null &&
                   widget.food.servingDescription!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -388,6 +426,136 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+class _UnitStepper extends StatelessWidget {
+  final double units;
+  final String unitLabel;
+  final double unitGrams;
+  final Color primary;
+  final ValueChanged<double> onChanged;
+  final String Function(double) unitsLabel;
+
+  const _UnitStepper({
+    required this.units,
+    required this.unitLabel,
+    required this.unitGrams,
+    required this.primary,
+    required this.onChanged,
+    required this.unitsLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const presets = <double>[0.5, 1, 2, 3, 4, 6, 8];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _RoundIcon(
+              icon: Icons.remove,
+              onTap: () {
+                final step = units > 1 ? 1.0 : 0.5;
+                onChanged(units - step);
+              },
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Container(
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      unitsLabel(units),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      '≈ ${(units * unitGrams).toStringAsFixed(0)} g',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            _RoundIcon(
+              icon: Icons.add,
+              onTap: () {
+                final step = units < 1 ? 0.5 : 1.0;
+                onChanged(units + step);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: presets.map((n) {
+              final selected = (units - n).abs() < 0.01;
+              return GestureDetector(
+                onTap: () => onChanged(n),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected ? primary : const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    unitsLabel(n),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : Colors.black54,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoundIcon extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _RoundIcon({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      onTap: onTap,
+      radius: 28,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F8FF),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF00BFFF).withValues(alpha: 0.4)),
+        ),
+        child: Icon(icon, color: const Color(0xFF00BFFF), size: 22),
+      ),
     );
   }
 }

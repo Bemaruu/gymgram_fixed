@@ -102,7 +102,7 @@ class FoodService {
             .select(
               'name, kcal_per_100g, protein_per_100g, carbs_per_100g, '
               'fat_per_100g, fiber_per_100g, serving_grams, '
-              'serving_description, country_relevance',
+              'serving_description, unit_label, unit_grams, country_relevance',
             )
             .or('name_normalized.ilike.%$q2%,name.ilike.%$q2%')
             .order('name')
@@ -318,11 +318,19 @@ class FoodService {
     double grams,
     String mealType, {
     DateTime? date,
+    double? unitCount,
   }) async {
     final uid = _uid;
     if (uid == null) throw Exception('Usuario no autenticado');
     if (grams <= 0) throw ArgumentError('grams debe ser mayor a 0');
     final logDate = date ?? DateTime.now();
+    // Si el alimento se cuenta en unidades y el caller no pasó un count
+    // explícito, lo derivamos: count = grams / unitGrams.
+    final double? resolvedUnitCount = food.isUnitBased
+        ? (unitCount ??
+            (food.unitGrams! > 0 ? grams / food.unitGrams! : null))
+        : null;
+    final String? resolvedUnitLabel = food.isUnitBased ? food.unitLabel : null;
 
     // Auto-cache: si el producto vino de Open Food Facts (no era ya curado),
     // lo persistimos en custom_foods para que crezca con el uso real. Fire and
@@ -350,6 +358,8 @@ class FoodService {
       fatTotal: food.fatFor(grams),
       fiberPer100g: food.fiberPer100g,
       fiberTotal: food.fiberFor(grams),
+      unitLabel: resolvedUnitLabel,
+      unitCount: resolvedUnitCount,
       createdAt: DateTime.now(),
     );
     final inserted =

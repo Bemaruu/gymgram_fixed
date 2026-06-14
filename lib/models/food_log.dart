@@ -18,6 +18,8 @@ class FoodLog {
   final double? fatTotal;
   final double? fiberPer100g;
   final double? fiberTotal;
+  final String? unitLabel;
+  final double? unitCount;
   final DateTime createdAt;
 
   const FoodLog({
@@ -40,8 +42,26 @@ class FoodLog {
     this.fatTotal,
     this.fiberPer100g,
     this.fiberTotal,
+    this.unitLabel,
+    this.unitCount,
     required this.createdAt,
   });
+
+  bool get isUnitBased =>
+      unitLabel != null && unitLabel!.isNotEmpty && (unitCount ?? 0) > 0;
+
+  /// Texto corto para la lista del día: "1 manzana", "6 piezas", "12 g".
+  String get portionLabel {
+    if (isUnitBased) {
+      final count = unitCount!;
+      final countStr = count == count.roundToDouble()
+          ? count.toStringAsFixed(0)
+          : count.toStringAsFixed(1);
+      final plural = count > 1.0001;
+      return '$countStr ${unitLabel!}${plural ? 's' : ''}';
+    }
+    return '${grams.toStringAsFixed(0)} g';
+  }
 
   static FoodLog fromMap(Map<String, dynamic> m) {
     double? d(dynamic v) {
@@ -70,6 +90,8 @@ class FoodLog {
       fatTotal: d(m['fat_total']),
       fiberPer100g: d(m['fiber_per_100g']),
       fiberTotal: d(m['fiber_total']),
+      unitLabel: m['unit_label'] as String?,
+      unitCount: d(m['unit_count']),
       createdAt: DateTime.parse(m['created_at'] as String),
     );
   }
@@ -94,5 +116,7 @@ class FoodLog {
         if (fatTotal != null) 'fat_total': fatTotal,
         if (fiberPer100g != null) 'fiber_per_100g': fiberPer100g,
         if (fiberTotal != null) 'fiber_total': fiberTotal,
+        if (unitLabel != null) 'unit_label': unitLabel,
+        if (unitCount != null) 'unit_count': unitCount,
       };
 }

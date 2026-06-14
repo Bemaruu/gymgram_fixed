@@ -403,9 +403,11 @@ class _FoodCard extends StatelessWidget {
                     color: Colors.black87,
                   ),
                 ),
-                const Text(
-                  'kcal/100g',
-                  style: TextStyle(fontSize: 10, color: Colors.black45),
+                Text(
+                  food.isUnitBased
+                      ? 'kcal/100g · 1 ${food.unitLabel}=${food.unitGrams!.toStringAsFixed(0)}g'
+                      : 'kcal/100g',
+                  style: const TextStyle(fontSize: 10, color: Colors.black45),
                 ),
                 const SizedBox(height: 4),
                 const Icon(Icons.chevron_right, color: Colors.black26, size: 20),
