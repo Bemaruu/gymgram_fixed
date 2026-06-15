@@ -4,7 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../models/badge_model.dart';
 import '../../services/badge_service.dart';
 import '../../services/medal_proof_service.dart';
+import '../../services/supabase_service.dart';
 import '../../widgets/medal_widget.dart';
+import '../../widgets/medal_share_card.dart';
 
 /// Bottom sheet con el detalle completo de una medalla.
 /// [userBadge] es null si el usuario aún no la ha ganado.
@@ -50,13 +52,44 @@ class _MedalDetailSheet extends StatefulWidget {
 class _MedalDetailSheetState extends State<_MedalDetailSheet> {
   bool _featuredLoading = false;
   bool _proofLoading = false;
+  bool _sharing = false;
   late bool _isFeatured;
   bool _earnedViaProof = false;
+  int? _pionero;
+  final _shareCardKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _isFeatured = widget.userBadge?.isFeatured ?? false;
+    if (widget.badge.id == 'beta_exclusiva' && _isEarned) _loadPionero();
+  }
+
+  Future<void> _loadPionero() async {
+    final n = await SupabaseService.instance.getPioneroNumber();
+    if (mounted && n != null) setState(() => _pionero = n);
+  }
+
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    final isBeta = widget.badge.id == 'beta_exclusiva';
+    final num = isBeta && _pionero != null ? ' (Pionero #$_pionero)' : '';
+    final ok = await shareMedalImage(
+      boundaryKey: _shareCardKey,
+      text: isBeta
+          ? 'Soy Pionero de GymGram 💪$num · gymgram.fit'
+          : 'Desbloqueé "${widget.badge.medalName}" en GymGram 💪 · gymgram.fit',
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo compartir. Intenta de nuevo.'),
+          backgroundColor: Color(0xFF3A1A1A),
+        ),
+      );
+    }
+    if (mounted) setState(() => _sharing = false);
   }
 
   bool get _isEarned =>
@@ -189,7 +222,20 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
       minChildSize: 0.4,
       maxChildSize: 0.85,
       expand: false,
-      builder: (_, controller) => Container(
+      builder: (_, controller) => Stack(
+        children: [
+          // Tarjeta compartible fuera de pantalla (solo para capturarla)
+          Positioned(
+            left: -2000,
+            child: RepaintBoundary(
+              key: _shareCardKey,
+              child: MedalShareCard(
+                badge: widget.badge,
+                pioneroNumber: _pionero,
+              ),
+            ),
+          ),
+          Container(
         decoration: const BoxDecoration(
           color: Color(0xFF0E1221),
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -367,6 +413,16 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
               ),
             ],
 
+            // Botón compartir (dueño y medalla ganada)
+            if (widget.isOwner && _isEarned) ...[
+              const SizedBox(height: 12),
+              _ShareMedalButton(
+                isLoading: _sharing,
+                rankColor: rankColor,
+                onPressed: _share,
+              ),
+            ],
+
             const SizedBox(height: 8),
             Center(
               child: Text(
@@ -375,6 +431,50 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
               ),
             ),
           ],
+        ),
+      ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShareMedalButton extends StatelessWidget {
+  final bool isLoading;
+  final Color rankColor;
+  final VoidCallback onPressed;
+
+  const _ShareMedalButton({
+    required this.isLoading,
+    required this.rankColor,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: isLoading ? null : onPressed,
+        icon: isLoading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white54),
+              )
+            : const Icon(Icons.ios_share, size: 18),
+        label: Text(
+          isLoading ? 'Generando…' : 'Compartir medalla',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );

@@ -34,7 +34,7 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final s = await SupabaseService.instance.getSuggestedProfiles();
       if (mounted) setState(() => _suggested = s);
-    } catch (_) {/* silencioso: el prompt vacío sigue sirviendo */}
+    } catch (_) {/* silencioso: el empty state cubre el caso */}
   }
 
   @override

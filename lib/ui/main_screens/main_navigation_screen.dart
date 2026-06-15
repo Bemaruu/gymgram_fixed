@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/analytics_service.dart';
 import '../../services/supabase_service.dart';
+import '../onboarding/beta_welcome_screen.dart';
 import 'home_screen.dart';
 import 'rutina_screen.dart';
 import 'alimentacion_screen.dart';
@@ -30,6 +32,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     username = widget.userData['username'] ?? 'usuario';
     bio = widget.userData['bio'] ?? '';
     _loadAvatar();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBetaWelcome());
+  }
+
+  // Muestra la bienvenida de la beta una sola vez por usuario (incluye a los
+  // betatesters que ya estaban registrados antes de esta pantalla).
+  Future<void> _maybeShowBetaWelcome() async {
+    if (!kBetaWelcomeEnabled) return;
+    final uid = SupabaseService.instance.currentUserId;
+    if (uid == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'beta_welcome_seen_$uid';
+    if (prefs.getBool(key) == true) return;
+    await prefs.setBool(key, true);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const BetaWelcomeScreen(),
+      ),
+    );
   }
 
   Future<void> _loadAvatar() async {

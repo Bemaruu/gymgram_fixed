@@ -166,7 +166,7 @@ class _PlansScreenState extends State<PlansScreen> {
                     const SizedBox(height: 14),
                   ],
                   const Text(
-                    'Precios de lanzamiento - Cancela cuando quieras',
+                    'Precio fundador de beta - sube despues. Cancela cuando quieras',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
@@ -511,9 +511,9 @@ class _PlanSpec {
         return const _PlanSpec(
           name: 'Plus',
           tagline: 'Para quienes ya entrenan en serio.',
-          monthlyClp: 4990,
-          launchClp: 2490,
-          yearlyClp: 47900,
+          monthlyClp: 2500,
+          launchClp: 1000,
+          yearlyClp: 24000,
           ctaLabel: 'Elegir Plus',
           ctaColor: AppColors.accentOrange,
           ctaTextColor: Colors.white,
@@ -532,9 +532,9 @@ class _PlanSpec {
         return const _PlanSpec(
           name: 'Premium',
           tagline: 'Tu entrenador personal IA, 24/7.',
-          monthlyClp: 8990,
-          launchClp: 4990,
-          yearlyClp: 86900,
+          monthlyClp: 5000,
+          launchClp: 2000,
+          yearlyClp: 48000,
           ctaLabel: 'Elegir Premium',
           ctaColor: Color(0xFFFFE08A),
           ctaTextColor: AppColors.deepBlue,
@@ -577,7 +577,7 @@ class _PlanSpec {
       return null;
     }
     if (launchClp != null && launchClp! < monthlyClp!) {
-      return 'Lanzamiento - antes ${_fmtClp(monthlyClp!)}';
+      return 'Precio beta - luego ${_fmtClp(monthlyClp!)}';
     }
     return null;
   }

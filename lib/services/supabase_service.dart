@@ -49,6 +49,23 @@ class SupabaseService {
     await client.from('profiles').upsert(row);
   }
 
+  // Numero de pionero del usuario actual (orden de registro). 1 = primer
+  // usuario de la beta. Devuelve null si falla o no hay sesion.
+  Future<int?> getPioneroNumber() async {
+    final uid = currentUserId;
+    if (uid == null) return null;
+    try {
+      final res = await client.rpc('get_pionero_number', params: {
+        'p_user_id': uid,
+      });
+      if (res is int) return res;
+      if (res is num) return res.toInt();
+      return int.tryParse('$res');
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Devuelve el perfil del usuario actual como mapa crudo
   Future<Map<String, dynamic>?> getRawMyProfile() async {
     final uid = currentUserId;
@@ -224,16 +241,16 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(result);
   }
 
-  /// Perfiles sugeridos para descubrir/seguir (cold-start). Excluye al usuario
-  /// actual. El estado de "siguiendo" se resuelve por tarjeta en la UI.
+  /// Perfiles sugeridos para descubrir/seguir. Algoritmo server-side:
+  /// 1) amigos de amigos ordenados por conexiones mutuas; 2) mismo
+  /// fitness_goal como relleno. Excluye user actual, a quienes ya sigue y
+  /// bloqueados. Si no hay señales suficientes devuelve [] (sin random).
   Future<List<Map<String, dynamic>>> getSuggestedProfiles({int limit = 20}) async {
-    final uid = currentUserId;
-    var q = client
-        .from('public_profiles')
-        .select('id, username, full_name, avatar_url, bio, fitness_goal');
-    if (uid != null) q = q.neq('id', uid);
-    final result = await q.limit(limit);
-    return List<Map<String, dynamic>>.from(result);
+    final result = await client.rpc(
+      'get_suggested_profiles',
+      params: {'p_limit': limit},
+    );
+    return List<Map<String, dynamic>>.from(result as List);
   }
 
   Future<Map<String, dynamic>?> getProfileById(String userId) async {
