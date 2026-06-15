@@ -182,11 +182,9 @@ Future<bool> shareMedalImage({
       return false;
     }
 
-    // Si aun no termino de pintar, espera un par de frames antes de capturar.
-    if (boundary.debugNeedsPaint) {
-      await Future.delayed(const Duration(milliseconds: 60));
-      await WidgetsBinding.instance.endOfFrame;
-    }
+    // Pequena espera para asegurar que el boundary esta pintado antes de
+    // capturar. NO usar boundary.debugNeedsPaint: en release lanza excepcion.
+    await Future<void>.delayed(const Duration(milliseconds: 32));
 
     final image = await boundary.toImage(pixelRatio: 3.0);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
