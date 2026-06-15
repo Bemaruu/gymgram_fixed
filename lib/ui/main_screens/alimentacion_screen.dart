@@ -323,6 +323,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         return;
       }
       if (res.status >= 400) {
+        // La edge a veces timeoutea (502) pero alcanza a persistir el plan
+        // antes de que el gateway corte. Re-leemos DB antes de rendirnos.
+        if (await _loadCachedPlan(weekIndex)) return;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -352,6 +355,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       _weekPlanIndex = weekIndex;
     } catch (e) {
       debugPrint('generate-nutrition-plan edge error: $e');
+      // Mismo caso que el 502: el plan puede haberse persistido aunque la
+      // invocación del cliente haya fallado/timeoutado.
+      if (await _loadCachedPlan(weekIndex)) return;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -361,6 +367,32 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       }
       _weekDays = [];
       _weekPlanIndex = weekIndex;
+    }
+  }
+
+  /// Re-lee `nutrition_plans` y, si encuentra un plan válido para [weekIndex],
+  /// hidrata `_weekDays`/`_weekPlanIndex` y devuelve true. Caso contrario, false.
+  Future<bool> _loadCachedPlan(int weekIndex) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('nutrition_plans')
+          .select('plan_json')
+          .eq('user_id', _userId ?? '')
+          .eq('week_index', weekIndex)
+          .maybeSingle();
+      if (row == null) return false;
+      final planJson = row['plan_json'];
+      final week = planJson is Map ? (planJson['week'] as List?) : null;
+      if (week == null || week.isEmpty) return false;
+      _weekDays = week
+          .whereType<Map>()
+          .map((d) => Map<String, dynamic>.from(d))
+          .toList();
+      _weekPlanIndex = weekIndex;
+      return true;
+    } catch (e) {
+      debugPrint('nutrition_plans recheck error: $e');
+      return false;
     }
   }
 
@@ -523,12 +555,18 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     _reconcilePlanChecks();
   }
 
-  /// Número de semana absoluto desde una referencia fija. Cambia cada lunes,
-  /// es estable independientemente del huso horario y sirve como semilla
-  /// determinista para rotar el plan semanal.
+  /// Número de semana absoluto desde una referencia fija. Cambia cada lunes
+  /// a medianoche LOCAL del usuario y sirve como semilla determinista para
+  /// rotar el plan semanal. Antes usábamos date.toUtc() y la semana saltaba
+  /// al UTC midnight (= 20:00 hora Chile del domingo), generando un plan
+  /// "de la próxima semana" un día antes.
   static int _weeksSinceEpoch(DateTime date) {
+    // Comparamos día calendario LOCAL contra el lunes 1 enero 2024 local.
+    // Construir ambas como UTC desde los componentes locales evita el drift
+    // por horarios de verano cuando calculamos .inDays.
+    final localDay = DateTime.utc(date.year, date.month, date.day);
     final epoch = DateTime.utc(2024, 1, 1); // lunes 1 enero 2024
-    final daysDiff = date.toUtc().difference(epoch).inDays;
+    final daysDiff = localDay.difference(epoch).inDays;
     return daysDiff ~/ 7;
   }
 
