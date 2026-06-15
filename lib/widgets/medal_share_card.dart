@@ -177,11 +177,24 @@ Future<bool> shareMedalImage({
   try {
     final boundary =
         boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) return false;
+    if (boundary == null) {
+      debugPrint('shareMedalImage: boundary null');
+      return false;
+    }
+
+    // Si aun no termino de pintar, espera un par de frames antes de capturar.
+    if (boundary.debugNeedsPaint) {
+      await Future.delayed(const Duration(milliseconds: 60));
+      await WidgetsBinding.instance.endOfFrame;
+    }
 
     final image = await boundary.toImage(pixelRatio: 3.0);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (bytes == null) return false;
+    image.dispose();
+    if (bytes == null) {
+      debugPrint('shareMedalImage: bytes null');
+      return false;
+    }
 
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$fileName');
@@ -189,7 +202,8 @@ Future<bool> shareMedalImage({
 
     await Share.shareXFiles([XFile(file.path)], text: text);
     return true;
-  } catch (_) {
+  } catch (e, st) {
+    debugPrint('shareMedalImage error: $e\n$st');
     return false;
   }
 }

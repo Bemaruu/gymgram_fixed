@@ -224,9 +224,12 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
       expand: false,
       builder: (_, controller) => Stack(
         children: [
-          // Tarjeta compartible fuera de pantalla (solo para capturarla)
+          // Tarjeta compartible: se pinta detras del panel opaco (queda oculta
+          // al usuario pero con un layer valido para capturar con toImage).
+          // No usar left:-2000: el Stack la recortaria y no se pintaria.
           Positioned(
-            left: -2000,
+            left: 0,
+            top: 0,
             child: RepaintBoundary(
               key: _shareCardKey,
               child: MedalShareCard(
