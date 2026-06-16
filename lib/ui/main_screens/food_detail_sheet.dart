@@ -43,6 +43,9 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
 
   bool get _byUnit => widget.food.isUnitBased;
   double get _unitGrams => widget.food.unitGrams ?? 0;
+  // Líquido (capuccino, jugo, leche…) sin unidad → se mide en ml, no gramos.
+  bool get _byMl => widget.food.isLiquid && !_byUnit;
+  String get _unit => _byMl ? 'ml' : 'g';
 
   @override
   void initState() {
@@ -54,7 +57,9 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
     } else {
       // Si el alimento tiene una porción de referencia (custom_foods), parte de ahí.
       final serving = widget.food.servingGrams;
-      _grams = (serving != null && serving > 0) ? serving : 100.0;
+      _grams = (serving != null && serving > 0)
+          ? serving
+          : (_byMl ? 200.0 : 100.0); // un vaso/taza por defecto en líquidos
     }
     _gramsCtrl = TextEditingController(text: _grams.toStringAsFixed(0));
     _sheetController = DraggableScrollableController();
@@ -64,8 +69,9 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
     final opts = <(String, double)>[];
     final serving = widget.food.servingGrams;
     if (serving != null && serving > 0) opts.add(('1 porción', serving));
-    for (final g in _quickGrams) {
-      opts.add(('${g.toStringAsFixed(0)}g', g));
+    final presets = _byMl ? const [200.0, 250.0, 330.0, 500.0] : _quickGrams;
+    for (final g in presets) {
+      opts.add(('${g.toStringAsFixed(0)}$_unit', g));
     }
     return opts;
   }
@@ -235,9 +241,9 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'g',
-                      style: TextStyle(
+                    Text(
+                      _unit,
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w600,
                         color: Colors.black54,

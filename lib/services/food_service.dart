@@ -326,11 +326,15 @@ class FoodService {
     final logDate = date ?? DateTime.now();
     // Si el alimento se cuenta en unidades y el caller no pasó un count
     // explícito, lo derivamos: count = grams / unitGrams.
+    // Líquido sin unidad definida → se registra en ml (1 ml ≈ 1 g).
+    final bool liquid = food.isLiquid && !food.isUnitBased;
     final double? resolvedUnitCount = food.isUnitBased
         ? (unitCount ??
             (food.unitGrams! > 0 ? grams / food.unitGrams! : null))
-        : null;
-    final String? resolvedUnitLabel = food.isUnitBased ? food.unitLabel : null;
+        : (liquid ? grams : null);
+    final String? resolvedUnitLabel = food.isUnitBased
+        ? food.unitLabel
+        : (liquid ? 'ml' : null);
 
     // Auto-cache: si el producto vino de Open Food Facts (no era ya curado),
     // lo persistimos en custom_foods para que crezca con el uso real. Fire and

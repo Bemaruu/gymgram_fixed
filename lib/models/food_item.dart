@@ -24,6 +24,25 @@ class FoodItem {
   bool get isUnitBased =>
       unitLabel != null && unitLabel!.isNotEmpty && (unitGrams ?? 0) > 0;
 
+  // Palabras que identifican un líquido. Se compara por token exacto (no
+  // substring) para no marcar "aguacate" como agua ni "tomate" como mate.
+  static const _liquidWords = {
+    'capuccino', 'cappuccino', 'café', 'cafe', 'latte', 'cortado', 'leche',
+    'jugo', 'zumo', 'bebida', 'agua', 'té', 'te', 'infusión', 'infusion',
+    'batido', 'smoothie', 'licuado', 'gaseosa', 'refresco', 'soda', 'cerveza',
+    'vino', 'malta', 'néctar', 'nectar', 'mate', 'isotónica', 'isotonica',
+    'kombucha', 'sidra', 'limonada', 'milkshake', 'frappé', 'frappe', 'mocha',
+    'americano', 'espresso', 'cola', 'energética', 'energetica',
+  };
+
+  /// Líquido que conviene medir en ml en vez de gramos. Solo aplica cuando el
+  /// alimento no tiene ya una unidad definida (latas, piezas, etc.).
+  bool get isLiquid {
+    if (isUnitBased) return false;
+    final tokens = name.toLowerCase().split(RegExp(r'[^a-záéíóúüñ]+'));
+    return tokens.any(_liquidWords.contains);
+  }
+
   const FoodItem({
     required this.name,
     this.brand,

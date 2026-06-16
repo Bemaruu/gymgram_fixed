@@ -50,13 +50,17 @@ class FoodLog {
   bool get isUnitBased =>
       unitLabel != null && unitLabel!.isNotEmpty && (unitCount ?? 0) > 0;
 
-  /// Texto corto para la lista del día: "1 manzana", "6 piezas", "12 g".
+  /// Texto corto para la lista del día: "1 manzana", "6 piezas", "200 ml".
   String get portionLabel {
     if (isUnitBased) {
       final count = unitCount!;
       final countStr = count == count.roundToDouble()
           ? count.toStringAsFixed(0)
           : count.toStringAsFixed(1);
+      // Unidades de medida (ml, g) no se pluralizan: "200 ml", no "200 mls".
+      if (unitLabel == 'ml' || unitLabel == 'g') {
+        return '$countStr ${unitLabel!}';
+      }
       final plural = count > 1.0001;
       return '$countStr ${unitLabel!}${plural ? 's' : ''}';
     }
