@@ -168,40 +168,42 @@ class MedalShareCard extends StatelessWidget {
 }
 
 /// Captura el widget envuelto por [boundaryKey] (un RepaintBoundary) como PNG
-/// y abre el menú nativo de compartir. Devuelve false si algo falla.
-Future<bool> shareMedalImage({
+/// y abre el menú nativo de compartir.
+/// Devuelve null si todo salió bien, o un String con el error si algo falla
+/// (para poder mostrarlo y diagnosticar).
+Future<String?> shareMedalImage({
   required GlobalKey boundaryKey,
   required String text,
   String fileName = 'gymgram_medalla.png',
 }) async {
   try {
-    final boundary =
-        boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) {
-      debugPrint('shareMedalImage: boundary null');
-      return false;
+    final ro = boundaryKey.currentContext?.findRenderObject();
+    if (ro is! RenderRepaintBoundary) {
+      return 'sin boundary (${ro.runtimeType})';
     }
 
-    // Pequena espera para asegurar que el boundary esta pintado antes de
-    // capturar. NO usar boundary.debugNeedsPaint: en release lanza excepcion.
-    await Future<void>.delayed(const Duration(milliseconds: 32));
+    // Deja pasar un frame para asegurar que el boundary está pintado.
+    await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    final image = await boundary.toImage(pixelRatio: 3.0);
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final image = await ro.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
-    if (bytes == null) {
-      debugPrint('shareMedalImage: bytes null');
-      return false;
-    }
+    if (byteData == null) return 'no se pudo codificar PNG';
 
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$fileName');
-    await file.writeAsBytes(bytes.buffer.asUint8List());
+    await file.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
 
-    await Share.shareXFiles([XFile(file.path)], text: text);
-    return true;
-  } catch (e, st) {
-    debugPrint('shareMedalImage error: $e\n$st');
-    return false;
+    final result = await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'image/png')],
+      text: text,
+    );
+    if (result.status == ShareResultStatus.unavailable) {
+      return 'compartir no disponible en el dispositivo';
+    }
+    return null;
+  } catch (e) {
+    debugPrint('shareMedalImage error: $e');
+    return '$e';
   }
 }

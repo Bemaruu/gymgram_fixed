@@ -75,17 +75,17 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
     setState(() => _sharing = true);
     final isBeta = widget.badge.id == 'beta_exclusiva';
     final num = isBeta && _pionero != null ? ' (Pionero #$_pionero)' : '';
-    final ok = await shareMedalImage(
+    final err = await shareMedalImage(
       boundaryKey: _shareCardKey,
       text: isBeta
           ? 'Soy Pionero de GymGram 💪$num · gymgram.fit'
           : 'Desbloqueé "${widget.badge.medalName}" en GymGram 💪 · gymgram.fit',
     );
-    if (!ok && mounted) {
+    if (err != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo compartir. Intenta de nuevo.'),
-          backgroundColor: Color(0xFF3A1A1A),
+        SnackBar(
+          content: Text('No se pudo compartir: $err'),
+          backgroundColor: const Color(0xFF3A1A1A),
         ),
       );
     }

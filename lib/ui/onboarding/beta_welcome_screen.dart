@@ -73,17 +73,17 @@ class _BetaWelcomeScreenState extends State<BetaWelcomeScreen> {
     HapticFeedback.selectionClick();
 
     final num = _pionero != null ? ' (Pionero #$_pionero)' : '';
-    final ok = await shareMedalImage(
+    final err = await shareMedalImage(
       boundaryKey: _cardKey,
       text: 'Soy Pionero de GymGram 💪$num · gymgram.fit',
       fileName: 'pionero_gymgram.png',
     );
 
-    if (!ok && mounted) {
+    if (err != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo compartir. Intenta de nuevo.'),
-          backgroundColor: Color(0xFF3A1A1A),
+        SnackBar(
+          content: Text('No se pudo compartir: $err'),
+          backgroundColor: const Color(0xFF3A1A1A),
         ),
       );
     }
