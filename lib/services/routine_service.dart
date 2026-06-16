@@ -530,19 +530,36 @@ class RoutineService {
     String? workoutLogId;
     try {
       final today = DateTime.now().toIso8601String().substring(0, 10);
+      // limit(1) evita que maybeSingle() lance si existen filas duplicadas
+      // para el mismo dia (datos heredados de la condicion de carrera previa).
       final existing = await _client
           .from('workout_logs')
           .select('id')
           .eq('user_id', uid)
           .eq('logged_at', today)
+          .order('logged_at', ascending: false)
+          .limit(1)
           .maybeSingle();
       if (existing == null) {
-        final inserted = await _client.from('workout_logs').insert({
-          'user_id': uid,
-          'routine_id': routineId,
-          'logged_at': today,
-        }).select('id').single();
-        workoutLogId = inserted['id'] as String?;
+        try {
+          final inserted = await _client.from('workout_logs').insert({
+            'user_id': uid,
+            'routine_id': routineId,
+            'logged_at': today,
+          }).select('id').single();
+          workoutLogId = inserted['id'] as String?;
+        } catch (_) {
+          // Si el indice unico (user_id, logged_at) rechaza un insert
+          // concurrente, re-leemos la fila que ya existe.
+          final row = await _client
+              .from('workout_logs')
+              .select('id')
+              .eq('user_id', uid)
+              .eq('logged_at', today)
+              .limit(1)
+              .maybeSingle();
+          workoutLogId = row?['id'] as String?;
+        }
       } else {
         workoutLogId = existing['id'] as String?;
       }

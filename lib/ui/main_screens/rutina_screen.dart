@@ -65,6 +65,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
   // ID del workout_log de hoy (se crea/recupera la primera vez que se
   // intenta registrar un set). Necesario para set_logs.
   String? _workoutLogId;
+  // Future en vuelo de _ensureWorkoutLogId: evita que taps rapidos lancen
+  // varios inserts concurrentes y creen workout_logs duplicados del dia.
+  Future<String?>? _ensuringLog;
   // Cuantos sets se han registrado por ejercicio en el workout actual.
   final Map<String, int> _setCounts = {};
   // Por indice de ejercicio en _exercises: el match contra el catalogo
@@ -510,6 +513,8 @@ class _RoutineScreenState extends State<RoutineScreen> {
           .select('id')
           .eq('user_id', uid)
           .eq('logged_at', dateStr)
+          .order('logged_at', ascending: false)
+          .limit(1)
           .maybeSingle();
       if (!mounted) return;
       if (log != null) {
@@ -556,12 +561,20 @@ class _RoutineScreenState extends State<RoutineScreen> {
   }
 
   /// Garantiza que exista un workout_log para hoy y devuelve su id.
-  Future<String?> _ensureWorkoutLogId() async {
-    if (_workoutLogId != null) return _workoutLogId;
-    final id = await RoutineService.instance
-        .logWorkoutExecution(routineId: _savedRoutineId);
-    if (mounted) setState(() => _workoutLogId = id);
-    return id;
+  Future<String?> _ensureWorkoutLogId() {
+    if (_workoutLogId != null) return Future.value(_workoutLogId);
+    // Si ya hay una creacion en vuelo, reusarla en vez de disparar otro insert.
+    return _ensuringLog ??= () async {
+      try {
+        final id = await RoutineService.instance
+            .logWorkoutExecution(routineId: _savedRoutineId);
+        if (mounted) setState(() => _workoutLogId = id);
+        return id;
+      } finally {
+        // Permite reintentar si fallo (id == null).
+        _ensuringLog = null;
+      }
+    }();
   }
 
   Future<void> _openSetLoggerFor(_Exercise e, RankableExercise match) async {
