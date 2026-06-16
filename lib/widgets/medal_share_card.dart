@@ -169,11 +169,16 @@ class MedalShareCard extends StatelessWidget {
 
 /// Captura el widget envuelto por [boundaryKey] (un RepaintBoundary) como PNG
 /// y abre el menú nativo de compartir.
-/// Devuelve null si todo salió bien, o un String con el error si algo falla
-/// (para poder mostrarlo y diagnosticar).
+///
+/// [originContext] es el contexto del botón/pantalla que dispara el share. Es
+/// OBLIGATORIO en iOS/iPad: el menú es un popover que necesita un rectángulo
+/// de origen (sharePositionOrigin) no-cero; sin él iOS lanza PlatformException.
+///
+/// Devuelve null si todo salió bien, o un String con el error si algo falla.
 Future<String?> shareMedalImage({
   required GlobalKey boundaryKey,
   required String text,
+  BuildContext? originContext,
   String fileName = 'gymgram_medalla.png',
 }) async {
   try {
@@ -181,6 +186,15 @@ Future<String?> shareMedalImage({
     if (ro is! RenderRepaintBoundary) {
       return 'sin boundary (${ro.runtimeType})';
     }
+
+    // Origen del popover para iOS/iPad (rect del contexto que dispara).
+    Rect? origin;
+    final originBox = originContext?.findRenderObject();
+    if (originBox is RenderBox && originBox.hasSize) {
+      origin = originBox.localToGlobal(Offset.zero) & originBox.size;
+    }
+    // Fallback no-cero por si no hay box válido (iOS exige rect no-cero).
+    origin ??= const Rect.fromLTWH(0, 0, 1, 1);
 
     // Deja pasar un frame para asegurar que el boundary está pintado.
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -197,6 +211,7 @@ Future<String?> shareMedalImage({
     final result = await Share.shareXFiles(
       [XFile(file.path, mimeType: 'image/png')],
       text: text,
+      sharePositionOrigin: origin,
     );
     if (result.status == ShareResultStatus.unavailable) {
       return 'compartir no disponible en el dispositivo';

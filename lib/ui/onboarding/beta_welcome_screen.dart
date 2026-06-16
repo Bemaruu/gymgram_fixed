@@ -75,6 +75,7 @@ class _BetaWelcomeScreenState extends State<BetaWelcomeScreen> {
     final num = _pionero != null ? ' (Pionero #$_pionero)' : '';
     final err = await shareMedalImage(
       boundaryKey: _cardKey,
+      originContext: context,
       text: 'Soy Pionero de GymGram 💪$num · gymgram.fit',
       fileName: 'pionero_gymgram.png',
     );

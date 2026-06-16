@@ -77,6 +77,7 @@ class _MedalDetailSheetState extends State<_MedalDetailSheet> {
     final num = isBeta && _pionero != null ? ' (Pionero #$_pionero)' : '';
     final err = await shareMedalImage(
       boundaryKey: _shareCardKey,
+      originContext: context,
       text: isBeta
           ? 'Soy Pionero de GymGram 💪$num · gymgram.fit'
           : 'Desbloqueé "${widget.badge.medalName}" en GymGram 💪 · gymgram.fit',
