@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/post.dart';
@@ -30,11 +31,56 @@ class PostService {
   // Lista local para compatibilidad con pantallas que aún la usan
   static List<Post> posts = [];
 
+  /// Máximo de imágenes por carrusel (inspirado en Instagram).
+  static const int maxCarouselImages = 10;
+
   static final PostService instance = PostService._();
   PostService._();
 
   final _client = Supabase.instance.client;
   String? get _uid => _client.auth.currentUser?.id;
+
+  /// Extrae la lista ordenada de media de un post sin importar la forma del
+  /// mapa: feed RPC trae `media` (List), los selects con embed traen
+  /// `post_media` (List con `position`), y los posts antiguos solo traen
+  /// `media_url`/`media_type`. Siempre devuelve al menos 1 elemento.
+  static List<({String url, String type})> mediaOf(Map<String, dynamic> post) {
+    final result = <({String url, String type})>[];
+
+    final media = post['media'];
+    if (media is List && media.isNotEmpty) {
+      for (final m in media) {
+        if (m is Map) {
+          final url = (m['media_url'] as String?) ?? '';
+          if (url.isNotEmpty) {
+            result.add((url: url, type: (m['media_type'] as String?) ?? 'image'));
+          }
+        }
+      }
+    }
+
+    if (result.isEmpty) {
+      final embed = post['post_media'];
+      if (embed is List && embed.isNotEmpty) {
+        final rows = List<Map<String, dynamic>>.from(embed)
+          ..sort((a, b) =>
+              ((a['position'] as int?) ?? 0).compareTo((b['position'] as int?) ?? 0));
+        for (final m in rows) {
+          final url = (m['media_url'] as String?) ?? '';
+          if (url.isNotEmpty) {
+            result.add((url: url, type: (m['media_type'] as String?) ?? 'image'));
+          }
+        }
+      }
+    }
+
+    if (result.isEmpty) {
+      final url = (post['media_url'] as String?) ?? '';
+      result.add((url: url, type: (post['media_type'] as String?) ?? 'image'));
+    }
+
+    return result;
+  }
 
   // Feed rankeado por el algoritmo de GymGram (RPC en Supabase).
   // Score = (likes×1 + comments×3 + saves×5 + 1) × time_decay × social_boost
@@ -91,7 +137,11 @@ class PostService {
     // El ext se deriva del archivo real: jpg tras comprimir imagen, mp4 tras
     // comprimir video, o el original si la compresión hizo fallback.
     final uploadExt = fileToUpload.path.split('.').last.toLowerCase();
-    final path = '$uid/${DateTime.now().millisecondsSinceEpoch}.$uploadExt';
+    // Sufijo aleatorio para evitar colisiones al subir varias imágenes del
+    // carrusel en el mismo milisegundo.
+    final rand = Random().nextInt(0x7fffffff).toRadixString(36);
+    final path =
+        '$uid/${DateTime.now().millisecondsSinceEpoch}_$rand.$uploadExt';
     await _client.storage.from('posts').upload(
       path,
       fileToUpload,
@@ -100,20 +150,56 @@ class PostService {
     return _client.storage.from('posts').getPublicUrl(path);
   }
 
-  // Crea un post en Supabase
+  // Crea un post en Supabase (un solo media)
   Future<void> createPost({
     required String mediaUrl,
     required String mediaType,   // 'image' o 'video'
     required String caption,
   }) async {
+    await createPostWithMedia(
+      media: [(url: mediaUrl, type: mediaType)],
+      caption: caption,
+    );
+  }
+
+  /// Crea un post con uno o varios media (carrusel).
+  /// El primer item queda como portada en posts.media_url/media_type para
+  /// mantener compatibilidad con feed/grid; todos los items se guardan en
+  /// post_media en orden. Si la inserción del carrusel falla, el post sigue
+  /// existiendo como single (la portada) — nunca queda a medias sin imagen.
+  Future<void> createPostWithMedia({
+    required List<({String url, String type})> media,
+    required String caption,
+  }) async {
     final uid = _uid;
     if (uid == null) throw Exception('No hay usuario autenticado');
-    await _client.from('posts').insert({
+    if (media.isEmpty) throw Exception('Debes seleccionar al menos una imagen.');
+    if (media.length > maxCarouselImages) {
+      throw Exception('Máximo $maxCarouselImages imágenes por publicación.');
+    }
+
+    final cover = media.first;
+    final inserted = await _client.from('posts').insert({
       'user_id': uid,
-      'media_url': mediaUrl,
-      'media_type': mediaType,
+      'media_url': cover.url,
+      'media_type': cover.type,
       'caption': caption,
-    });
+    }).select('id').single();
+
+    final postId = inserted['id'] as String;
+
+    // Guardar todos los items (incluida la portada) en post_media en orden.
+    final rows = <Map<String, dynamic>>[];
+    for (var i = 0; i < media.length; i++) {
+      rows.add({
+        'post_id': postId,
+        'media_url': media[i].url,
+        'media_type': media[i].type,
+        'position': i,
+      });
+    }
+    await _client.from('post_media').insert(rows);
+
     await BadgeService.instance.checkAndAwardBadges(uid, 'post_created');
   }
 
@@ -123,7 +209,7 @@ class PostService {
     if (uid == null) return [];
     final result = await _client
         .from('posts')
-        .select('id, media_url, media_type, caption, likes_count, comments_count, created_at')
+        .select('id, media_url, media_type, caption, likes_count, comments_count, created_at, post_media(media_url, media_type, position)')
         .eq('user_id', uid)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(result);
@@ -248,7 +334,7 @@ class PostService {
     if (uid == null) return [];
     final result = await _client
         .from('saved_posts')
-        .select('post_id, posts(id, user_id, media_url, media_type, caption, likes_count, comments_count, created_at)')
+        .select('post_id, posts(id, user_id, media_url, media_type, caption, likes_count, comments_count, created_at, post_media(media_url, media_type, position))')
         .eq('user_id', uid)
         .order('saved_at', ascending: false);
     final list = List<Map<String, dynamic>>.from(result);

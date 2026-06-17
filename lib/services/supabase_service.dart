@@ -264,7 +264,7 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getPostsByUserId(String userId) async {
     final result = await client
         .from('posts')
-        .select('id, media_url, media_type, caption, likes_count, created_at')
+        .select('id, media_url, media_type, caption, likes_count, created_at, post_media(media_url, media_type, position)')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(result);

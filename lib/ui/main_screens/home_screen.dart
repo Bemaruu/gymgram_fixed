@@ -372,9 +372,13 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   late Animation<double> _floatingHeartOpacity;
   late Animation<double> _floatingHeartSize;
 
+  // Lista de media (carrusel). Siempre tiene al menos 1 elemento.
+  late final List<({String url, String type})> _media =
+      PostService.mediaOf(widget.post);
+
   // Helpers de acceso al mapa
   String get _postId    => (widget.post['id']        as String?) ?? '';
-  String get _mediaUrl  => (widget.post['media_url'] as String?) ?? '';
+  String get _mediaUrl  => _media.first.url;
   String get _mediaType => (widget.post['media_type'] as String?) ?? 'image';
   String get _caption   => (widget.post['caption']   as String?) ?? '';
   String get _userId    => (widget.post['user_id']   as String?) ?? '';
@@ -530,6 +534,11 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
         );
       }
       return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    // Carrusel de imágenes (más de una). Solo imágenes; el video va aparte.
+    if (_media.length > 1) {
+      return _FeedCarousel(media: _media);
     }
 
     if (isNetwork) {
@@ -898,6 +907,119 @@ class _NotifTile extends StatelessWidget {
               )
             : null,
       ),
+    );
+  }
+}
+
+// ── Carrusel de imágenes en el feed ───────────────────────────────────────────
+
+class _FeedCarousel extends StatefulWidget {
+  final List<({String url, String type})> media;
+  const _FeedCarousel({required this.media});
+
+  @override
+  State<_FeedCarousel> createState() => _FeedCarouselState();
+}
+
+class _FeedCarouselState extends State<_FeedCarousel> {
+  final PageController _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.media.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (_, i) {
+            final url = widget.media[i].url;
+            final uri = Uri.tryParse(url);
+            final isNetwork =
+                uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+            if (!isNetwork) {
+              return const Center(
+                child: Icon(PhosphorIconsRegular.imageBroken,
+                    color: Colors.white54, size: 60),
+              );
+            }
+            return CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              placeholder: (_, __) => const Center(
+                child: CircularProgressIndicator(
+                    color: Colors.white24, strokeWidth: 2),
+              ),
+              errorWidget: (_, __, ___) => const Center(
+                child: Icon(PhosphorIconsRegular.imageBroken,
+                    color: Colors.white54, size: 60),
+              ),
+            );
+          },
+        ),
+        // Contador "1/3" arriba al centro.
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 12,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_index + 1}/${widget.media.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Puntos indicadores arriba (debajo del contador).
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 38,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(widget.media.length, (i) {
+                final active = i == _index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: active ? 7 : 5,
+                  height: active ? 7 : 5,
+                  decoration: BoxDecoration(
+                    color: active ? Colors.white : Colors.white54,
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black45, blurRadius: 3),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -51,6 +51,7 @@ class PostGrid extends StatelessWidget {
       itemBuilder: (context, index) {
         final post = posts[index];
         final mediaUrl = post['media_url'] as String? ?? '';
+        final mediaCount = PostService.mediaOf(post).length;
         return _PressableCell(
           onTap: () => _showDetail(context, post),
           child: ClipRRect(
@@ -78,6 +79,17 @@ class PostGrid extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (mediaCount > 1)
+                  const Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Icon(
+                      Icons.collections,
+                      color: Colors.white,
+                      size: 18,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                    ),
+                  ),
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -185,7 +197,11 @@ class _PostDetailPageState extends State<_PostDetailPage>
   bool _isLiked = false;
   late int _likesCount;
   late int _commentsCount;
-  double? _imageAspectRatio; // relación ancho/alto natural de la imagen
+  double? _imageAspectRatio; // relación ancho/alto natural de la primera imagen
+  int _carouselIndex = 0;
+
+  late final List<({String url, String type})> _media =
+      PostService.mediaOf(widget.post);
 
   late AnimationController _scaleCtrl;
   late Animation<double> _scaleAnim;
@@ -291,7 +307,7 @@ class _PostDetailPageState extends State<_PostDetailPage>
   }
 
   String get _postId => widget.post['id'] as String? ?? '';
-  String get _mediaUrl => widget.post['media_url'] as String? ?? '';
+  String get _mediaUrl => _media.first.url;
 
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
@@ -474,20 +490,100 @@ class _PostDetailPageState extends State<_PostDetailPage>
                               maxHeight: maxH,
                               maxWidth: maxW,
                             ),
-                            child: CachedNetworkImage(
-                              imageUrl: _mediaUrl,
-                              fit: BoxFit.contain,
-                              width: imageW,
-                              errorWidget: (_, __, ___) => Container(
-                                height: 300,
-                                width: imageW,
-                                color: Colors.grey[900],
-                                child: const Center(
-                                  child: Icon(Icons.broken_image,
-                                      color: Colors.white38, size: 60),
-                                ),
-                              ),
-                            ),
+                            child: _media.length > 1
+                                ? SizedBox(
+                                    width: imageW,
+                                    height: _imageAspectRatio == null
+                                        ? maxH
+                                        : (imageW / _imageAspectRatio!)
+                                            .clamp(0.0, maxH),
+                                    child: Stack(
+                                      children: [
+                                        PageView.builder(
+                                          itemCount: _media.length,
+                                          onPageChanged: (i) => setState(
+                                              () => _carouselIndex = i),
+                                          itemBuilder: (_, i) =>
+                                              CachedNetworkImage(
+                                            imageUrl: _media[i].url,
+                                            fit: BoxFit.contain,
+                                            width: imageW,
+                                            errorWidget: (_, __, ___) =>
+                                                Container(
+                                              color: Colors.grey[900],
+                                              child: const Center(
+                                                child: Icon(Icons.broken_image,
+                                                    color: Colors.white38,
+                                                    size: 60),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 10,
+                                          right: 10,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black54,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              '${_carouselIndex + 1}/${_media.length}',
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          bottom: 10,
+                                          left: 0,
+                                          right: 0,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children:
+                                                List.generate(_media.length, (i) {
+                                              final active = i == _carouselIndex;
+                                              return AnimatedContainer(
+                                                duration: const Duration(
+                                                    milliseconds: 200),
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 3),
+                                                width: active ? 7 : 5,
+                                                height: active ? 7 : 5,
+                                                decoration: BoxDecoration(
+                                                  color: active
+                                                      ? Colors.white
+                                                      : Colors.white54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: _mediaUrl,
+                                    fit: BoxFit.contain,
+                                    width: imageW,
+                                    errorWidget: (_, __, ___) => Container(
+                                      height: 300,
+                                      width: imageW,
+                                      color: Colors.grey[900],
+                                      child: const Center(
+                                        child: Icon(Icons.broken_image,
+                                            color: Colors.white38, size: 60),
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
