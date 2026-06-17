@@ -590,11 +590,10 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                stops: const [0.0, 0.45, 1.0],
+                stops: const [0.55, 1.0],
                 colors: [
-                  Colors.black.withValues(alpha: 0.15),
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.75),
+                  Colors.black.withValues(alpha: 0.45),
                 ],
               ),
             ),
