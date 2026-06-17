@@ -10,6 +10,7 @@ import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/copy_routine_bottom_sheet.dart';
 import '../../widgets/medal_preview_section.dart';
+import '../../widgets/official_badge.dart';
 import '../../widgets/personal_routine_card.dart';
 import '../../widgets/post_grid.dart';
 import '../../widgets/premium_rank_preview.dart';
@@ -41,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late String bio;
 
   bool _isLoadingProfile = true;
+  bool _isOfficial = false;
   String? _displayName;
   String? _avatarUrl;
   List<Map<String, dynamic>> _userPosts = [];
@@ -97,6 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (dn != null && dn.isNotEmpty) _displayName = dn;
           final b = raw['bio'] as String?;
           if (b != null && b.isNotEmpty) bio = b;
+          _isOfficial = raw['is_official'] == true;
         }
         _isLoadingProfile = false;
       });
@@ -474,13 +477,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 const SizedBox(height: 6),
 
-                Text(
-                  '@$username',
-                  style: const TextStyle(
-                    color: Colors.black54,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '@$username',
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (_isOfficial) ...[
+                      const SizedBox(width: 6),
+                      const OfficialBadge(size: 18),
+                    ],
+                  ],
                 ),
 
                 const SizedBox(height: 8),

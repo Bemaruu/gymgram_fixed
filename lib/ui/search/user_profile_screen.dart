@@ -9,6 +9,7 @@ import '../../services/routine_service.dart';
 import '../../services/supabase_service.dart';
 import '../messaging/chat_conversation_screen.dart';
 import '../../widgets/copy_personal_week_sheet.dart';
+import '../../widgets/official_badge.dart';
 import '../../widgets/copy_routine_bottom_sheet.dart';
 import '../../widgets/medal_preview_section.dart';
 import '../../widgets/personal_routine_card.dart';
@@ -378,9 +379,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         const SizedBox(height: 4),
 
                         // Username
-                        Text(
-                          '@$username',
-                          style: const TextStyle(color: Colors.black54, fontSize: 14),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '@$username',
+                              style: const TextStyle(color: Colors.black54, fontSize: 14),
+                            ),
+                            if (_profile?['is_official'] == true) ...[
+                              const SizedBox(width: 5),
+                              const OfficialBadge(size: 16),
+                            ],
+                          ],
                         ),
 
                         // Bio

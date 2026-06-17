@@ -75,7 +75,8 @@ class SupabaseService {
         .select(
           'id, username, full_name, bio, avatar_url, weight, height, '
           'target_weight, fitness_goal, training_location, gender, age, '
-          'country_code, requires_medical_clearance, eating_disorder_risk',
+          'country_code, requires_medical_clearance, eating_disorder_risk, '
+          'is_official',
         )
         .eq('id', uid)
         .maybeSingle();
@@ -256,7 +257,7 @@ class SupabaseService {
   Future<Map<String, dynamic>?> getProfileById(String userId) async {
     return await client
         .from('public_profiles')
-        .select('id, username, full_name, avatar_url, bio, fitness_goal, training_location')
+        .select('id, username, full_name, avatar_url, bio, fitness_goal, training_location, is_official')
         .eq('id', userId)
         .maybeSingle();
   }

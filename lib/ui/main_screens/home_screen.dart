@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import '../../widgets/official_badge.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/analytics_service.dart';
@@ -387,6 +388,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
       widget.post['profiles'] as Map<String, dynamic>?;
   String get _username   => (_profile?['username']  as String?) ?? '';
   String? get _avatarUrl => _profile?['avatar_url'] as String?;
+  bool get _isOfficial   => _profile?['is_official'] == true;
 
   @override
   void initState() {
@@ -657,6 +659,10 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
                         shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                       ),
                     ),
+                    if (_isOfficial) ...[
+                      const SizedBox(width: 5),
+                      const OfficialBadge(size: 17),
+                    ],
                   ],
                 ),
               ),
