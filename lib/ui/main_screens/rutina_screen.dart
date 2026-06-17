@@ -503,11 +503,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
     final uid = SupabaseService.instance.currentUserId;
     if (uid == null || _exercises.isEmpty) return;
     try {
-      final now = DateTime.now();
-      final daysDiff = _selectedDayIndex - (now.weekday - 1);
-      final target = DateTime(now.year, now.month, now.day).add(Duration(days: daysDiff));
-      final dateStr =
-          '${target.year}-${target.month.toString().padLeft(2, '0')}-${target.day.toString().padLeft(2, '0')}';
+      final dateStr = _dayDateStr(_selectedDayIndex);
       final log = await SupabaseService.instance.client
           .from('workout_logs')
           .select('id')
@@ -517,18 +513,58 @@ class _RoutineScreenState extends State<RoutineScreen> {
           .limit(1)
           .maybeSingle();
       if (!mounted) return;
-      if (log != null) {
-        final logId = log['id'] as String?;
-        setState(() {
-          _workoutLogId = logId;
-          for (final e in _exercises) {
-            e.isChecked = true;
-          }
-        });
-        if (logId != null) {
-          await _refreshSetCounts(logId);
+      final logId = log?['id'] as String?;
+      // La existencia de un workout_log del dia NO significa que todos los
+      // ejercicios esten hechos: el log se crea al marcar el primer ejercicio.
+      // Restauramos SOLO los checks que el usuario marco (persistidos local),
+      // y luego los rankeables se reconfirman desde set_logs.
+      final checkedNames = await _loadSimpleChecks(uid, dateStr);
+      if (!mounted) return;
+      setState(() {
+        _workoutLogId = logId;
+        for (final e in _exercises) {
+          e.isChecked = checkedNames.contains(e.name);
         }
+      });
+      if (logId != null) {
+        await _refreshSetCounts(logId);
       }
+    } catch (_) {}
+  }
+
+  /// Fecha (YYYY-MM-DD) del dia seleccionado relativo a la semana actual.
+  String _dayDateStr(int dayIndex) {
+    final now = DateTime.now();
+    final daysDiff = dayIndex - (now.weekday - 1);
+    final target =
+        DateTime(now.year, now.month, now.day).add(Duration(days: daysDiff));
+    return '${target.year}-${target.month.toString().padLeft(2, '0')}-${target.day.toString().padLeft(2, '0')}';
+  }
+
+  String _simpleChecksKey(String uid, String dateStr) =>
+      'routine_checks_${uid}_$dateStr';
+
+  /// Nombres de ejercicios que el usuario marco a mano para ese dia.
+  Future<Set<String>> _loadSimpleChecks(String uid, String dateStr) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return (prefs.getStringList(_simpleChecksKey(uid, dateStr)) ?? const [])
+          .toSet();
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  /// Persiste los checks actuales del dia para que sobrevivan a la navegacion.
+  Future<void> _persistSimpleChecks() async {
+    final uid = SupabaseService.instance.currentUserId;
+    if (uid == null) return;
+    try {
+      final dateStr = _dayDateStr(_selectedDayIndex);
+      final checked =
+          _exercises.where((e) => e.isChecked).map((e) => e.name).toList();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_simpleChecksKey(uid, dateStr), checked);
     } catch (_) {}
   }
 
@@ -606,6 +642,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
     await _ensureWorkoutLogId();
     if (!mounted) return;
     setState(() => e.isChecked = !e.isChecked);
+    _persistSimpleChecks();
   }
 
   Future<void> _restorePreviousRoutine() async {
@@ -784,6 +821,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
         e.isChecked = true;
       }
     });
+    _persistSimpleChecks();
     try {
       final id = await RoutineService.instance
           .logWorkoutExecution(routineId: _savedRoutineId);
