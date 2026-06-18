@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
@@ -68,6 +69,10 @@ class SetLoggerSheet extends StatefulWidget {
   State<SetLoggerSheet> createState() => _SetLoggerSheetState();
 }
 
+// Preferencia de unidad de peso (kg/lb) compartida entre sesiones.
+const String _kWeightUnitPrefKey = 'weight_input_unit';
+const double _kLbPerKg = 2.2046226218;
+
 class _SetLoggerSheetState extends State<SetLoggerSheet> {
   final _client = Supabase.instance.client;
   final _weightCtrl = TextEditingController();
@@ -80,13 +85,51 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
   bool _addedAny = false;
   RankedTier? _userTier;
 
+  // Unidad en la que el usuario ingresa/ve el peso. El cálculo y el guardado
+  // siempre son en kg (weight_kg); lb es solo capa de entrada/visualización.
+  String _unit = 'kg';
+  String get _unitLabel => _unit == 'lb' ? 'lb' : 'kg';
+  double _toKg(double v) => _unit == 'lb' ? v / _kLbPerKg : v;
+  double _fromKg(double kg) => _unit == 'lb' ? kg * _kLbPerKg : kg;
+
   @override
   void initState() {
     super.initState();
-    _loadSets();
+    _initUnitThenLoad();
     if (widget.isRankable) {
       _loadUserTier();
     }
+  }
+
+  /// Carga la unidad preferida ANTES de prellenar el peso, para que el valor
+  /// inicial se muestre en la unidad correcta.
+  Future<void> _initUnitThenLoad() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final u = prefs.getString(_kWeightUnitPrefKey);
+      if (u != null && (u == 'lb' || u == 'kg')) _unit = u;
+    } catch (_) {}
+    if (mounted) setState(() {});
+    await _loadSets();
+  }
+
+  Future<void> _switchUnit(String u) async {
+    if (u == _unit) return;
+    final prevUnit = _unit;
+    final current = double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'));
+    setState(() {
+      _unit = u;
+      // Convertir el valor actual para que represente el mismo peso real.
+      if (current != null && current > 0) {
+        final kg = prevUnit == 'lb' ? current / _kLbPerKg : current;
+        _weightCtrl.text = _fmtWeight(_fromKg(kg));
+      }
+    });
+    HapticFeedback.selectionClick();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kWeightUnitPrefKey, u);
+    } catch (_) {}
   }
 
   Future<void> _loadUserTier() async {
@@ -147,7 +190,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
         _sets = list;
         _loading = false;
         if (lastWeight != null && _weightCtrl.text.isEmpty) {
-          _weightCtrl.text = _fmtWeight(lastWeight);
+          _weightCtrl.text = _fmtWeight(_fromKg(lastWeight));
         }
       });
     } catch (e) {
@@ -187,11 +230,15 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
 
     final weightTxt = _weightCtrl.text.trim().replaceAll(',', '.');
     final repsTxt = _repsCtrl.text.trim();
-    final weight = double.tryParse(weightTxt);
+    final entered = double.tryParse(weightTxt);
     final reps = int.tryParse(repsTxt);
 
-    if (weight == null || weight <= 0 || weight > 500) {
-      _toast('Peso invalido (0.1 - 500 kg)');
+    // El cálculo y el guardado siempre van en kg; si el usuario eligió lb,
+    // convertimos aquí. weight queda SIEMPRE en kg de acá en adelante.
+    final weight = entered == null ? null : _toKg(entered);
+    if (entered == null || entered <= 0 || weight == null || weight > 500) {
+      final maxInUnit = _fmtWeight(_fromKg(500));
+      _toast('Peso inválido (máx $maxInUnit $_unitLabel)');
       return;
     }
     if (reps == null || reps < 1 || reps > 50) {
@@ -264,9 +311,12 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
           rpEstimate = (delta * 200).clamp(15, 80).round();
         }
         _showPrOverlay(
-          weight: weight,
+          weight: _fromKg(weight),
+          unitLabel: _unitLabel,
           reps: reps,
-          e1rm: e1rm,
+          // e1rm se calcula en kg; lo convertimos a la unidad elegida para que
+          // overlay muestre peso y e1RM coherentes (ambos en lb o ambos en kg).
+          e1rm: _fromKg(e1rm),
           rpEstimate: rpEstimate,
         );
       }
@@ -470,6 +520,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
 
   void _showPrOverlay({
     required double weight,
+    required String unitLabel,
     required int reps,
     required double e1rm,
     required int rpEstimate,
@@ -486,6 +537,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
         transitionDuration: const Duration(milliseconds: 250),
         pageBuilder: (_, __, ___) => _PROverlay(
           weight: weight,
+          unitLabel: unitLabel,
           reps: reps,
           e1rm: e1rm,
           rpEstimate: rpEstimate,
@@ -594,7 +646,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Set $idx: ${_fmtWeight(w)} kg × $r',
+                    'Set $idx: ${_fmtWeight(_fromKg(w))} $_unitLabel × $r',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -627,13 +679,20 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Registrar nuevo set',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Registrar nuevo set',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _buildUnitToggle(),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
@@ -642,7 +701,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
                 child: _numField(
                   controller: _weightCtrl,
                   focusNode: _weightFocus,
-                  label: 'Peso (kg)',
+                  label: 'Peso ($_unitLabel)',
                   allowDecimal: true,
                 ),
               ),
@@ -685,6 +744,44 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUnitToggle() {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [_unitOption('kg'), _unitOption('lb')],
+      ),
+    );
+  }
+
+  Widget _unitOption(String u) {
+    final selected = _unit == u;
+    return GestureDetector(
+      onTap: () => _switchUnit(u),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accentOrange : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          u.toUpperCase(),
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.white54,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -736,6 +833,7 @@ class _SetLoggerSheetState extends State<SetLoggerSheet> {
 
 class _PROverlay extends StatefulWidget {
   final double weight;
+  final String unitLabel;
   final int reps;
   final double e1rm;
   final int rpEstimate;
@@ -743,6 +841,7 @@ class _PROverlay extends StatefulWidget {
 
   const _PROverlay({
     required this.weight,
+    required this.unitLabel,
     required this.reps,
     required this.e1rm,
     required this.rpEstimate,
@@ -853,7 +952,7 @@ class _PROverlayState extends State<_PROverlay>
                       child: Opacity(
                         opacity: weightOp,
                         child: Text(
-                          '${_fmt(widget.weight)}kg × ${widget.reps}',
+                          '${_fmt(widget.weight)}${widget.unitLabel} × ${widget.reps}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 48,
@@ -866,7 +965,7 @@ class _PROverlayState extends State<_PROverlay>
                     Opacity(
                       opacity: e1rmOp,
                       child: Text(
-                        'e1RM: ${_fmt(widget.e1rm)}kg',
+                        'e1RM: ${_fmt(widget.e1rm)}${widget.unitLabel}',
                         style: TextStyle(
                           color: widget.tierColor,
                           fontSize: 16,
