@@ -236,7 +236,13 @@ class PostService {
         .eq('post_id', postId)
         .maybeSingle();
     if (existing == null) {
-      await _client.from('likes').insert({'user_id': uid, 'post_id': postId});
+      // upsert idempotente: si el like ya existe (race / otro dispositivo) no
+      // lanza por la unique (user_id, post_id) ni cuenta doble.
+      await _client.from('likes').upsert(
+        {'user_id': uid, 'post_id': postId},
+        onConflict: 'user_id,post_id',
+        ignoreDuplicates: true,
+      );
       await BadgeService.instance.checkAndAwardBadges(uid, 'like_given');
       try {
         await _client.rpc('notify_like', params: {'p_post_id': postId});
@@ -307,10 +313,11 @@ class PostService {
         .eq('post_id', postId)
         .maybeSingle();
     if (existing == null) {
-      await _client.from('saved_posts').insert({
-        'user_id': uid,
-        'post_id': postId,
-      });
+      await _client.from('saved_posts').upsert(
+        {'user_id': uid, 'post_id': postId},
+        onConflict: 'post_id,user_id',
+        ignoreDuplicates: true,
+      );
     } else {
       await _client.from('saved_posts').delete().eq('id', existing['id']);
     }

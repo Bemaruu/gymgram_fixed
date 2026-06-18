@@ -230,6 +230,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 final post = _posts[index];
                 final id = post['id'] as String? ?? '';
                 return PostWidget(
+                  // Clave por id del post: sin ella, al refrescar/reordenar el
+                  // feed Flutter reutiliza el State por posición y los
+                  // contadores + estado de like quedan pegados del post
+                  // anterior (initState no vuelve a correr).
+                  key: ValueKey(id),
                   post: post,
                   initialIsLiked: _likedIds.contains(id),
                   initialIsSaved: _savedIds.contains(id),
@@ -373,6 +378,11 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   late int _likesCount;
   late int _commentsCount;
 
+  // Guards anti spam-tap: evitan llamadas de red concurrentes que podrían
+  // descuadrar el conteo (race entre like/unlike o save/unsave rápidos).
+  bool _likeBusy = false;
+  bool _saveBusy = false;
+
   late AnimationController _heartBounceCtrl;
   late Animation<double> _heartScale;
 
@@ -443,14 +453,41 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
 
   }
 
+  @override
+  void didUpdateWidget(covariant PostWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Tras un refresh del feed, el mismo post (misma key) llega con datos
+    // frescos del servidor. Re-sincronizamos contadores y estado solo cuando
+    // realmente cambian, para no pisar la actualización optimista en rebuilds
+    // no relacionados (polls de notificaciones, etc.).
+    final newLikes = (widget.post['likes_count'] as int?) ?? 0;
+    final oldLikes = (oldWidget.post['likes_count'] as int?) ?? 0;
+    final newComments = (widget.post['comments_count'] as int?) ?? 0;
+    final oldComments = (oldWidget.post['comments_count'] as int?) ?? 0;
+    if (newLikes != oldLikes ||
+        newComments != oldComments ||
+        widget.initialIsLiked != oldWidget.initialIsLiked ||
+        widget.initialIsSaved != oldWidget.initialIsSaved) {
+      setState(() {
+        _likesCount = newLikes;
+        _commentsCount = newComments;
+        _isLiked = widget.initialIsLiked;
+        _isSaved = widget.initialIsSaved;
+      });
+    }
+  }
+
   Future<void> _toggleSave() async {
-    if (_postId.isEmpty) return;
+    if (_postId.isEmpty || _saveBusy) return;
+    _saveBusy = true;
     final newSaved = !_isSaved;
     setState(() => _isSaved = newSaved);
     try {
       await PostService.instance.toggleSavePost(_postId);
     } catch (_) {
       if (mounted) setState(() => _isSaved = !newSaved);
+    } finally {
+      _saveBusy = false;
     }
   }
 
@@ -473,11 +510,12 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
   }
 
   Future<void> _toggleLike() async {
-    if (_postId.isEmpty) return;
+    if (_postId.isEmpty || _likeBusy) return;
+    _likeBusy = true;
     final newLiked = !_isLiked;
     setState(() {
       _isLiked = newLiked;
-      _likesCount += newLiked ? 1 : -1;
+      _likesCount = (_likesCount + (newLiked ? 1 : -1)).clamp(0, 1 << 31);
     });
     _heartBounceCtrl.forward(from: 0);
     if (newLiked) {
@@ -491,9 +529,11 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _isLiked = !newLiked;
-          _likesCount += newLiked ? -1 : 1;
+          _likesCount = (_likesCount + (newLiked ? -1 : 1)).clamp(0, 1 << 31);
         });
       }
+    } finally {
+      _likeBusy = false;
     }
   }
 
