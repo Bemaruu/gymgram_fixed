@@ -16,6 +16,7 @@ import '../search/search_screen.dart';
 import '../search/user_profile_screen.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeletons/feed_post_skeleton.dart';
+import '../../widgets/streak_flame.dart';
 import '../social/comments_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -277,6 +278,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+          ),
+          // Indicador de racha (fueguito)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            left: 60,
+            child: const StreakBadge(),
           ),
           // Botón de mensajes
           Positioned(

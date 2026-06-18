@@ -9,8 +9,11 @@ import '../../services/exercise_service.dart';
 import '../../services/progression_service.dart';
 import '../../services/rankable_exercise_lookup.dart';
 import '../../services/routine_service.dart';
+import '../../services/streak_service.dart';
 import '../../services/supabase_service.dart';
+import '../../models/streak_model.dart';
 import '../../widgets/ai_plan_loading.dart';
+import '../../widgets/streak_flame.dart';
 import '../../widgets/progression_nudge_chip.dart';
 import '../../widgets/routine_analysis_banner.dart';
 import '../../widgets/skeletons/routine_skeleton.dart';
@@ -605,6 +608,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
         final id = await RoutineService.instance
             .logWorkoutExecution(routineId: _savedRoutineId);
         if (mounted) setState(() => _workoutLogId = id);
+        // Al crear el log del día (primer ejercicio marcado) actualizamos la
+        // racha en segundo plano, sin bloquear la UI ni romper si falla.
+        if (id != null) StreakService.instance.bumpAfterWorkout();
         return id;
       } finally {
         // Permite reintentar si fallo (id == null).
@@ -827,7 +833,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
           .logWorkoutExecution(routineId: _savedRoutineId);
       if (!mounted) return;
       if (id != null) setState(() => _workoutLogId = id);
-      _showCompletionSheet();
+      // Recalcula la racha y muestra el resultado en el sheet de completado.
+      final streak = await StreakService.instance.bumpAfterWorkout();
+      if (!mounted) return;
+      _showCompletionSheet(streak);
     } catch (e) {
       debugPrint('_logWorkoutExecution error: $e');
       if (mounted) {
@@ -843,12 +852,12 @@ class _RoutineScreenState extends State<RoutineScreen> {
     }
   }
 
-  void _showCompletionSheet() {
+  void _showCompletionSheet([StreakModel? streak]) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => const _CompletionSheet(),
+      builder: (_) => _CompletionSheet(streak: streak),
     );
   }
 
@@ -1785,10 +1794,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
 }
 
 class _CompletionSheet extends StatelessWidget {
-  const _CompletionSheet();
+  final StreakModel? streak;
+  const _CompletionSheet({this.streak});
 
   @override
   Widget build(BuildContext context) {
+    final s = streak;
+    final hasStreak = s != null && s.currentStreak > 0;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
@@ -1838,6 +1850,10 @@ class _CompletionSheet extends StatelessWidget {
                 'Un dia mas de progreso',
                 style: TextStyle(color: Colors.white60, fontSize: 14),
               ),
+              if (hasStreak) ...[
+                const SizedBox(height: 18),
+                _StreakCelebration(streak: s),
+              ],
               const SizedBox(height: 8),
               // Solo visible para usuarios Premium (WorkoutFeedbackPrompt
               // maneja internamente el tier check y muestra SizedBox.shrink
@@ -1855,6 +1871,66 @@ class _CompletionSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Celebración de racha dentro del sheet de "Entrenamiento completado".
+class _StreakCelebration extends StatelessWidget {
+  final StreakModel streak;
+  const _StreakCelebration({required this.streak});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = streak.currentStreak;
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const AnimatedFlame(size: 30),
+            const SizedBox(width: 8),
+            Text(
+              n == 1 ? '1 día' : '$n días',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (streak.isNewRecord && n > 1)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFC83D).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(PhosphorIconsFill.trophy, color: Color(0xFFFFC83D), size: 15),
+                SizedBox(width: 6),
+                Text(
+                  '¡Nuevo récord!',
+                  style: TextStyle(
+                    color: Color(0xFFFFC83D),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Text(
+            'Racha encendida · récord ${streak.bestStreak}',
+            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          ),
+      ],
     );
   }
 }

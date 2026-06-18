@@ -17,6 +17,7 @@ import '../../widgets/post_grid.dart';
 import '../../widgets/premium_rank_preview.dart';
 import '../../widgets/profile_tabs_nav.dart';
 import '../../widgets/routine_card.dart';
+import '../../widgets/streak_flame.dart';
 import '../recipes/widgets/recipes_grid.dart';
 import '../social/follow_list_screen.dart';
 
@@ -402,6 +403,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             style: const TextStyle(color: Colors.black87, fontSize: 14, height: 1.4),
                           ),
                         ],
+
+                        const SizedBox(height: 12),
+
+                        StreakInlineAuto(userId: widget.userId),
 
                         const SizedBox(height: 16),
 

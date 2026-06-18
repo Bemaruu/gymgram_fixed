@@ -14,6 +14,7 @@ import '../../widgets/official_badge.dart';
 import '../../widgets/personal_routine_card.dart';
 import '../../widgets/post_grid.dart';
 import '../../widgets/premium_rank_preview.dart';
+import '../../widgets/streak_flame.dart';
 import '../../widgets/profile_tabs_nav.dart';
 import '../../widgets/routine_card.dart';
 import '../recipes/create_recipe_screen.dart';
@@ -502,6 +503,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(color: Colors.black54),
                   textAlign: TextAlign.center,
                 ),
+
+                const SizedBox(height: 12),
+
+                const StreakInlineAuto(),
 
                 const SizedBox(height: 24),
 
