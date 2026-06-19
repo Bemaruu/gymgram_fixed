@@ -301,13 +301,32 @@ class _RoutineScreenState extends State<RoutineScreen> {
   /// Llama a la RPC server-side y guarda el overlay (sets/reps/nudge).
   /// Si falla, simplemente no hay overlay y se sigue mostrando el plan IA.
   Future<void> _loadProgression() async {
-    final names = _exercises.map((e) => e.name).where((n) => n.isNotEmpty).toList();
+    // Construimos nombres + baseline POR EJERCICIO del plan de IA en un solo
+    // paso para que los índices queden alineados. El baseline siembra el estado
+    // inicial diferenciado (antes la progresión mostraba 3x8-12 para todos).
+    final names = <String>[];
+    final baseSets = <int>[];
+    final baseRepsMin = <int>[];
+    final baseRepsMax = <int>[];
+    for (final e in _exercises) {
+      if (e.name.isEmpty) continue;
+      names.add(e.name);
+      baseSets.add(e.sets > 0 ? e.sets : 0);
+      final (rMin, rMax) = _parseRepRange(e.reps);
+      baseRepsMin.add(rMin);
+      baseRepsMax.add(rMax);
+    }
     if (names.isEmpty) {
       if (mounted) setState(_progression.clear);
       return;
     }
     final snapshot = List<_Exercise>.from(_exercises);
-    final result = await ProgressionService.instance.recompute(names);
+    final result = await ProgressionService.instance.recompute(
+      names,
+      baseSets: baseSets,
+      baseRepsMin: baseRepsMin,
+      baseRepsMax: baseRepsMax,
+    );
     if (!mounted) return;
     if (!_sameExerciseList(snapshot, _exercises)) return;
     setState(() {
@@ -315,6 +334,21 @@ class _RoutineScreenState extends State<RoutineScreen> {
         ..clear()
         ..addAll(result);
     });
+  }
+
+  /// Parsea un rango de reps del plan IA ("6-8", "12", "8-12") a (min, max).
+  /// Devuelve (0, 0) si no es numérico (la RPC usa 0 = "usa la regla").
+  (int, int) _parseRepRange(String reps) {
+    final range = RegExp(r'(\d+)\s*[-–]\s*(\d+)').firstMatch(reps);
+    if (range != null) {
+      return (int.parse(range.group(1)!), int.parse(range.group(2)!));
+    }
+    final single = RegExp(r'(\d+)').firstMatch(reps);
+    if (single != null) {
+      final v = int.parse(single.group(1)!);
+      return (v, v);
+    }
+    return (0, 0);
   }
 
   /// Garantiza que tengamos el plan de la edge en memoria. Si no se ha pedido

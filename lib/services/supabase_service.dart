@@ -28,6 +28,10 @@ class SupabaseService {
     required String timeAvailability,
     String? birthDate,
     String? countryCode,
+    // Plazo del objetivo físico (3/6/12 meses) + fechas de inicio/vencimiento.
+    int? goalTimeframeMonths,
+    String? goalStartedAt,
+    String? goalTargetDate,
   }) async {
     final row = <String, dynamic>{
       'id': userId,
@@ -45,6 +49,11 @@ class SupabaseService {
     };
     if (birthDate != null && birthDate.isNotEmpty) {
       row['birth_date'] = birthDate;
+    }
+    if (goalTimeframeMonths != null) {
+      row['goal_timeframe_months'] = goalTimeframeMonths;
+      row['goal_started_at'] = goalStartedAt;
+      row['goal_target_date'] = goalTargetDate;
     }
     await client.from('profiles').upsert(row);
   }
@@ -76,7 +85,7 @@ class SupabaseService {
           'id, username, full_name, bio, avatar_url, weight, height, '
           'target_weight, fitness_goal, training_location, gender, age, '
           'country_code, requires_medical_clearance, eating_disorder_risk, '
-          'is_official',
+          'is_official, goal_timeframe_months, goal_started_at, goal_target_date',
         )
         .eq('id', uid)
         .maybeSingle();
@@ -407,6 +416,12 @@ class SupabaseService {
     String? fitnessGoal,
     String? trainingLocation,
     String? foodMode,
+    // Plazo del objetivo. Usar setGoalTimeframe=true para escribir incluso
+    // valores null (al fijar un objetivo sin plazo, ej. mantenimiento).
+    bool setGoalTimeframe = false,
+    int? goalTimeframeMonths,
+    String? goalStartedAt,
+    String? goalTargetDate,
   }) async {
     final uid = currentUserId;
     if (uid == null) return;
@@ -418,6 +433,11 @@ class SupabaseService {
     if (fitnessGoal != null) updates['fitness_goal'] = fitnessGoal;
     if (trainingLocation != null) updates['training_location'] = trainingLocation;
     if (foodMode != null) updates['food_mode'] = foodMode;
+    if (setGoalTimeframe) {
+      updates['goal_timeframe_months'] = goalTimeframeMonths;
+      updates['goal_started_at'] = goalStartedAt;
+      updates['goal_target_date'] = goalTargetDate;
+    }
     if (updates.isNotEmpty) {
       await client.from('profiles').update(updates).eq('id', uid);
     }

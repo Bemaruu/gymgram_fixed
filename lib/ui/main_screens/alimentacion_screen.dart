@@ -14,6 +14,7 @@ import '../../services/analytics_service.dart';
 import '../../services/food_scan_service.dart';
 import '../../services/food_service.dart';
 import '../../services/nutrition_calculator.dart';
+import '../../services/nutrition_goals_service.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
@@ -65,6 +66,12 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   int _trainingDaysPerWeek = 3;
   String _dailyActivityLevel = DailyActivityLevel.moderate;
   bool _eatingDisorderRisk = false;
+  // Plazo del objetivo (3/6/12 meses) y si ya venció → mantenimiento auto.
+  int? _goalTimeframeMonths;
+  bool _goalExpired = false;
+  int _mealsPerDay = 4;
+  // Firma del último nutrition_goals persistido (evita escrituras redundantes).
+  String? _savedGoalsSig;
   String? _cookingTime;
   String? _userId;
   String _countryCode = CountryUtils.defaultCountry;
@@ -142,8 +149,26 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       final height = (profile?['height'] as num?)?.toDouble() ?? 170.0;
       final targetWeight = (profile?['target_weight'] as num?)?.toDouble() ?? weight;
 
+      // Plazo del objetivo: si goal_target_date ya pasó (fecha LOCAL), el plan
+      // entra en mantenimiento automáticamente hasta que el usuario fije uno
+      // nuevo desde "Cambiar objetivo".
+      final timeframeMonths = (profile?['goal_timeframe_months'] as num?)?.toInt();
+      final targetDateStr = profile?['goal_target_date'] as String?;
+      bool goalExpired = false;
+      if (targetDateStr != null) {
+        final td = DateTime.tryParse(targetDateStr);
+        if (td != null) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final target = DateTime(td.year, td.month, td.day);
+          goalExpired = today.isAfter(target);
+        }
+      }
+
       final rawDays = (onboarding?['available_days'] as List?)?.cast<String>() ?? [];
       final trainingDaysPerWeek = rawDays.isEmpty ? 3 : rawDays.length.clamp(1, 7);
+      final mealsPerDay =
+          (onboarding?['meals_per_day'] as num?)?.toInt().clamp(2, 6) ?? 4;
 
       final dailyActivityLevel =
           (onboarding?['daily_activity_level'] as String?) ??
@@ -175,6 +200,9 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
         _height = height;
         _trainingDaysPerWeek = trainingDaysPerWeek;
         _dailyActivityLevel = dailyActivityLevel;
+        _goalTimeframeMonths = timeframeMonths;
+        _goalExpired = goalExpired;
+        _mealsPerDay = mealsPerDay;
         _cookingTime = cookingTime;
         _eatingDisorderRisk = eatingDisorderRisk;
         _isVegan = isVegan;
@@ -232,7 +260,28 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       trainingDaysPerWeek: _trainingDaysPerWeek,
       dailyActivityLevel: _dailyActivityLevel,
       eatingDisorderRisk: _eatingDisorderRisk,
+      goalTimeframeMonths: _goalTimeframeMonths,
+      goalExpired: _goalExpired,
     );
+
+    // Persistir los targets reales en nutrition_goals: es la ÚNICA fuente que
+    // lee la edge generate-nutrition-plan para armar el plan. Sin esto la IA
+    // usaba defaults (2000 kcal) e ignoraba el objetivo/plazo del usuario.
+    final goalsChanged = await _persistNutritionGoals(nutrition);
+    if (goalsChanged) {
+      // Los targets cambiaron (objetivo, plazo, vencimiento o peso) → el plan
+      // semanal cacheado quedó obsoleto. Lo invalidamos para regenerarlo con
+      // los nuevos números.
+      _weekDays = null;
+      _weekPlanIndex = null;
+      try {
+        await Supabase.instance.client
+            .from('nutrition_plans')
+            .delete()
+            .eq('user_id', _userId ?? '')
+            .eq('week_index', weekIndex);
+      } catch (_) {}
+    }
 
     // Carga plan semanal solo si no esta cacheado para este weekIndex.
     if (_weekDays == null || _weekPlanIndex != weekIndex) {
@@ -270,6 +319,48 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
       _items = items;
       _checkedKeys.clear();
     });
+  }
+
+  /// Persiste los targets nutricionales en `nutrition_goals` (fuente única que
+  /// lee la edge). Devuelve true si los targets cambiaron respecto a lo
+  /// almacenado (para invalidar el plan cacheado). Deduplica por firma para no
+  /// escribir/leer en cada cambio de día.
+  Future<bool> _persistNutritionGoals(NutritionResult n) async {
+    final sig = '${n.recommendedCalories}|${n.proteinGrams}|${n.carbsGrams}|'
+        '${n.fatsGrams}|${n.fiberGrams}|${n.sodiumMaxMg}|${n.waterMl}|'
+        '$_mealsPerDay';
+    if (sig == _savedGoalsSig) return false; // ya sincronizado en esta sesión
+
+    try {
+      final stored = await NutritionGoalsService.instance.get();
+      final storedSig = stored == null
+          ? null
+          : '${stored['daily_kcal']}|${stored['protein_g']}|'
+              '${stored['carbs_g']}|${stored['fat_g']}|${stored['fiber_g']}|'
+              '${stored['sodium_max_mg']}|${stored['water_target_ml']}|'
+              '${stored['meals_per_day']}';
+      if (storedSig == sig) {
+        _savedGoalsSig = sig;
+        return false; // DB ya tiene los targets correctos
+      }
+
+      await NutritionGoalsService.instance.save(
+        kcal: n.recommendedCalories,
+        protein: n.proteinGrams,
+        carbs: n.carbsGrams,
+        fat: n.fatsGrams,
+        fiber: n.fiberGrams,
+        sodiumMaxMg: n.sodiumMaxMg,
+        waterTargetMl: n.waterMl,
+        mealsPerDay: _mealsPerDay,
+      );
+      _savedGoalsSig = sig;
+      // storedSig != null → había targets previos distintos = cambio real.
+      return storedSig != null;
+    } catch (e) {
+      debugPrint('persist nutrition_goals error: $e');
+      return false;
+    }
   }
 
   /// Carga el plan semanal: 1) lee `nutrition_plans` (cache DB), 2) si no

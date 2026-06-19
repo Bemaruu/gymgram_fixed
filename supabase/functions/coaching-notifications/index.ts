@@ -142,13 +142,22 @@ function slotName(localHour: number): string {
 }
 
 serve(async (req) => {
-  // Solo el cron (service_role) puede dispararlo.
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+  // Solo el cron puede dispararlo. Validamos el bearer contra el MISMO
+  // service_role_key guardado en vault que envía el cron (vía RPC), para no
+  // depender de que la env auto-inyectada coincida con la copia del vault
+  // (una rotación de llaves dejaba esto en 401 y mataba las notificaciones).
   const auth = req.headers.get('Authorization') ?? '';
-  if (auth !== `Bearer ${SERVICE_ROLE_KEY}`) {
+  let authorized = auth === `Bearer ${SERVICE_ROLE_KEY}`;
+  if (!authorized) {
+    const { data: ok } = await supabase.rpc('is_cron_authorized', { p_auth: auth });
+    authorized = ok === true;
+  }
+  if (!authorized) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const nowMs = Date.now();
 
   const { data: candidates, error } = await supabase

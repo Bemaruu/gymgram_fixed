@@ -78,6 +78,8 @@ class NutritionCalculator {
   /// [fitnessGoal]         'LOSE_WEIGHT' | 'GAIN_MUSCLE' | 'MAINTAIN'
   /// [trainingDaysPerWeek] días de entrenamiento por semana (0–7)
   /// [dailyActivityLevel]  ver constantes DailyActivityLevel
+  /// [goalTimeframeMonths] plazo elegido (3/6/12). null = ritmo por defecto.
+  /// [goalExpired]         si el plazo ya venció → fuerza mantenimiento.
   static NutritionResult calculate({
     required String gender,
     required int age,
@@ -98,18 +100,34 @@ class NutritionCalculator {
     // Si el usuario declaró hipertensión, bajamos el techo de sodio a 1500 mg
     // (AHA / NIH DRI).
     bool hypertension = false,
+    // Plazo del objetivo (3/6/12 meses) → modula agresividad del ajuste
+    // calórico y proteína DENTRO de las bandas validadas con nutricionista.
+    int? goalTimeframeMonths,
+    // Si el plazo venció, el plan entra en mantenimiento automáticamente.
+    bool goalExpired = false,
   }) {
     final isFemale = gender.toUpperCase() == 'FEMALE';
     final isSenior = age >= 60;
-    final weightDiff = targetWeightKg - weightKg; // negativo = quiere bajar de peso
+    // Ritmo (pace) según el plazo: define pct/máx de déficit/superávit y g/kg
+    // de proteína. null o plazo vencido usan el ritmo por defecto.
+    final pace = _paceFor(goalExpired ? null : goalTimeframeMonths);
+
+    // Al vencer el plazo: mantenimiento puro (sostener peso actual), ignorando
+    // el peso objetivo para no seguir prescribiendo déficit/superávit.
+    final weightDiff =
+        goalExpired ? 0.0 : (targetWeightKg - weightKg); // neg = bajar de peso
 
     // Safety override silencioso para evitar prescribir deficit en perfiles
-    // con riesgo declarado en onboarding.
+    // con riesgo declarado en onboarding. El plazo vencido también fuerza
+    // mantenimiento.
     final normalizedGoal = fitnessGoal.toUpperCase();
-    final goalForCalc = (eatingDisorderRisk &&
-            (normalizedGoal == 'LOSE_WEIGHT' || normalizedGoal == 'CUTTING'))
+    final goalForCalc = goalExpired
         ? 'MAINTAIN'
-        : normalizedGoal;
+        : (eatingDisorderRisk &&
+                (normalizedGoal == 'LOSE_WEIGHT' ||
+                    normalizedGoal == 'CUTTING'))
+            ? 'MAINTAIN'
+            : normalizedGoal;
 
     // 1. Metabolismo basal (Mifflin-St Jeor)
     final bmr = _bmr(
@@ -137,6 +155,7 @@ class NutritionCalculator {
       weightKg: weightKg,
       heightCm: heightCm,
       maintenance: maintenance,
+      pace: pace,
     );
 
     // 5. Calorías recomendadas dentro de límites de seguridad
@@ -152,6 +171,7 @@ class NutritionCalculator {
       goalInterpretation: goal.interpretation,
       weightKg: weightKg,
       dietPref: dietPref,
+      pace: pace,
     );
 
     // 7. Texto explicativo (lenguaje simple, no técnico)
@@ -261,6 +281,7 @@ class NutritionCalculator {
     required double weightKg,
     required double heightCm,
     required double maintenance,
+    required _Pace pace,
   }) {
     final needsToLose  = weightDiff < -2.0;
     final needsToGain  = weightDiff > 2.0;
@@ -268,13 +289,17 @@ class NutritionCalculator {
     final isOverweight = bmi >= 27.0;
 
     // Deltas calóricos PROPORCIONALES al mantenimiento, acotados a la banda
-    // 300-500 kcal recomendada por nutricionista (2026-06-08). Escalar al
-    // individuo evita prescribir -500 a alguien con mantenimiento bajo
-    // (donde -500 sería un déficit demasiado agresivo).
-    int deficit({double pct = 0.20, int max = 500}) =>
-        (maintenance * pct).round().clamp(300, max);
-    int surplus({double pct = 0.12, int max = 450}) =>
-        (maintenance * pct).round().clamp(300, max);
+    // 300-500 kcal recomendada por nutricionista (2026-06-08). El PLAZO elegido
+    // mueve el pct/máx DENTRO de esa banda: 3 meses = más agresivo (cerca del
+    // tope), 12 meses = gradual (cerca del piso). Nunca fuera de la banda.
+    int deficit({double? pct, int? max}) =>
+        (maintenance * (pct ?? pace.deficitPct))
+            .round()
+            .clamp(300, max ?? pace.deficitMax);
+    int surplus({double? pct, int? max}) =>
+        (maintenance * (pct ?? pace.surplusPct))
+            .round()
+            .clamp(300, max ?? pace.surplusMax);
     // Recomposición: déficit muy suave (cerca de mantenimiento) + proteína alta.
     int recompDeficit() => (maintenance * 0.10).round().clamp(250, 400);
 
@@ -365,6 +390,7 @@ class NutritionCalculator {
     required String goalInterpretation,
     required double weightKg,
     required String dietPref,
+    required _Pace pace,
   }) {
     final interp = goalInterpretation.toLowerCase();
     final isRecomp = interp.contains('recomp');
@@ -377,7 +403,15 @@ class NutritionCalculator {
 
     // 1) PROTEÍNA: anclada a g/kg de peso, luego acotada a 20-30% de kcal.
     //    Más alta en déficit/ganancia/recomposición para preservar músculo.
-    final double pPerKg = (isLoss || isGain || isRecomp) ? 2.0 : 1.8;
+    //    En déficit, el PLAZO sube la proteína (cut más agresivo = más proteína
+    //    para preservar masa magra; Helms 2014 / ISSN). Recomp = tope 2.2.
+    final double pPerKg = isRecomp
+        ? 2.2
+        : isLoss
+            ? pace.proteinCut
+            : isGain
+                ? 1.9
+                : 1.8;
     double pPct = (weightKg * pPerKg * 4) / calories;
     final double pMax = highProtein ? 0.30 : 0.28;
     pPct = pPct.clamp(0.20, pMax);
@@ -441,6 +475,39 @@ class NutritionCalculator {
     }
   }
 
+  // ── Ritmo según el plazo del objetivo ───────────────────────────────────────
+  //
+  // El plazo (3/6/12 meses) NO sale de las bandas validadas con nutricionista;
+  // solo mueve el ajuste DENTRO de ellas: plazo corto = cerca del tope seguro,
+  // plazo largo = cerca del piso (gradual). Respaldo de tasas:
+  //   - Pérdida de grasa segura: 0.5-1 %/sem del peso (ACSM/NIH). 3m≈tope,
+  //     12m≈piso, preservando más músculo cuanto más lento.
+  //   - Ganancia magra: superávit +250-500 kcal; cuanto más largo el plazo,
+  //     más limpio (menos grasa) — lean bulk (Aragon/Lyle).
+  //   - Proteína: 1.6-2.2 g/kg (ISSN/Morton 2018). En déficit se sube para
+  //     preservar masa magra; el cut más agresivo (3m) usa el tope 2.2.
+
+  static _Pace _paceFor(int? months) {
+    switch (months) {
+      case 3: // Exigente pero seguro (cerca del tope de cada banda)
+        return const _Pace(
+          deficitPct: 0.22, deficitMax: 500,
+          surplusPct: 0.15, surplusMax: 450, proteinCut: 2.2);
+      case 6: // Moderado y sostenible
+        return const _Pace(
+          deficitPct: 0.17, deficitMax: 420,
+          surplusPct: 0.12, surplusMax: 380, proteinCut: 2.1);
+      case 12: // Gradual / lean (mínima pérdida de músculo o ganancia de grasa)
+        return const _Pace(
+          deficitPct: 0.12, deficitMax: 320,
+          surplusPct: 0.09, surplusMax: 320, proteinCut: 2.0);
+      default: // Sin plazo: ritmo por defecto (igual al histórico)
+        return const _Pace(
+          deficitPct: 0.20, deficitMax: 500,
+          surplusPct: 0.12, surplusMax: 450, proteinCut: 2.0);
+    }
+  }
+
   // ── BMI auxiliar ────────────────────────────────────────────────────────────
 
   static double _bmi({required double weightKg, required double heightCm}) {
@@ -461,6 +528,25 @@ class _GoalResult {
     required this.interpretation,
     required this.strategy,
     required this.adjustment,
+  });
+}
+
+// Ritmo del objetivo derivado del plazo (3/6/12 meses). Acotado a las bandas
+// validadas con nutricionista: déficit/superávit 300-500/450 kcal, proteína
+// 1.8-2.2 g/kg. Ver _paceFor().
+class _Pace {
+  final double deficitPct; // fracción del mantenimiento para déficit
+  final int deficitMax;    // tope kcal del déficit
+  final double surplusPct; // fracción del mantenimiento para superávit
+  final int surplusMax;    // tope kcal del superávit
+  final double proteinCut; // g/kg de proteína en déficit
+
+  const _Pace({
+    required this.deficitPct,
+    required this.deficitMax,
+    required this.surplusPct,
+    required this.surplusMax,
+    required this.proteinCut,
   });
 }
 

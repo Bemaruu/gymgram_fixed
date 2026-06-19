@@ -195,6 +195,7 @@ class _PostDetailPageState extends State<_PostDetailPage>
   late String _caption;
   bool _isDeleting = false;
   bool _isLiked = false;
+  bool _likeBusy = false; // guard anti spam-tap: evita toggles de red concurrentes
   late int _likesCount;
   late int _commentsCount;
   double? _imageAspectRatio; // relación ancho/alto natural de la primera imagen
@@ -289,20 +290,24 @@ class _PostDetailPageState extends State<_PostDetailPage>
 
   Future<void> _toggleLike() async {
     final postId = widget.post['id'] as String? ?? '';
-    if (postId.isEmpty) return;
+    if (postId.isEmpty || _likeBusy) return;
+    _likeBusy = true;
+    final newLiked = !_isLiked;
     setState(() {
-      _isLiked = !_isLiked;
-      _likesCount += _isLiked ? 1 : -1;
+      _isLiked = newLiked;
+      _likesCount = (_likesCount + (newLiked ? 1 : -1)).clamp(0, 1 << 31);
     });
     try {
       await PostService.instance.toggleLike(postId);
     } catch (_) {
       if (mounted) {
         setState(() {
-          _isLiked = !_isLiked;
-          _likesCount += _isLiked ? 1 : -1;
+          _isLiked = !newLiked;
+          _likesCount = (_likesCount + (newLiked ? -1 : 1)).clamp(0, 1 << 31);
         });
       }
+    } finally {
+      _likeBusy = false;
     }
   }
 

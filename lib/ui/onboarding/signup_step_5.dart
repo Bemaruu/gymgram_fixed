@@ -15,7 +15,17 @@ class SignupStep5 extends StatefulWidget {
 class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin {
   // Single-select: el modelo de IA necesita un único objetivo principal.
   String? selectedGoal;
+  // Plazo (3/6/12 meses) — solo para objetivos de cambio físico.
+  int? selectedMonths;
   late Map<String, dynamic> userData;
+
+  // Objetivos que implican un cambio físico medible → necesitan plazo para
+  // calibrar el ritmo del déficit/superávit. Mantenimiento y resistencia no.
+  static bool _needsTimeframe(String? goal) =>
+      goal == 'LOSE_WEIGHT' ||
+      goal == 'GAIN_MUSCLE' ||
+      goal == 'RECOMPOSITION' ||
+      goal == 'TONE_BODY';
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -47,14 +57,23 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
   }
 
   void _selectGoal(String goal) {
-    setState(() => selectedGoal = goal);
+    setState(() {
+      selectedGoal = goal;
+      // Si el objetivo no requiere plazo, lo limpiamos.
+      if (!_needsTimeframe(goal)) selectedMonths = null;
+    });
   }
 
+  bool get _canContinue =>
+      selectedGoal != null &&
+      (!_needsTimeframe(selectedGoal) || selectedMonths != null);
+
   void _onNext() {
-    if (selectedGoal != null) {
+    if (_canContinue) {
       // Mantenemos 'goal' por compat con el mapeo de signup_step_13.
       userData['goal'] = selectedGoal;
       userData['fitnessGoal'] = selectedGoal;
+      userData['goalTimeframeMonths'] = selectedMonths; // null si no aplica
 
       final next = OnboardingFlow.nextRoute('/signup_step_5', userData);
       if (next != null) {
@@ -100,6 +119,109 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
     );
   }
 
+  Widget _timeframeSection() {
+    return Padding(
+      key: const ValueKey('timeframe'),
+      padding: const EdgeInsets.only(top: 28),
+      child: Column(
+        children: [
+          const Text(
+            '¿En cuánto tiempo quieres lograrlo?',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Montserrat',
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Ajustamos tus calorías y proteína a un ritmo seguro según el plazo.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: Colors.white70),
+          ),
+          const SizedBox(height: 14),
+          _monthCard(3, 'Más exigente', 'Ritmo rápido y seguro'),
+          _monthCard(6, 'Equilibrado', 'Constante y sostenible'),
+          _monthCard(12, 'Gradual', 'Suave, máxima adherencia'),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthCard(int months, String title, String subtitle) {
+    final isSelected = selectedMonths == months;
+    return GestureDetector(
+      onTap: () => setState(() => selectedMonths = months),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.accentOrange
+              : Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? AppColors.accentOrange : Colors.white24,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              '$months',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : Colors.white,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'meses',
+              style: TextStyle(
+                fontSize: 13,
+                color: isSelected ? Colors.white : Colors.white70,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isSelected ? Colors.white70 : Colors.white60,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: isSelected ? Colors.white : Colors.white38,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -117,12 +239,13 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Center(
+              child: SingleChildScrollView(
                 child: FadeTransition(
                   opacity: _fadeAnimation,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      const SizedBox(height: 16),
                       Builder(builder: (_) {
                         final p = OnboardingFlow.progressFor('/signup_step_5', userData);
                         return OnboardingProgress(step: p.step, total: p.total);
@@ -153,15 +276,21 @@ class _SignupStep5State extends State<SignupStep5> with TickerProviderStateMixin
                       goalButton('Mantenerme sano', Icons.favorite, 'MAINTAIN', AppColors.primary),
                       goalButton('Mejorar resistencia', Icons.directions_run, 'IMPROVE_ENDURANCE', AppColors.accentOrange),
                       goalButton('Tonificar', Icons.self_improvement, 'TONE_BODY', AppColors.darkBlue),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _needsTimeframe(selectedGoal)
+                            ? _timeframeSection()
+                            : const SizedBox.shrink(),
+                      ),
                       const SizedBox(height: 32),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: CustomButton(
-                          key: ValueKey(selectedGoal),
+                          key: ValueKey('$selectedGoal-$selectedMonths'),
                           text: 'Siguiente',
                           color: AppColors.accentOrange,
                           textColor: Colors.white,
-                          onPressed: selectedGoal != null ? _onNext : null,
+                          onPressed: _canContinue ? _onNext : null,
                         ),
                       ),
                       const SizedBox(height: 16),

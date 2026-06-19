@@ -106,10 +106,22 @@ serve(async (req) => {
   // 1) profile (incluye flags clinicas para C3)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, fitness_goal, weight, age, gender, eating_disorder_risk, country_code, pregnancy_status, requires_medical_clearance')
+    .select('id, fitness_goal, weight, age, gender, eating_disorder_risk, country_code, pregnancy_status, requires_medical_clearance, goal_target_date')
     .eq('id', user.id)
     .maybeSingle();
   if (!profile) return errorResponse('Profile not found', 404);
+
+  // Plazo vencido: si goal_target_date ya pasó, el objetivo entra en
+  // mantenimiento automáticamente (coherente con NutritionCalculator del
+  // cliente, que ya guarda los targets de mantenimiento en nutrition_goals).
+  let goalExpired = false;
+  if (profile.goal_target_date) {
+    const target = new Date(`${profile.goal_target_date}T23:59:59Z`);
+    if (!isNaN(target.getTime()) && Date.now() > target.getTime()) {
+      profile.fitness_goal = 'maintain';
+      goalExpired = true;
+    }
+  }
 
   // Safety override: si hay riesgo declarado en screening, forzar mantenimiento
   // cuando el objetivo sea perder peso o cutting. NUNCA se le dice al usuario
@@ -713,6 +725,7 @@ FORMATO JSON EXACTO:
     quality_flags: qualityFlags,
     catalog_size: filtered.length,
     eating_disorder_safe_mode: eatingDisorderSafeMode,
+    goal_expired: goalExpired,
     low_variety: lowVariety,
     low_quality: lowQuality || incoherentMains > 2,
     incoherent_mains: incoherentMains,

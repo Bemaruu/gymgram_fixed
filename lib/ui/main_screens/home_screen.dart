@@ -238,6 +238,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   post: post,
                   initialIsLiked: _likedIds.contains(id),
                   initialIsSaved: _savedIds.contains(id),
+                  // Persistimos el cambio optimista en la fuente de verdad para
+                  // que, si el PageView recicla este post al hacer scroll, su
+                  // State se reconstruya con el conteo/estado correctos y el
+                  // like no "desaparezca".
+                  onLikeChanged: (liked, count) {
+                    post['likes_count'] = count;
+                    if (liked) {
+                      _likedIds.add(id);
+                    } else {
+                      _likedIds.remove(id);
+                    }
+                  },
+                  onSaveChanged: (saved) {
+                    if (saved) {
+                      _savedIds.add(id);
+                    } else {
+                      _savedIds.remove(id);
+                    }
+                  },
+                  onCommentsChanged: (count) => post['comments_count'] = count,
                 );
               },
             ),
@@ -358,11 +378,20 @@ class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
   final bool initialIsLiked;
   final bool initialIsSaved;
+  // Callbacks para "subir" el estado optimista al feed: así la fuente de verdad
+  // (lista de posts + sets liked/saved) queda coherente y el contador NO se
+  // revierte al reciclar el State del PageView (scroll fuera y de vuelta).
+  final void Function(bool liked, int likesCount)? onLikeChanged;
+  final void Function(bool saved)? onSaveChanged;
+  final void Function(int commentsCount)? onCommentsChanged;
   const PostWidget({
     super.key,
     required this.post,
     this.initialIsLiked = false,
     this.initialIsSaved = false,
+    this.onLikeChanged,
+    this.onSaveChanged,
+    this.onCommentsChanged,
   });
 
   @override
@@ -482,10 +511,12 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
     _saveBusy = true;
     final newSaved = !_isSaved;
     setState(() => _isSaved = newSaved);
+    widget.onSaveChanged?.call(newSaved);
     try {
       await PostService.instance.toggleSavePost(_postId);
     } catch (_) {
       if (mounted) setState(() => _isSaved = !newSaved);
+      widget.onSaveChanged?.call(!newSaved);
     } finally {
       _saveBusy = false;
     }
@@ -517,6 +548,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
       _isLiked = newLiked;
       _likesCount = (_likesCount + (newLiked ? 1 : -1)).clamp(0, 1 << 31);
     });
+    widget.onLikeChanged?.call(newLiked, _likesCount);
     _heartBounceCtrl.forward(from: 0);
     if (newLiked) {
       AnalyticsService.instance.postLiked(_postId);
@@ -531,6 +563,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
           _isLiked = !newLiked;
           _likesCount = (_likesCount + (newLiked ? -1 : 1)).clamp(0, 1 << 31);
         });
+        widget.onLikeChanged?.call(!newLiked, _likesCount);
       }
     } finally {
       _likeBusy = false;
@@ -551,6 +584,7 @@ class _PostWidgetState extends State<PostWidget> with TickerProviderStateMixin {
         postId: _postId,
         onCountChanged: (count) {
           if (mounted) setState(() => _commentsCount = count);
+          widget.onCommentsChanged?.call(count);
         },
       ),
     );

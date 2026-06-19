@@ -139,6 +139,22 @@ String _mapTrainingLocation(String value) {
       final targetWeight = model.targetWeight ?? weight;
       final gender = _mapGender(model.gender ?? '');
       final goalValue = _mapFitnessGoal(model.fitnessGoal ?? '');
+
+      // Plazo del objetivo físico (3/6/12). Si aplica, fijamos fecha de inicio
+      // (hoy) y de vencimiento (hoy + N meses); al vencer el plan pasa a
+      // mantenimiento automáticamente.
+      final tfMonths = (userData['goalTimeframeMonths'] as num?)?.toInt();
+      String? goalStartedAt;
+      String? goalTargetDate;
+      if (tfMonths != null) {
+        String fmt(DateTime d) =>
+            '${d.year.toString().padLeft(4, '0')}-'
+            '${d.month.toString().padLeft(2, '0')}-'
+            '${d.day.toString().padLeft(2, '0')}';
+        final now = DateTime.now();
+        goalStartedAt = fmt(DateTime(now.year, now.month, now.day));
+        goalTargetDate = fmt(DateTime(now.year, now.month + tfMonths, now.day));
+      }
       final trainingLocationValue =
           _mapTrainingLocation(model.trainingLocation ?? '');
       final trainingTime = model.trainingTime ?? 'variable';
@@ -165,6 +181,9 @@ String _mapTrainingLocation(String value) {
         timeAvailability: trainingTime,
         birthDate: model.birthDate,
         countryCode: countryCode,
+        goalTimeframeMonths: tfMonths,
+        goalStartedAt: goalStartedAt,
+        goalTargetDate: goalTargetDate,
       );
 
       // 3) Medallas de bienvenida

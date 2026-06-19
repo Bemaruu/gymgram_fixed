@@ -10,15 +10,27 @@ class ProgressionService {
   static final ProgressionService instance = ProgressionService._();
 
   /// Recalcula y devuelve el overlay para los ejercicios dados.
+  /// [baseSets]/[baseRepsMin]/[baseRepsMax] son el baseline POR EJERCICIO del
+  /// plan de IA (alineados por índice con [exerciseNames]); se usan para
+  /// sembrar el estado inicial diferenciado (compuesto 4x6-8, aislamiento
+  /// 3x12-15) en vez de un 3x8-12 uniforme. Usa 0 cuando no se conoce.
   /// Si la RPC falla, devuelve un mapa vacio para fallback al plan IA.
   Future<Map<String, ExerciseProgression>> recompute(
-    List<String> exerciseNames,
-  ) async {
+    List<String> exerciseNames, {
+    List<int>? baseSets,
+    List<int>? baseRepsMin,
+    List<int>? baseRepsMax,
+  }) async {
     if (exerciseNames.isEmpty) return const {};
     try {
       final res = await Supabase.instance.client.rpc(
         'recompute_progression_state',
-        params: {'p_exercise_names': exerciseNames},
+        params: {
+          'p_exercise_names': exerciseNames,
+          if (baseSets != null) 'p_base_sets': baseSets,
+          if (baseRepsMin != null) 'p_base_reps_min': baseRepsMin,
+          if (baseRepsMax != null) 'p_base_reps_max': baseRepsMax,
+        },
       );
       if (res is! List) return const {};
       final out = <String, ExerciseProgression>{};
