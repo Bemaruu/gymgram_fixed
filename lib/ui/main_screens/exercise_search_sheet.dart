@@ -477,7 +477,7 @@ class _ExerciseItemState extends State<_ExerciseItem> {
                                     Icons.add_circle_outline,
                                     color: Color(0xFF00BFFF),
                                   ),
-                                  onPressed: _sets < 6
+                                  onPressed: _sets < 10
                                       ? () => setState(() => _sets++)
                                       : null,
                                   constraints: const BoxConstraints(

@@ -790,7 +790,9 @@ class _RoutineScreenState extends State<RoutineScreen> {
   }
 
   void _selectDay(int index) {
-    if (!_availableDays[index]) return;
+    // Cualquier día es seleccionable, incluido un día de descanso: el usuario
+    // puede querer agregar su propia rutina ahí. Si el día no tiene rutina,
+    // _generateExercises deja la pantalla vacía con la opción de crear una.
     setState(() {
       _selectedDayIndex = index;
       _isEditMode = false;
@@ -799,7 +801,20 @@ class _RoutineScreenState extends State<RoutineScreen> {
     _checkTodayCompleted();
   }
 
+  void _startEditingEmptyDay() {
+    setState(() {
+      _exercises = [];
+      _isEditMode = true;
+    });
+  }
+
   Future<void> _saveEdit() async {
+    // Día vacío: no creamos una rutina sin ejercicios; solo salimos del modo
+    // edición (si era un día de descanso, sigue siéndolo).
+    if (_exercises.isEmpty) {
+      setState(() => _isEditMode = false);
+      return;
+    }
     setState(() { _isEditMode = false; _isSaving = true; });
     try {
       final exerciseMaps = _exercises
@@ -826,6 +841,14 @@ class _RoutineScreenState extends State<RoutineScreen> {
         _savedRoutineId = newId;
         _savedRoutines.removeWhere((r) => r['day_of_week'] == _selectedDayIndex);
         _savedRoutines.add({'id': newId, 'day_of_week': _selectedDayIndex, 'routine_exercises': exerciseMaps});
+      }
+
+      // Si era un día de descanso, ahora tiene rutina: pasa a ser día de
+      // entrenamiento al instante (local + persistido en onboarding) para que
+      // no se archive en la próxima carga.
+      if (!_availableDays[_selectedDayIndex]) {
+        setState(() => _availableDays[_selectedDayIndex] = true);
+        await SupabaseService.instance.ensureTrainingDay(_selectedDayIndex);
       }
 
       if (mounted) {
@@ -1723,16 +1746,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
             ),
 
           Expanded(
-            child: _exercises.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Dia de descanso. Aprovecha para recuperarte.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.black54, fontSize: 16),
-                    ),
-                  )
-                : _isEditMode
-                    ? _buildEditList()
+            child: _isEditMode
+                ? _buildEditList()
+                : _exercises.isEmpty
+                    ? _buildEmptyDayState()
                     : _buildNormalList(),
           ),
 
@@ -1771,6 +1788,68 @@ class _RoutineScreenState extends State<RoutineScreen> {
             ),
 
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyDayState() {
+    final isRest = !_availableDays[_selectedDayIndex];
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                color: const Color(0xFF00BFFF).withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isRest ? Icons.hotel_rounded : Icons.add_box_outlined,
+                color: const Color(0xFF00BFFF),
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              isRest ? 'Día de descanso' : 'Sin ejercicios para este día',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isRest
+                  ? 'Aprovecha para recuperarte. Si quieres entrenar igual, crea tu rutina para este día.'
+                  : 'Crea tu rutina con los ejercicios que quieras.',
+              style: const TextStyle(fontSize: 14, color: Colors.black45),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _startEditingEmptyDay,
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text(
+                'Crear rutina para este día',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00BFFF),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

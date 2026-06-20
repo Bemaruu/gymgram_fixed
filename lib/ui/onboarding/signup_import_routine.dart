@@ -34,6 +34,7 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
 
   late Map<String, dynamic> userData;
   int _selectedDay = 0;
+  bool _didInit = false;
 
   /// Por día (0..6) → lista de ejercicios. Día sin entrada = descanso.
   final Map<int, List<Map<String, dynamic>>> _routine = {};
@@ -41,6 +42,14 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // IMPORTANTE: inicializar UNA sola vez. ModalRoute.of(context) crea una
+    // dependencia del route; al abrir/cerrar el bottom sheet para agregar un
+    // ejercicio, didChangeDependencies se vuelve a disparar. Sin este guard,
+    // se reseteaba _selectedDay al primer día → "te devuelve a otro día"
+    // cada vez que agregabas un ejercicio.
+    if (_didInit) return;
+    _didInit = true;
+
     userData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
 
     // Pre-rellena los días con la selección hecha en signup_step_7 si existe.
@@ -50,23 +59,19 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
         final idx = int.tryParse(d.toString());
         if (idx != null) _routine.putIfAbsent(idx, () => []);
       }
-      _selectedDay = _routine.keys.first;
+      if (_routine.isNotEmpty) _selectedDay = _routine.keys.first;
     }
   }
 
-  bool _isTrainingDay(int day) => _routine.containsKey(day);
+  // Un día es "de entrenamiento" si tiene al menos un ejercicio. No hay que
+  // marcarlo aparte: agregar un ejercicio lo activa, y un día sin ejercicios
+  // queda como descanso automáticamente.
+  bool _isTrainingDay(int day) => _routine[day]?.isNotEmpty ?? false;
 
-  void _toggleTrainingDay(int day) {
+  void _selectDay(int day) {
     setState(() {
-      if (_routine.containsKey(day)) {
-        _routine.remove(day);
-        if (_selectedDay == day && _routine.isNotEmpty) {
-          _selectedDay = _routine.keys.first;
-        }
-      } else {
-        _routine[day] = [];
-        _selectedDay = day;
-      }
+      _selectedDay = day;
+      _routine.putIfAbsent(day, () => []);
     });
   }
 
@@ -147,23 +152,30 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
 
     // Serializa los días con entrenamiento al formato que signup_step_13 usará
     // para crear las rutinas en bulk con source='user_imported'.
-    final importedRoutine = <Map<String, dynamic>>[];
-    _routine.forEach((day, exercises) {
-      if (exercises.isEmpty) return;
-      importedRoutine.add({
-        'day_of_week': day,
-        'title': _dayNames[day],
-        'exercises': exercises,
-      });
-    });
+    // Solo cuentan los días con al menos un ejercicio: un día tocado pero
+    // vacío no es día de entrenamiento.
+    final trainingDays = (_routine.entries
+            .where((e) => e.value.isNotEmpty)
+            .map((e) => e.key)
+            .toList())
+        ..sort();
+
+    final importedRoutine = <Map<String, dynamic>>[
+      for (final day in trainingDays)
+        {
+          'day_of_week': day,
+          'title': _dayNames[day],
+          'exercises': _routine[day],
+        },
+    ];
     userData['importedRoutine'] = importedRoutine;
 
-    // Sincroniza availableDays con los días marcados aquí, para que sea
-    // coherente al guardar.
+    // Sincroniza availableDays con los días que realmente tienen ejercicios,
+    // para que sea coherente con la rutina guardada.
     userData['availableDays'] =
-        _routine.keys.map((d) => d.toString()).toList();
+        trainingDays.map((d) => d.toString()).toList();
     userData['trainingDays'] =
-        _routine.keys.map((d) => _dayNames[d]).join(', ');
+        trainingDays.map((d) => _dayNames[d]).join(', ');
 
     // Defaults derivados: como el usuario importa rutina, se omiten
     // signup_split y signup_days_duration. El split queda sin preferencia
@@ -226,7 +238,7 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(20, 4, 20, 10),
                   child: Text(
-                    'Marca tus días de entrenamiento y agrega los ejercicios',
+                    'Elige un día y agrega tus ejercicios',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ),
@@ -238,16 +250,11 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
                     itemCount: 7,
                     itemBuilder: (_, i) {
                       final isSelected = i == _selectedDay;
-                      final isTrainingDay = _isTrainingDay(i);
+                      // Punto blanco = el día ya tiene ejercicios. Todos los
+                      // días son seleccionables libremente.
+                      final hasExercises = _isTrainingDay(i);
                       return GestureDetector(
-                        onTap: () {
-                          if (isTrainingDay) {
-                            setState(() => _selectedDay = i);
-                          } else {
-                            _toggleTrainingDay(i);
-                          }
-                        },
-                        onLongPress: () => _toggleTrainingDay(i),
+                        onTap: () => _selectDay(i),
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           padding:
@@ -255,14 +262,8 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? Colors.white
-                                : isTrainingDay
-                                    ? Colors.white.withValues(alpha: 0.25)
-                                    : Colors.white.withValues(alpha: 0.08),
+                                : Colors.white.withValues(alpha: 0.22),
                             borderRadius: BorderRadius.circular(20),
-                            border: !isTrainingDay
-                                ? Border.all(
-                                    color: Colors.white.withValues(alpha: 0.20))
-                                : null,
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -272,21 +273,21 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
                                 style: TextStyle(
                                   color: isSelected
                                       ? AppColors.primary
-                                      : isTrainingDay
-                                          ? Colors.white
-                                          : Colors.white38,
+                                      : Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
-                                  decoration: !isTrainingDay
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor: Colors.white38,
                                 ),
                               ),
-                              if (!isTrainingDay) ...[
-                                const SizedBox(width: 4),
-                                const Icon(Icons.hotel_rounded,
-                                    size: 11, color: Colors.white38),
+                              if (!isSelected && hasExercises) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
                               ],
                             ],
                           ),
@@ -304,24 +305,22 @@ class _SignupImportRoutineState extends State<SignupImportRoutine> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Toca un día para entrenar; mantén presionado para quitarlo.',
+                'Agrega los ejercicios que quieras en cada día. Un día sin ejercicios queda como descanso.',
                 style: TextStyle(color: Colors.black54, fontSize: 12),
               ),
             ),
           ),
           Expanded(
-            child: !_isTrainingDay(_selectedDay)
-                ? _buildEmptyState(rest: true)
-                : exercises.isEmpty
-                    ? _buildEmptyState(rest: false)
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: exercises.length + 1,
-                        itemBuilder: (_, i) {
-                          if (i == exercises.length) return _buildAddButton();
-                          return _buildExerciseCard(exercises[i], i);
-                        },
-                      ),
+            child: exercises.isEmpty
+                ? _buildEmptyState(rest: false)
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: exercises.length + 1,
+                    itemBuilder: (_, i) {
+                      if (i == exercises.length) return _buildAddButton();
+                      return _buildExerciseCard(exercises[i], i);
+                    },
+                  ),
           ),
           SafeArea(
             top: false,

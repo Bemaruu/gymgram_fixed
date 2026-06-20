@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/routine_service.dart';
+import '../../services/supabase_service.dart';
 import 'exercise_search_sheet.dart';
 
 class CreateCustomRoutineScreen extends StatefulWidget {
@@ -27,16 +28,17 @@ class _CreateCustomRoutineScreenState
   @override
   void initState() {
     super.initState();
+    // Días marcados como entrenamiento en el onboarding (solo para resaltar).
+    // El usuario es libre de crear su rutina en CUALQUIER día, no se bloquea.
     _availableDays = widget.availableDays ?? List.filled(7, true);
-    final hasAny = _availableDays.any((d) => d);
-    if (!hasAny) _availableDays = List.filled(7, true);
+    if (!_availableDays.any((d) => d)) _availableDays = List.filled(7, true);
 
+    // Respetar siempre el día solicitado; nunca saltar a otro.
     final preferred = widget.initialDay;
-    if (preferred != null && _availableDays[preferred]) {
+    if (preferred != null && preferred >= 0 && preferred < 7) {
       _selectedDay = preferred;
     } else {
-      _selectedDay = _availableDays.indexWhere((d) => d);
-      if (_selectedDay < 0) _selectedDay = DateTime.now().weekday - 1;
+      _selectedDay = DateTime.now().weekday - 1;
     }
   }
 
@@ -91,6 +93,11 @@ class _CreateCustomRoutineScreenState
         dayOfWeek: _selectedDay,
         exercises: exerciseMaps,
       );
+
+      // Si el usuario eligió un día que no estaba marcado como entrenamiento,
+      // lo habilitamos para que la pantalla de rutina lo muestre y no lo
+      // archive como día de descanso.
+      await SupabaseService.instance.ensureTrainingDay(_selectedDay);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -184,24 +191,19 @@ class _CreateCustomRoutineScreenState
                     itemCount: 7,
                     itemBuilder: (_, i) {
                       final isSelected = i == _selectedDay;
+                      // Día configurado como entrenamiento: solo un punto de
+                      // referencia visual. Todos los días son seleccionables.
                       final isTrainingDay = _availableDays[i];
                       return GestureDetector(
-                        onTap: isTrainingDay
-                            ? () => setState(() => _selectedDay = i)
-                            : null,
+                        onTap: () => setState(() => _selectedDay = i),
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? Colors.white
-                                : isTrainingDay
-                                    ? Colors.white.withValues(alpha: 0.25)
-                                    : Colors.white.withValues(alpha: 0.08),
+                                : Colors.white.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(20),
-                            border: !isTrainingDay
-                                ? Border.all(color: Colors.white.withValues(alpha: 0.20))
-                                : null,
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -211,20 +213,21 @@ class _CreateCustomRoutineScreenState
                                 style: TextStyle(
                                   color: isSelected
                                       ? const Color(0xFF00BFFF)
-                                      : isTrainingDay
-                                          ? Colors.white
-                                          : Colors.white38,
+                                      : Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
-                                  decoration: !isTrainingDay
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  decorationColor: Colors.white38,
                                 ),
                               ),
-                              if (!isTrainingDay) ...[
-                                const SizedBox(width: 4),
-                                const Icon(Icons.hotel_rounded, size: 11, color: Colors.white38),
+                              if (!isSelected && isTrainingDay) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
                               ],
                             ],
                           ),

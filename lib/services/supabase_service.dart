@@ -157,6 +157,37 @@ class SupabaseService {
     await client.from('user_onboarding_data').insert(row);
   }
 
+  /// Marca un día (índice 0..6, Lun..Dom) como día de entrenamiento en el
+  /// onboarding más reciente. Se usa cuando el usuario crea manualmente una
+  /// rutina en un día que no había marcado, para que la pantalla de rutina lo
+  /// muestre y no lo archive como día de descanso. Acepta formato nuevo
+  /// (índices) y legacy (strings en español).
+  Future<void> ensureTrainingDay(int dayIndex) async {
+    final uid = currentUserId;
+    if (uid == null || dayIndex < 0 || dayIndex > 6) return;
+    const legacyKeys = [
+      'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'
+    ];
+    final rows = await client
+        .from('user_onboarding_data')
+        .select('id, available_days')
+        .eq('user_id', uid)
+        .order('created_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return;
+    final row = rows.first;
+    final raw = (row['available_days'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        <String>[];
+    final idxStr = dayIndex.toString();
+    if (raw.contains(idxStr) || raw.contains(legacyKeys[dayIndex])) return;
+    raw.add(idxStr);
+    await client
+        .from('user_onboarding_data')
+        .update({'available_days': raw}).eq('id', row['id'] as Object);
+  }
+
   /// Importa la rutina semanal del usuario desde el flujo `analyze_existing_routine`.
   /// Crea las entradas en `routines` (kind='personal', source='user_imported') y
   /// deja `routine_analysis` con status='pending' para una IA futura.
