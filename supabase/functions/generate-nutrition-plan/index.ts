@@ -459,19 +459,19 @@ REGLAS NUMERADAS (cúmplelas todas, en orden):
    ${isVegan ? '- DIETA VEGANA: marca "vegan_warning":"B12 suplementación obligatoria + cuida hierro/zinc/omega-3 (AND 2016 Melina/Craig/Levin)" en meta_warnings.' : ''}
    ${isVegetarian && !isVegan ? '- Vegetariana: prioriza huevo + lácteos como proteína; combina legumbres + cereales (lentejas+arroz) para aminoácidos completos.' : ''}
 
-9. CÁLCULO DE MACROS (obligatorio, no inventes):
-   - Para cada alimento: kcal = round(grams/100 * kcal_per_100g). Igual para protein/carbs/fat.
-   - Redondea a enteros.
+9. PORCIONES (NO calcules macros, solo gramos):
+   - Para cada alimento entrega SOLO "name" y "grams". El servidor calcula kcal/proteína/carbos/grasa desde el catálogo; NO los incluyas (ahorra tiempo y evita errores de cálculo).
    - Las "porciones sugeridas" del catálogo son orientativas; ajusta grams para cumplir targets pero RESPETA porciones razonables (ej. cazuela 300-400g, ensalada 100-200g, fruta entera 100-180g, NO porciones de 50g de un plato fuerte).
 
 10. NOMBRES: usa SOLO los nombres exactos del catálogo, copiados literal (mismas tildes y mayúsculas).
 
-11. RAZONAMIENTO PREVIO (B1/B4): Antes del "week", incluye un campo "reasoning" con tu planificación:
+11. RAZONAMIENTO (mejora la calidad del plan — NO lo omitas): incluye un campo "reasoning" antes de "week" con tu planificación:
    - distribución kcal aproximada por meal_type
    - estrategia para llegar a proteína y fibra
-   - patrón cultural elegido (qué [CASERO] vas a usar varias veces)
+   - patrón cultural [CASERO] elegido (qué vas a usar varias veces)
    - 2-3 alternativas que descartaste y por qué
-   Y en CADA comida, incluye un "rationale" de 1 línea con la justificación clínica/cultural (ej. "Cazuela post-pierna: 0.4 g/kg proteína + carbo reposición + casero CL").
+   Y en CADA comida incluye un "rationale" de 1 línea con la justificación clínica/cultural (ej. "Cazuela post-pierna: proteína + carbo reposición + casero CL").
+   ÚNICA optimización: por cada alimento entrega SOLO "name" + "grams". NO incluyas macros por alimento, ni "daily_totals" ni "totals" — el servidor los calcula con precisión desde el catálogo.
 
 12. NO incluyas texto fuera del JSON. NO uses markdown. NO añadas un día 8.
 
@@ -483,21 +483,10 @@ FORMATO JSON EXACTO:
     {
       "day": 1,
       "meals": [
-        {
-          "meal_type":"breakfast",
-          "rationale":"Desayuno proteína moderada + fibra alta para saciedad",
-          "foods":[
-            {"name":"Avena cocida","grams":200,"kcal":142,"protein":5,"carbs":24,"fat":3}
-          ]
-        }
-      ],
-      "daily_totals": {"kcal":2000,"protein":150,"carbs":220,"fat":60,"fiber":28,"sodium":1900}
+        {"meal_type":"breakfast","rationale":"Desayuno proteína moderada + fibra alta para saciedad","foods":[{"name":"Avena cocida","grams":200},{"name":"Plátano","grams":120}]}
+      ]
     }
-  ],
-  "totals": {
-    "daily_avg": {"kcal":2000,"protein":150,"carbs":220,"fat":60,"fiber":28,"sodium":1900},
-    "weekly": {"kcal":14000,"protein":1050,"carbs":1540,"fat":420}
-  }
+  ]
 }`;
 
   let plan: WeeklyPlan;
@@ -505,8 +494,10 @@ FORMATO JSON EXACTO:
     plan = await chatJson<WeeklyPlan>({
       model: 'gpt-4o-mini',
       temperature: 0.7,
-      // CoT (reasoning) + rationale por comida requieren mas espacio.
-      maxTokens: 8000,
+      // El modelo entrega reasoning + rationale + name/grams; el servidor calcula
+      // macros y totales (lo mas caro en tokens). Output ~1/2 del original con la
+      // calidad de planificacion intacta → bajo el timeout del gateway.
+      maxTokens: 5000,
       messages: [
         { role: 'system', content: system },
         {
@@ -529,13 +520,23 @@ FORMATO JSON EXACTO:
   }
 
   // 2. Validar nombres por dia (filtrar alimentos que no esten en catalogo)
+  //    El modelo solo entrega {name, grams}; los macros se calculan abajo.
   const validNames = new Set(filtered.map((f) => f.name.toLowerCase()));
   const cleanWeek: DayPlan[] = plan.week.map((d) => ({
     day: d.day,
     meals: (d.meals ?? []).map((m) => ({
       meal_type: m.meal_type,
       rationale: m.rationale, // B4: preservar rationale del modelo
-      foods: (m.foods ?? []).filter((f) => validNames.has((f.name ?? '').toLowerCase())),
+      foods: (m.foods ?? [])
+        .filter((f) => validNames.has((f.name ?? '').toLowerCase()))
+        .map((f) => ({
+          name: f.name,
+          grams: f.grams,
+          kcal: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+        })),
     })),
   }));
 
@@ -581,6 +582,21 @@ FORMATO JSON EXACTO:
   //    del item × proporcion de grams del plan.
   const foodByName = new Map<string, FoodRow>();
   for (const f of filtered) foodByName.set(f.name.toLowerCase(), f);
+
+  // Macros por alimento desde el catalogo (el modelo solo entrega name+grams).
+  // Mas preciso que pedirselos al modelo y ademas recorta la salida = sin timeout.
+  for (const d of cleanWeek) {
+    for (const m of d.meals) {
+      for (const f of m.foods) {
+        const meta = foodByName.get((f.name ?? '').toLowerCase());
+        const factor = (f.grams ?? 0) / 100;
+        f.kcal = meta ? Math.round((meta.kcal_per_100g ?? 0) * factor) : 0;
+        f.protein = meta ? Math.round((meta.protein_per_100g ?? 0) * factor) : 0;
+        f.carbs = meta ? Math.round((meta.carbs_per_100g ?? 0) * factor) : 0;
+        f.fat = meta ? Math.round((meta.fat_per_100g ?? 0) * factor) : 0;
+      }
+    }
+  }
 
   const dailyTotals = cleanWeek.map((d) => {
     let kcal = 0, protein = 0, carbs = 0, fat = 0, fiber = 0, sodium = 0;

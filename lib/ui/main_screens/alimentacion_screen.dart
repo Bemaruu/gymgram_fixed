@@ -15,6 +15,7 @@ import '../../services/food_scan_service.dart';
 import '../../services/food_service.dart';
 import '../../services/nutrition_calculator.dart';
 import '../../services/nutrition_goals_service.dart';
+import '../../services/single_flight.dart';
 import '../../services/subscription_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/water_service.dart';
@@ -45,6 +46,11 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
   // Se carga 1 vez por week_index desde nutrition_plans (DB) o edge fallback.
   List<Map<String, dynamic>>? _weekDays;
   int? _weekPlanIndex;
+  // Carga de plan semanal EN VUELO: dedup por week_index para que múltiples
+  // disparos concurrentes (abrir pantalla + tocar varios días mientras la edge
+  // tarda ~30-47s) NO disparen una invocación a la IA por cada uno. Sin esto se
+  // veían ráfagas de 10-15 llamadas a generate-nutrition-plan en segundos.
+  final SingleFlight<int> _weekPlanFlight = SingleFlight<int>();
   // Unidad checkeable = "itemIndex:compIndex" (compIndex -1 = item completo/receta).
   final Set<String> _checkedKeys = {};
   // Mapea la unidad del plan al id de su food_log registrado.
@@ -363,10 +369,21 @@ class _AlimentacionScreenState extends State<AlimentacionScreen> {
     }
   }
 
+  /// Dedup de la carga semanal: si ya hay una carga en vuelo para la MISMA
+  /// semana, los llamadores concurrentes esperan ese mismo Future en vez de
+  /// disparar otra invocación a la edge (cada invocación = tokens + $ + IA).
+  Future<void> _loadWeekPlan(int weekIndex, {bool forceRegenerate = false}) {
+    return _weekPlanFlight.run(
+      weekIndex,
+      () => _doLoadWeekPlan(weekIndex, forceRegenerate: forceRegenerate),
+    );
+  }
+
   /// Carga el plan semanal: 1) lee `nutrition_plans` (cache DB), 2) si no
   /// existe, invoca edge `generate-nutrition-plan` con `week_index` actual.
   /// La edge persiste en DB asi que la siguiente apertura no quema IA.
-  Future<void> _loadWeekPlan(int weekIndex, {bool forceRegenerate = false}) async {
+  Future<void> _doLoadWeekPlan(int weekIndex,
+      {bool forceRegenerate = false}) async {
     if (!forceRegenerate) {
       try {
         final row = await Supabase.instance.client
