@@ -4,13 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/recipe_service.dart';
+import 'create_recipe_screen.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final String recipeId;
   const RecipeDetailScreen({super.key, required this.recipeId});
 
-  static Future<void> open(BuildContext context, String recipeId) {
-    return Navigator.push(
+  static Future<bool?> open(BuildContext context, String recipeId) {
+    return Navigator.push<bool>(
       context,
       MaterialPageRoute(
           builder: (_) => RecipeDetailScreen(recipeId: recipeId)),
@@ -27,6 +28,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   bool _loading = true;
   bool _isSaved = false;
   bool _saving = false;
+  bool _changed = false;
 
   String? get _myId => Supabase.instance.client.auth.currentUser?.id;
 
@@ -89,7 +91,13 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     final macros = _calcMacros();
     final per = servings > 0 ? servings : 1;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _changed);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.darkSurface,
       appBar: AppBar(
         backgroundColor: AppColors.darkSurface,
@@ -105,6 +113,26 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                 _isSaved ? Icons.bookmark : Icons.bookmark_border,
                 color: _isSaved ? AppColors.accentOrange : Colors.white,
               ),
+            ),
+          if (isMine)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              color: AppColors.darkSurfaceCard,
+              onSelected: (v) {
+                if (v == 'edit') _edit();
+                if (v == 'delete') _confirmDelete();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Text('Editar', style: TextStyle(color: Colors.white)),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Eliminar',
+                      style: TextStyle(color: Colors.redAccent)),
+                ),
+              ],
             ),
         ],
       ),
@@ -193,14 +221,65 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           ],
         ],
       ),
+    ),
     );
   }
 
+  Future<void> _edit() async {
+    final changed =
+        await CreateRecipeScreen.openEdit(context, widget.recipeId);
+    if (changed == true && mounted) {
+      _changed = true;
+      setState(() => _loading = true);
+      await _load();
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.darkSurfaceCard,
+        title: const Text('Eliminar receta',
+            style: TextStyle(color: Colors.white)),
+        content: const Text('Esta acción no se puede deshacer.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final deleted = await RecipeService.instance.deleteRecipe(widget.recipeId);
+    if (!mounted) return;
+    if (deleted) {
+      Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo eliminar. Intenta de nuevo.')),
+      );
+    }
+  }
+
   RecipeMacros _calcMacros() {
-    // ingredientes guardados solo tienen grams+food_name; sin macros por 100g
-    // exactos al traer (food_id es nullable). Para Beta mostramos 0 cuando
-    // no hay food_id; la calculadora real corre en CreateRecipeScreen.
-    return RecipeMacros.zero;
+    final inputs = _ingredients
+        .map((i) => RecipeIngredientInput(
+              grams: (i['grams'] as num?)?.toDouble() ?? 0,
+              kcalPer100g: (i['kcal_per_100g'] as num?)?.toDouble() ?? 0,
+              proteinPer100g: (i['protein_per_100g'] as num?)?.toDouble() ?? 0,
+              carbsPer100g: (i['carbs_per_100g'] as num?)?.toDouble() ?? 0,
+              fatPer100g: (i['fat_per_100g'] as num?)?.toDouble() ?? 0,
+            ))
+        .toList();
+    return RecipeService.instance.calculateMacros(inputs);
   }
 
   Widget _buildHeroImage(String url) {

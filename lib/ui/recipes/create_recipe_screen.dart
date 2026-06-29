@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,12 +10,23 @@ import '../plans/plans_screen.dart';
 import 'widgets/ingredient_picker_sheet.dart';
 
 class CreateRecipeScreen extends StatefulWidget {
-  const CreateRecipeScreen({super.key});
+  /// Si viene un recipeId, la pantalla edita esa receta en vez de crear una.
+  final String? recipeId;
+  const CreateRecipeScreen({super.key, this.recipeId});
+
+  bool get isEditing => recipeId != null;
 
   static Future<bool?> open(BuildContext context) {
     return Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const CreateRecipeScreen()),
+    );
+  }
+
+  static Future<bool?> openEdit(BuildContext context, String recipeId) {
+    return Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => CreateRecipeScreen(recipeId: recipeId)),
     );
   }
 
@@ -27,10 +39,12 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
   final _instructionsCtrl = TextEditingController();
   final _prepCtrl = TextEditingController();
   double _servings = 1;
-  bool _isPublic = false;
+  bool _isPublic = true;
   bool _saving = false;
   bool _canPublish = true;
+  bool _loadingExisting = false;
   File? _imageFile;
+  String? _existingImageUrl;
   final _picker = ImagePicker();
   final List<RecipeIngredientInput> _ingredients = [];
   final List<String> _ingredientLabels = [];
@@ -38,13 +52,68 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
   @override
   void initState() {
     super.initState();
-    _checkPublishLimit();
+    if (widget.isEditing) {
+      _loadingExisting = true;
+      _loadExisting();
+    } else {
+      _checkPublishLimit();
+    }
+  }
+
+  Future<void> _loadExisting() async {
+    final id = widget.recipeId!;
+    final recipe = await RecipeService.instance.getRecipe(id);
+    final ingredients = await RecipeService.instance.getIngredients(id);
+    final can = await RecipeService.instance.canPublishMore();
+    if (!mounted) return;
+    if (recipe == null) {
+      setState(() => _loadingExisting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cargar la receta.')),
+      );
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      _nameCtrl.text = (recipe['name'] as String?) ?? '';
+      _instructionsCtrl.text = (recipe['instructions'] as String?) ?? '';
+      final prep = recipe['prep_time_min'];
+      _prepCtrl.text = prep == null ? '' : '$prep';
+      _servings = (recipe['servings'] as num?)?.toDouble() ?? 1;
+      _isPublic = recipe['is_public'] as bool? ?? false;
+      _existingImageUrl = recipe['image_url'] as String?;
+      // Si ya estaba pública, editar no cuenta para el límite; si era privada
+      // y quiere publicarla, respetamos el límite Free.
+      _canPublish = can || _isPublic;
+      _ingredients.clear();
+      _ingredientLabels.clear();
+      for (final i in ingredients) {
+        double d(dynamic v) => (v as num?)?.toDouble() ?? 0;
+        final name = (i['food_name_manual'] as String?) ?? 'Ingrediente';
+        final grams = d(i['grams']);
+        _ingredients.add(RecipeIngredientInput(
+          foodId: i['food_id'] as String?,
+          foodNameManual: name,
+          grams: grams,
+          kcalPer100g: d(i['kcal_per_100g']),
+          proteinPer100g: d(i['protein_per_100g']),
+          carbsPer100g: d(i['carbs_per_100g']),
+          fatPer100g: d(i['fat_per_100g']),
+        ));
+        _ingredientLabels.add('$name - ${grams.toStringAsFixed(0)} g');
+      }
+      _loadingExisting = false;
+    });
   }
 
   Future<void> _checkPublishLimit() async {
     final can = await RecipeService.instance.canPublishMore();
     if (!mounted) return;
-    setState(() => _canPublish = can);
+    setState(() {
+      _canPublish = can;
+      // Si llegó al límite Free, no podemos publicar por defecto.
+      if (!can) _isPublic = false;
+    });
   }
 
   @override
@@ -63,7 +132,10 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
     if (file != null) setState(() => _imageFile = File(file.path));
   }
 
-  void _removeImage() => setState(() => _imageFile = null);
+  void _removeImage() => setState(() {
+        _imageFile = null;
+        _existingImageUrl = null;
+      });
 
   Future<void> _addIngredient() async {
     final result = await IngredientPickerSheet.show(context);
@@ -121,23 +193,42 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty || _ingredients.isEmpty || _saving) return;
     setState(() => _saving = true);
-    String? imageUrl;
+    // Si eligió una foto nueva la subimos; si no, conservamos la existente.
+    String? imageUrl = _existingImageUrl;
     if (_imageFile != null) {
       imageUrl = await RecipeService.instance.uploadRecipeImage(_imageFile!);
     }
-    final id = await RecipeService.instance.createRecipe(
-      name: name,
-      servings: _servings,
-      prepTimeMin: int.tryParse(_prepCtrl.text.trim()),
-      imageUrl: imageUrl,
-      instructions: _instructionsCtrl.text.trim().isEmpty
-          ? null
-          : _instructionsCtrl.text.trim(),
-      isPublic: _isPublic,
-      ingredients: _ingredients,
-    );
+    final instructions = _instructionsCtrl.text.trim().isEmpty
+        ? null
+        : _instructionsCtrl.text.trim();
+    final prep = int.tryParse(_prepCtrl.text.trim());
+
+    bool ok;
+    if (widget.isEditing) {
+      ok = await RecipeService.instance.updateRecipe(
+        recipeId: widget.recipeId!,
+        name: name,
+        servings: _servings,
+        prepTimeMin: prep,
+        imageUrl: imageUrl,
+        instructions: instructions,
+        isPublic: _isPublic,
+        ingredients: _ingredients,
+      );
+    } else {
+      ok = await RecipeService.instance.createRecipe(
+            name: name,
+            servings: _servings,
+            prepTimeMin: prep,
+            imageUrl: imageUrl,
+            instructions: instructions,
+            isPublic: _isPublic,
+            ingredients: _ingredients,
+          ) !=
+          null;
+    }
     if (!mounted) return;
-    if (id == null) {
+    if (!ok) {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo guardar. Intenta de nuevo.')),
@@ -157,11 +248,12 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
         backgroundColor: AppColors.darkSurface,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Nueva receta',
-            style: TextStyle(color: Colors.white)),
+        title: Text(widget.isEditing ? 'Editar receta' : 'Nueva receta',
+            style: const TextStyle(color: Colors.white)),
         actions: [
           TextButton(
             onPressed: (_saving ||
+                    _loadingExisting ||
                     _nameCtrl.text.trim().isEmpty ||
                     _ingredients.isEmpty)
                 ? null
@@ -176,7 +268,10 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: _loadingExisting
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
+          : ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           _buildImagePicker(),
@@ -285,17 +380,26 @@ class _CreateRecipeScreenState extends State<CreateRecipeScreen> {
   }
 
   Widget _buildImagePicker() {
-    if (_imageFile != null) {
+    final hasImage = _imageFile != null ||
+        (_existingImageUrl != null && _existingImageUrl!.isNotEmpty);
+    if (hasImage) {
       return Stack(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: Image.file(
-              _imageFile!,
-              width: double.infinity,
-              height: 200,
-              fit: BoxFit.cover,
-            ),
+            child: _imageFile != null
+                ? Image.file(
+                    _imageFile!,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                  )
+                : CachedNetworkImage(
+                    imageUrl: _existingImageUrl!,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                  ),
           ),
           Positioned(
             top: 8,

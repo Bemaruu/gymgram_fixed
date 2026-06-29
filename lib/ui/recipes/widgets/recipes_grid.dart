@@ -7,12 +7,16 @@ class RecipesGrid extends StatelessWidget {
   final List<Map<String, dynamic>> recipes;
   final bool shrinkWrap;
   final ScrollPhysics? physics;
+  /// Se llama cuando una receta se editó o eliminó desde el detalle, para que
+  /// el padre recargue la lista.
+  final VoidCallback? onChanged;
 
   const RecipesGrid({
     super.key,
     required this.recipes,
     this.shrinkWrap = true,
     this.physics,
+    this.onChanged,
   });
 
   @override
@@ -46,8 +50,10 @@ class RecipesGrid extends StatelessWidget {
         final name = (recipe['name'] as String?) ?? 'Receta';
         final image = recipe['image_url'] as String?;
         return GestureDetector(
-          onTap: () {
-            if (id != null) RecipeDetailScreen.open(context, id);
+          onTap: () async {
+            if (id == null) return;
+            final changed = await RecipeDetailScreen.open(context, id);
+            if (changed == true) onChanged?.call();
           },
           child: Stack(
             fit: StackFit.expand,

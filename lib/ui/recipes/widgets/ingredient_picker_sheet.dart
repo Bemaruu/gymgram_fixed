@@ -52,8 +52,13 @@ class _IngredientPickerSheetState extends State<IngredientPickerSheet> {
       setState(() => _searching = true);
       final r = await FoodService.instance.searchFoods(q);
       if (!mounted) return;
+      // Para una receta queremos ingredientes sueltos (huevo, harina, aceite),
+      // no platos ya preparados. Excluimos la categoría "Preparaciones".
+      final filtered = r
+          .where((f) => f.hasCalories && f.category != 'Preparaciones')
+          .toList();
       setState(() {
-        _results = r.where((f) => f.hasCalories).take(12).toList();
+        _results = filtered.take(12).toList();
         _searching = false;
       });
     });

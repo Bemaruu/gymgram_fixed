@@ -333,7 +333,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              RecipesGrid(recipes: _myRecipes),
+              RecipesGrid(
+                recipes: _myRecipes,
+                onChanged: () {
+                  _recipesLoaded = false;
+                  _loadRecipes();
+                },
+              ),
               const SizedBox(height: 12),
               GestureDetector(
                 onTap: () async {
@@ -381,7 +387,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                RecipesGrid(recipes: _savedRecipes),
+                RecipesGrid(
+                  recipes: _savedRecipes,
+                  onChanged: () {
+                    _recipesLoaded = false;
+                    _loadRecipes();
+                  },
+                ),
               ],
             ],
           ),

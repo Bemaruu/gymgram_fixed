@@ -8,6 +8,7 @@ class FoodItem {
   final double? carbsPer100g;
   final double? fatPer100g;
   final double? fiberPer100g;
+  final String? category;
   final bool isCustom;
   final List<String> countriesTags;
   final List<String> countryRelevance;
@@ -53,6 +54,7 @@ class FoodItem {
     this.carbsPer100g,
     this.fatPer100g,
     this.fiberPer100g,
+    this.category,
     this.isCustom = false,
     this.countriesTags = const [],
     this.countryRelevance = const [],
@@ -127,6 +129,7 @@ class FoodItem {
       carbsPer100g: d(row['carbs_per_100g']),
       fatPer100g: d(row['fat_per_100g']),
       fiberPer100g: d(row['fiber_per_100g']),
+      category: row['category'] as String?,
       isCustom: true,
       countryRelevance: countryRelevance,
       servingGrams: (serving != null && serving > 0) ? serving : null,

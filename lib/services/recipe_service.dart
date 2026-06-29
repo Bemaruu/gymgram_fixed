@@ -77,22 +77,87 @@ class RecipeService {
       final recipeId = inserted['id'] as String;
 
       if (ingredients.isNotEmpty) {
-        await _client.from('user_recipe_ingredients').insert(
-          ingredients
-              .map((i) => {
-                    'recipe_id': recipeId,
-                    'food_id': i.foodId,
-                    'food_name_manual': i.foodNameManual,
-                    'grams': i.grams,
-                  })
-              .toList(),
-        );
+        await _client
+            .from('user_recipe_ingredients')
+            .insert(_ingredientRows(recipeId, ingredients));
       }
       return recipeId;
     } catch (e) {
       debugPrint('RecipeService.createRecipe error: $e');
       return null;
     }
+  }
+
+  /// Edita una receta existente (solo del propio usuario, por RLS) y
+  /// reemplaza por completo su lista de ingredientes.
+  Future<bool> updateRecipe({
+    required String recipeId,
+    required String name,
+    required double servings,
+    int? prepTimeMin,
+    String? imageUrl,
+    String? instructions,
+    required bool isPublic,
+    required List<RecipeIngredientInput> ingredients,
+  }) async {
+    final uid = _uid;
+    if (uid == null) return false;
+    try {
+      await _client.from('user_recipes').update({
+        'name': name,
+        'servings': servings,
+        'prep_time_min': prepTimeMin,
+        'image_url': imageUrl,
+        'instructions': instructions,
+        'is_public': isPublic,
+      }).eq('id', recipeId);
+
+      // Reemplazo total de ingredientes.
+      await _client
+          .from('user_recipe_ingredients')
+          .delete()
+          .eq('recipe_id', recipeId);
+      if (ingredients.isNotEmpty) {
+        await _client
+            .from('user_recipe_ingredients')
+            .insert(_ingredientRows(recipeId, ingredients));
+      }
+      return true;
+    } catch (e) {
+      debugPrint('RecipeService.updateRecipe error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteRecipe(String recipeId) async {
+    final uid = _uid;
+    if (uid == null) return false;
+    try {
+      // Los ingredientes caen por ON DELETE CASCADE / RLS de receta propia.
+      await _client.from('user_recipes').delete().eq('id', recipeId);
+      return true;
+    } catch (e) {
+      debugPrint('RecipeService.deleteRecipe error: $e');
+      return false;
+    }
+  }
+
+  List<Map<String, dynamic>> _ingredientRows(
+    String recipeId,
+    List<RecipeIngredientInput> ingredients,
+  ) {
+    return ingredients
+        .map((i) => {
+              'recipe_id': recipeId,
+              'food_id': i.foodId,
+              'food_name_manual': i.foodNameManual,
+              'grams': i.grams,
+              'kcal_per_100g': i.kcalPer100g,
+              'protein_per_100g': i.proteinPer100g,
+              'carbs_per_100g': i.carbsPer100g,
+              'fat_per_100g': i.fatPer100g,
+            })
+        .toList();
   }
 
   Future<List<Map<String, dynamic>>> getMyRecipes({int limit = 50}) async {
@@ -156,7 +221,10 @@ class RecipeService {
     try {
       final rows = await _client
           .from('user_recipe_ingredients')
-          .select('id, food_id, food_name_manual, grams')
+          .select(
+            'id, food_id, food_name_manual, grams, '
+            'kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g',
+          )
           .eq('recipe_id', recipeId);
       return List<Map<String, dynamic>>.from(rows);
     } catch (e) {
@@ -247,7 +315,8 @@ class RecipeService {
     if (uid == null) return null;
     try {
       final ext = file.path.split('.').last.toLowerCase();
-      final path = 'recipes/$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      // El bucket 'posts' exige que la primera carpeta sea el uid (RLS).
+      final path = '$uid/recipes/${DateTime.now().millisecondsSinceEpoch}.$ext';
       await _client.storage.from('posts').upload(path, file);
       return _client.storage.from('posts').getPublicUrl(path);
     } catch (e) {
